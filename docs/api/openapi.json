@@ -22170,15 +22170,424 @@
                                 "retake",
                                 "edit"
                               ]
+                            },
+                            "h3": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "installed": {
+                                  "type": "boolean"
+                                },
+                                "available": {
+                                  "type": "boolean"
+                                },
+                                "audio": {
+                                  "type": "boolean"
+                                },
+                                "image_to_video": {
+                                  "type": "boolean",
+                                  "description": "A picture can start a clip of this model."
+                                },
+                                "end_image": {
+                                  "type": "boolean",
+                                  "description": "A second picture can end the clip (`end_image` on the generation request; start and end together). True only on LTX-2.5 Standard, Boost and Max."
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "string"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "memory": {
+                                  "type": "object",
+                                  "properties": {
+                                    "fits": {
+                                      "type": "boolean"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "peak_gb": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "fits",
+                                    "reason",
+                                    "peak_gb"
+                                  ]
+                                },
+                                "install": {
+                                  "type": "object",
+                                  "properties": {
+                                    "models": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "role": {
+                                            "type": "string"
+                                          },
+                                          "repo": {
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "sha256": {
+                                            "type": "string"
+                                          },
+                                          "approx_bytes": {
+                                            "type": "integer"
+                                          },
+                                          "licence": {
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "type": "string"
+                                          },
+                                          "engine": {
+                                            "type": "string"
+                                          },
+                                          "archive": {
+                                            "type": "boolean"
+                                          },
+                                          "hub_file": {
+                                            "type": "string"
+                                          },
+                                          "component": {
+                                            "type": "string"
+                                          },
+                                          "starter": {
+                                            "type": "boolean"
+                                          },
+                                          "installed": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "role",
+                                          "url",
+                                          "sha256",
+                                          "approx_bytes",
+                                          "licence",
+                                          "revision",
+                                          "starter",
+                                          "installed"
+                                        ]
+                                      }
+                                    },
+                                    "remaining_bytes": {
+                                      "type": "integer"
+                                    },
+                                    "download_bytes": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "models",
+                                    "remaining_bytes",
+                                    "download_bytes"
+                                  ]
+                                },
+                                "licence": {
+                                  "type": "object",
+                                  "nullable": true,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name",
+                                    "url"
+                                  ],
+                                  "description": "The model maker's licence. Home shows its summary and an admin accepts it before install."
+                                },
+                                "lora_base_model": {
+                                  "type": "string"
+                                },
+                                "ready": {
+                                  "type": "boolean"
+                                },
+                                "video_to_video": {
+                                  "type": "boolean"
+                                },
+                                "reference_pictures": {
+                                  "type": "boolean"
+                                },
+                                "reference_videos": {
+                                  "type": "boolean"
+                                },
+                                "reference_audio": {
+                                  "type": "boolean"
+                                },
+                                "loras": {
+                                  "type": "object",
+                                  "properties": {
+                                    "supported": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "supported"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "installed",
+                                "available",
+                                "audio",
+                                "image_to_video",
+                                "end_image",
+                                "limits",
+                                "memory",
+                                "install",
+                                "licence",
+                                "lora_base_model",
+                                "ready",
+                                "video_to_video",
+                                "reference_pictures",
+                                "reference_videos",
+                                "reference_audio",
+                                "loras"
+                              ]
+                            },
+                            "h3stream": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "installed": {
+                                  "type": "boolean"
+                                },
+                                "available": {
+                                  "type": "boolean"
+                                },
+                                "audio": {
+                                  "type": "boolean"
+                                },
+                                "image_to_video": {
+                                  "type": "boolean",
+                                  "description": "A picture can start a clip of this model."
+                                },
+                                "end_image": {
+                                  "type": "boolean",
+                                  "description": "A second picture can end the clip (`end_image` on the generation request; start and end together). True only on LTX-2.5 Standard, Boost and Max."
+                                },
+                                "limits": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "string"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "memory": {
+                                  "type": "object",
+                                  "properties": {
+                                    "fits": {
+                                      "type": "boolean"
+                                    },
+                                    "reason": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "peak_gb": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "fits",
+                                    "reason",
+                                    "peak_gb"
+                                  ]
+                                },
+                                "install": {
+                                  "type": "object",
+                                  "properties": {
+                                    "models": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "role": {
+                                            "type": "string"
+                                          },
+                                          "repo": {
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "sha256": {
+                                            "type": "string"
+                                          },
+                                          "approx_bytes": {
+                                            "type": "integer"
+                                          },
+                                          "licence": {
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "type": "string"
+                                          },
+                                          "engine": {
+                                            "type": "string"
+                                          },
+                                          "archive": {
+                                            "type": "boolean"
+                                          },
+                                          "hub_file": {
+                                            "type": "string"
+                                          },
+                                          "component": {
+                                            "type": "string"
+                                          },
+                                          "starter": {
+                                            "type": "boolean"
+                                          },
+                                          "installed": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "role",
+                                          "url",
+                                          "sha256",
+                                          "approx_bytes",
+                                          "licence",
+                                          "revision",
+                                          "starter",
+                                          "installed"
+                                        ]
+                                      }
+                                    },
+                                    "remaining_bytes": {
+                                      "type": "integer"
+                                    },
+                                    "download_bytes": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "models",
+                                    "remaining_bytes",
+                                    "download_bytes"
+                                  ]
+                                },
+                                "licence": {
+                                  "type": "object",
+                                  "nullable": true,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name",
+                                    "url"
+                                  ],
+                                  "description": "The model maker's licence. Home shows its summary and an admin accepts it before install."
+                                },
+                                "lora_base_model": {
+                                  "type": "string"
+                                },
+                                "ready": {
+                                  "type": "boolean"
+                                },
+                                "video_to_video": {
+                                  "type": "boolean"
+                                },
+                                "reference_pictures": {
+                                  "type": "boolean"
+                                },
+                                "reference_videos": {
+                                  "type": "boolean"
+                                },
+                                "reference_audio": {
+                                  "type": "boolean"
+                                },
+                                "loras": {
+                                  "type": "object",
+                                  "properties": {
+                                    "supported": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "supported"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "installed",
+                                "available",
+                                "audio",
+                                "image_to_video",
+                                "end_image",
+                                "limits",
+                                "memory",
+                                "install",
+                                "licence",
+                                "lora_base_model",
+                                "ready",
+                                "video_to_video",
+                                "reference_pictures",
+                                "reference_videos",
+                                "reference_audio",
+                                "loras"
+                              ]
                             }
                           },
                           "required": [
                             "quick",
                             "detailed",
                             "ltx25",
-                            "ltx25max"
+                            "ltx25max",
+                            "h3"
                           ],
-                          "description": "`quick` is Wan Quick. `detailed` is deprecated and retained for older Home versions; the model was retired. Use `ltx25` (LTX-2.5 Standard and Boost) or `ltx25max` (LTX-2.5 Max)."
+                          "description": "`quick` is Wan Quick. H3 entries report what their installed one-shot runner can do."
                         }
                       },
                       "required": [
