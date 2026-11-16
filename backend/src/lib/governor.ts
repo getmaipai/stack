@@ -380,9 +380,27 @@ export function fitsEver(request: GovernorRequest): boolean {
   return peakBytes <= modelRoom && peakBytes <= workingRoom;
 }
 
-export function tierRoomBytes(): number {
+/** The room a level is sized from. `resident` is the model budget less every reserved item (the chat set as loaded), within the
+ * working margin. `max` (TIER-ROOM-01) is that room plus what Reduced would give back, through tierCapBytes("max"): the one place
+ * the Max arithmetic lives. Standard and Boost are fractions of the resident room; Max is sized from the Max room everywhere. */
+export function tierRoomBytes(mode: "resident" | "max" = "resident"): number {
+  const resident = residentRoomBytes();
+  return mode === "max" ? tierCapBytes("max", resident, reducedRoomBytes()) : resident;
+}
+function residentRoomBytes(): number {
   const reservedBytes = [...loaded.values()].filter((item) => item.class === "reserved").reduce((sum, item) => sum + item.peakBytes, 0);
   return Math.max(0, Math.min(effectiveCapBytes() - reservedBytes, totalMemoryBytes - reservedBytes - workingMargin()));
+}
+/** TIER-ROOM-01: the bytes Reduced would free for a Max job on top of the resident room. The live ledger decides while chat is
+ * loaded (its measured peak less the Reduced chat peak, voice likewise); before chat has loaded the profile's catalogued Standard
+ * less Reduced peaks stand in. Never more than the room with no reservation at all: a figure above that would promise memory the
+ * computer does not have. */
+export function reducedRoomBytes(): number {
+  const resident = residentRoomBytes();
+  const chat = [...loaded.values()].find((item) => item.role === "chat" || item.id === "chat");
+  const freed = chat ? liveReducedFreedBytes() : tierReducedFreedBytes(activeTier, resident);
+  const ceiling = Math.max(0, Math.min(effectiveCapBytes(), totalMemoryBytes - workingMargin()));
+  return Math.max(0, Math.min(freed, ceiling - resident));
 }
 
 /** The live loaded chat peak is authoritative; use the tier's standard peak only before chat has been loaded. */
@@ -410,8 +428,9 @@ export function neverFitCapacityBytes(request: GovernorRequest, reducedBytes = l
 export function fitsEverForTier(request: GovernorRequest, opts: { reducedFreedBytes?: number } = {}): { fits: boolean; capBytes: number; peakBytes: number } {
   const peakBytes = peakFor(request).bytes;
   if (!request.tier) return { fits: fitsEver(request), capBytes: tierRoomBytes(), peakBytes };
-  const reducedFreedBytes = opts.reducedFreedBytes ?? (request.tier === "max" && request.caller !== "dev" && request.caller !== "test" ? liveReducedFreedBytes() : 0);
-  const capBytes = tierCapBytes(request.tier, tierRoomBytes(), reducedFreedBytes);
+  // A household Max job is sized from the Max room (TIER-ROOM-01); dev and test jobs never count on Reduced. An explicit figure (a bench, a test) replaces the ledger's.
+  const householdMax = request.tier === "max" && request.caller !== "dev" && request.caller !== "test";
+  const capBytes = opts.reducedFreedBytes !== undefined ? tierCapBytes(request.tier, tierRoomBytes(), opts.reducedFreedBytes) : tierCapBytes(request.tier, tierRoomBytes(householdMax ? "max" : "resident"));
   return { fits: peakBytes <= capBytes, capBytes, peakBytes };
 }
 export function neverFitTierReason(request: GovernorRequest, capBytes: number, peakBytes = peakFor(request).bytes): string {
@@ -595,7 +614,9 @@ function canAdmit(request: GovernorRequest, peakBytes: number): boolean {
   if (maxWindow.state !== "none" && request.id !== maxWindow.ownerId && requestClass(request) !== "reserved") return false;
   if (codingModeActive && request.kind === "generator") return false;
   if (memoryReadingDegraded) return false;
-  if (request.tier && peakBytes > tierCapBytes(request.tier, tierRoomBytes(), request.tier === "max" && request.caller !== "dev" && request.caller !== "test" && maxWindow.ownerId === request.id ? liveReducedFreedBytes() : 0)) return false;
+  // The Max owner is sized from the Max room, the same room the candidates and capabilities answers are built from (TIER-ROOM-01).
+  const maxRoom = request.tier === "max" && request.caller !== "dev" && request.caller !== "test" && maxWindow.ownerId === request.id;
+  if (request.tier && peakBytes > tierCapBytes(request.tier, tierRoomBytes(maxRoom ? "max" : "resident"))) return false;
   if (!gateVerdict(request, peakBytes).ok) return false;
   if (pressure === "critical" || (pressure === "warn" && requestClass(request) !== "reserved")) return false;
   const existing = loaded.get(request.id);

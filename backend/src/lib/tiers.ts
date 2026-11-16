@@ -27,7 +27,7 @@ export interface TierCandidate {
   vetting?: string;
 }
 
-// Peaks marked "measured" come from docs/design/tier-evaluations-2026-10-30.md in getmaipai/home (Mac Studio, Apple M5 Max, 128 GB). Max video and Max music have no candidate on purpose: a Max slot is catalogued only with a measured, heard gain over the slot below.
+// Peaks marked "measured" come from docs/design/tier-evaluations-2026-10-30.md in getmaipai/home (Mac Studio, Apple M5 Max, 128 GB). Max video is LTX-2.5 Video Max on p128 (LTX25-MAX-01); Max music has no candidate on purpose: a Max slot is catalogued only with a measured, heard gain over the slot below.
 export const TIER_CANDIDATES: TierCandidate[] = [
   { id: "muse-glimmer-30b-q4-k-xl", category: "chat", family: "muse", label: "Muse Glimmer 30B Q4_K_XL", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 19_000_000_000, status: "measured", note: "Tier eval 2026-10-30, 18.6 GB resident, 19.0 GB peak." }, { options: { thinking: true, reasoningBudget: 4096 }, peakBytes: 22_500_000_000, status: "unverified" }], tiers: ["standard", "boost"] },
   { id: "muse-glimmer-30b-q4-k-m", category: "chat", family: "muse", label: "Muse Glimmer 30B Q4_K_M", profiles: ["p32"], peaks: [{ options: {}, peakBytes: 17_000_000_000, status: "unverified" }], tiers: ["standard"] },
@@ -58,6 +58,7 @@ export const TIER_CANDIDATES: TierCandidate[] = [
 
 export const TIER_CAP_FRACTIONS = { standard: 0.6, boost: 0.85, max: 1 } as const;
 const GB = 1_000_000_000;
+/** A level's cap. Standard and Boost are fractions of the resident room; Max is the resident room plus what Reduced frees (the Max room, TIER-ROOM-01). This is the one place that arithmetic lives: the governor's tierRoomBytes("max") and every route go through it. */
 export function tierCapBytes(tier: TierId, roomBytes: number, reducedFreedBytes = 0): number {
   if (tier === "reduced") return 0;
   if (tier === "max") return roomBytes + reducedFreedBytes;
