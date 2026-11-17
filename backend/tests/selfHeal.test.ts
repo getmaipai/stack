@@ -258,7 +258,7 @@ test("regression 2026-10-17: a role offline with no process and no request comin
   expect(crashItem("chat")).toBeUndefined();
 });
 
-test("Splash 1.6.1 exits with status 69 when its engine stops for good: that is a crash the Stack restarts, not an unhandled exit", async () => {
+test("Splash 1.7.0 exits with status 69 when its engine stops for good: that is a crash the Stack restarts, not an unhandled exit", async () => {
   expect(classifyCrash({ exitCode: 69, signal: null, stderrTail: ["Done · request 12 · engine stopped"] })).toMatchObject({ kind: "unknown", retryHelps: true, cause: expect.stringContaining("exit code 69") });
   await crash("chat", { exitCode: 69, stderrTail: ["engine stopped"] });
   expect(getRoleStatus("chat").state).toBe("offline");

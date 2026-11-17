@@ -24,6 +24,7 @@ import { imageTools } from "@/imagetools/imageTools";
 import { livePortrait } from "@/liveportrait/liveportrait";
 import { lookService } from "@/look/look";
 import { packs } from "@/packs/loader";
+import { splashSpec } from "@/engines/splash/spec";
 import { heavyGate, recoverPausedWorkers } from "@/lib/heavyGate";
 import { hostLimiter } from "@/media/hosts";
 import { videoGen } from "@/video/videoGen";
@@ -76,6 +77,8 @@ async function serve(): Promise<void> {
   homeViewToken();
   // MODELPACK-STACK-01: a model pack that does not validate stops the Stack here, with the folder and the fix in the message.
   logger.appendLine(JSON.stringify({ event: "packs.loaded", count: packs().length }));
+  // ENGINESPEC-STACK-01: the same for the Splash engine data.
+  logger.appendLine(JSON.stringify({ event: "engines.spec.loaded", engine: "splash", tiers: splashSpec().tiers }));
   const options = serveOptions();
   const server = Bun.serve(options);
   // Under systemd (Type=notify) the unit is "started" only now, and the

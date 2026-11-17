@@ -10,17 +10,19 @@
 // bind a coding model at all).
 import type { GovernorTier } from "@/lib/governor";
 import type { CodingEngine } from "@/lib/engineCatalog";
+import { splashSpec } from "@/engines/splash/spec";
 
 export const CODING_ENGINE_SETTING = "stack.engines.coding.engine";
 export const CODING_ENGINE_CHOICES = ["auto", "llama-server", "splash"] as const;
 export type CodingEngineSetting = typeof CODING_ENGINE_CHOICES[number];
 
-export const SPLASH_MIN_MEMORY_GB = 36;
-export const SPLASH_MIN_CHIP_GENERATION = 3;
-export const SPLASH_MIN_MACOS: readonly [number, number] = [26, 4];
-export const SPLASH_TIERS: readonly GovernorTier[] = ["p64", "p128"];
+// The values live in src/engines/splash/engine.json (ENGINESPEC-STACK-01); these names stay so every caller reads one spelling.
+export const SPLASH_MIN_MEMORY_GB: number = splashSpec().floors.memory_gb;
+export const SPLASH_MIN_CHIP_GENERATION: number = splashSpec().floors.chip_generation;
+export const SPLASH_MIN_MACOS: readonly [number, number] = splashSpec().floors.macos;
+export const SPLASH_TIERS: readonly GovernorTier[] = splashSpec().tiers;
 /** Reasoning effort Splash applies to a request that sets none (the benchmark's setting: 10 of 10 at medium with a 2,000-token budget). */
-export const SPLASH_REASONING_EFFORT = "medium";
+export const SPLASH_REASONING_EFFORT: string = splashSpec().defaults.reasoning_effort;
 
 /** What the machine says about itself, gathered once at the daemon's start. */
 export interface SplashFacts {
