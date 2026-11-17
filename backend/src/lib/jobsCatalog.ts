@@ -20,7 +20,7 @@ export const JOB_LABELS: Readonly<Record<StackJobName, string>> = {
 };
 const JOB_ORDER = Object.keys(JOB_LABELS) as StackJobName[];
 /** The lowercase phrase inside the "nothing can do this" sentence. */
-const JOB_PHRASE: Readonly<Record<StackJobName, string>> = {
+export const JOB_PHRASE: Readonly<Record<StackJobName, string>> = {
   picture: "make pictures", picture_edit: "change pictures", clip: "make video clips", clip_from_sheet: "make a clip from a sheet",
   restyle: "restyle a clip", swap: "swap a face in a clip", character_sheet: "make a character sheet", contact_sheet: "make a contact sheet",
 };
@@ -35,18 +35,25 @@ const levelsOf = (job: PackJob): Level[] => {
 };
 const runnable = (part: StackPartView): boolean => part.enabled && part.state === "ready" && (part.fits.standard || part.fits.boost || part.fits.max);
 
-export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): Promise<Catalog> {
-  const list = await listParts({ audience, kind: "model" }, hw);
-  const byId = new Map(list.parts.map((p) => [p.id, p]));
+export interface Serving { pack: LoadedPack; job: PackJob; part: StackPartView }
+/** The parts that serve a job for an audience, in the order a job would pick them: the household's order for an adult, the shipped priority for a minor (rule E6). */
+export function servingFor(name: StackJobName, audience: PartsAudience, parts: readonly StackPartView[]): Serving[] {
+  const byId = new Map(parts.map((p) => [p.id, p]));
   const shipped = new Map(PART_DEFS.map((d) => [d.id, d.priority]));
   const rank = (id: string) => (audience === "minor" ? (shipped.get(id) ?? 999) : (byId.get(id)?.priority ?? 999));
+  return packs().flatMap((p) => {
+    const job = p.pack.jobs.find((j) => j.job === name && j.audiences.includes(audience));
+    const part = byId.get(p.pack.part);
+    return job && part ? [{ pack: p, job, part }] : [];
+  }).sort((a, b) => rank(a.part.id) - rank(b.part.id) || a.part.id.localeCompare(b.part.id));
+}
+export const isRunnable = runnable;
+
+export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): Promise<Catalog> {
+  const list = await listParts({ audience, kind: "model" }, hw);
 
   const jobs = JOB_ORDER.flatMap((name) => {
-    const serving = packs().flatMap((p) => {
-      const job = p.pack.jobs.find((j) => j.job === name && j.audiences.includes(audience));
-      const part = byId.get(p.pack.part);
-      return job && part ? [{ pack: p, job, part }] : [];
-    }).sort((a, b) => rank(a.part.id) - rank(b.part.id) || a.part.id.localeCompare(b.part.id));
+    const serving = servingFor(name, audience, list.parts);
     if (!serving.length && audience === "minor") return []; // a job a minor may not have is absent, never explained
     const chosen = serving.find((s) => runnable(s.part)) ?? null;
     const shown = chosen ?? serving[0] ?? null;
