@@ -26,6 +26,7 @@ import { LTX25_GEN_NAME, LTX25_GEN_VERSION, LTX25_MAX_GEN_NAME, LTX25_MAX_GEN_VE
 import { memoryVerdict, tierAvailability, videoGen, VIDEO_SPECS, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_GEN_NAME, VIDEO_GEN_VERSION, VIDEO_MAX_FRAMES, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_PEAK_BYTES, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGenEnvironmentReady, videoGenSourceInstalled } from "@/video/videoGen";
 import { H3_VIDEO_LICENSE_NOTICE, H3_VIDEO_CAPABILITIES } from "@/video/h3";
 import { videoModelPaths } from "@/video/videoGen";
+import { h3SwapReady, H3_SWAP_MAX_SECONDS } from "@/video/swap";
 
 const PlanModelSchema = z.object({
   id: z.string(), role: z.string(), repo: z.string().optional(), url: z.string(), sha256: z.string(), approx_bytes: z.number().int(), licence: z.string(), revision: z.string(),
@@ -85,7 +86,7 @@ const StatusSchema = z.object({
   worker: z.object({ alive: z.boolean(), idle_exit_seconds: z.number().int() }),
   environment: z.object({ engine: z.string(), version: z.string(), source: z.boolean(), ready: z.boolean() }),
   install: z.object({ models: z.array(PlanModelSchema), remaining_bytes: z.number().int() }).openapi({ description: "The pinned models to pull (POST /stack/v1/models, shaped as an install-plan model) and how many bytes are still to come." }),
-  qualities: z.object({ quick: QualitySchema, detailed: QualitySchema.openapi({ description: "Deprecated compatibility entry. The Detailed video model was retired. Use ltx25 or ltx25max." }), ltx25: Ltx25QualitySchema, ltx25max: Ltx25MaxQualitySchema, h3: QualitySchema.extend({ ready: z.boolean(), video_to_video: z.boolean(), reference_pictures: z.boolean(), reference_videos: z.boolean(), reference_audio: z.boolean(), loras: z.object({ supported: z.boolean() }) }), h3stream: QualitySchema.extend({ ready: z.boolean(), video_to_video: z.boolean(), reference_pictures: z.boolean(), reference_videos: z.boolean(), reference_audio: z.boolean(), loras: z.object({ supported: z.boolean() }) }).optional() }).openapi({ description: "`quick` is Wan Quick. H3 entries report what their installed one-shot runner can do." }),
+  qualities: z.object({ quick: QualitySchema, detailed: QualitySchema.openapi({ description: "Deprecated compatibility entry. The Detailed video model was retired. Use ltx25 or ltx25max." }), ltx25: Ltx25QualitySchema, ltx25max: Ltx25MaxQualitySchema, h3: QualitySchema.extend({ ready: z.boolean(), video_to_video: z.boolean(), reference_pictures: z.boolean(), reference_videos: z.boolean(), reference_audio: z.boolean(), loras: z.object({ supported: z.boolean() }) }), h3_swap: z.object({ ready: z.boolean(), max_seconds: z.number(), sizes: z.array(z.string()), references_max: z.number(), peak_gb: z.number(), licence: z.string() }), h3stream: QualitySchema.extend({ ready: z.boolean(), video_to_video: z.boolean(), reference_pictures: z.boolean(), reference_videos: z.boolean(), reference_audio: z.boolean(), loras: z.object({ supported: z.boolean() }) }).optional() }).openapi({ description: "`quick` is Wan Quick. H3 entries report what their installed one-shot runner can do." }),
 });
 const statusRoute = createRoute({ method: "get", path: "/", tags: ["Video"], summary: "The video role's state, limits, and what to install", responses: { 200: { content: { "application/json": { schema: z.object({ video: StatusSchema }) } }, description: "Additive. Home enables the video control from `available` and `state`." } } });
 
@@ -226,6 +227,7 @@ videoRoutes.openapi(statusRoute, (c) => {
       ltx25: ltx25View(videoLtx25InstallModels(installed), installed, availability.available),
       ltx25max: ltx25MaxView(videoLtx25MaxInstallModels(installed), installed, availability.available),
       h3: h3View("h3"),
+      h3_swap: { ready: h3SwapReady(), max_seconds: H3_SWAP_MAX_SECONDS, sizes: ["640x480", "512x384"], references_max: 3, peak_gb: 112, licence: "MiniMax H3 Community License (use outside the US, EU, UK and Korea only)" },
       ...(videoModelPaths("h3stream") ? { h3stream: h3View("h3stream") } : {}),
     },
   } }, 200 as const);
