@@ -99,6 +99,14 @@ test("install rejects caller supplied pins, joins jobs, installs and uninstalls 
   expect(await (await app.request("/stack/v1/parts/tiny-picture", { method: "DELETE" })).json()).toMatchObject({ removed: false });
 });
 
+test("fractional environment sizes become whole bytes in the list (a live 500 on 2026-11-17)", async () => {
+  // The fixture takes a real part id: a unit with no row in the parts table is not listed.
+  __setComponentUnitsForTests([{ ...unit(), id: "z-image-turbo", pins: [{ ...tinyPin, id: "z-image-turbo" }], envs: [{ ...env, approxBytes: 4096.5 }] }]);
+  const row = (await listParts({ audience: "adult" }, hw())).parts.find((part) => part.id === "z-image-turbo")!;
+  expect(Number.isInteger(row.download_bytes)).toBe(true);
+  expect(row.download_bytes).toBe(Math.round(BYTES.length + 4096.5));
+});
+
 test("unknown ids and LoRAs are not parts", async () => {
   for (const [method, path] of [["POST", "/stack/v1/parts/nope/install"], ["DELETE", "/stack/v1/parts/nope"], ["DELETE", "/stack/v1/parts/lora.picture.x"]] as const) expect((await app.request(path, { method })).status).toBe(404);
 });

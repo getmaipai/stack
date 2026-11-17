@@ -23,6 +23,8 @@ export function __setPartsHardwareForTests(hw: HardwareInfo | null): void { test
 
 const candidateCategories: TierCategory[] = ["chat", "pictures", "video", "music", "voice", "stems"];
 
+const wholeBytes = (value: number | null | undefined): number => Math.max(0, Math.round(value ?? 0));
+
 export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise<StackPartList> {
   const choices = readPartChoices();
   const hardware = hw ?? (hasHardwareOverride ? testHardware! : await detectHardware());
@@ -70,7 +72,8 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
       ...(runtimeById.get(def.id)?.chat ? { chat: runtimeById.get(def.id)!.chat } : {}),
       label: filter.audience === "adult" ? def.label : def.neutralLabel,
       description: filter.audience === "adult" ? def.description : "", enabled: enabledFor(def.id, def.category, choices), state,
-      size_bytes: component.size_bytes ?? 0, download_bytes: component.download_bytes, percent: component.percent,
+      // Whole bytes: a shared environment is split between its parts and the fallback environment sizes are fractions of a GB (a live 500 on 2026-11-17).
+      size_bytes: wholeBytes(component.size_bytes), download_bytes: wholeBytes(component.download_bytes), percent: component.percent === null ? null : Math.min(100, Math.max(0, component.percent)),
       fits, can_install: component.can_install, install_block: component.install_block,
       can_uninstall: component.can_uninstall, uninstall_block: component.uninstall_block,
       licence_needed: component.licence !== null && component.licence.accepted_at === null,
@@ -90,5 +93,7 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
   if (filter.kind) parts = parts.filter((part) => part.kind === filter.kind);
   if (filter.category !== undefined) parts = parts.filter((part) => part.category === filter.category);
   parts.sort((a, b) => a.category.localeCompare(b.category) || a.priority - b.priority || a.id.localeCompare(b.id));
-  return StackPartListSchema.parse({ audience: filter.audience, parts });
+  const parsed = StackPartListSchema.safeParse({ audience: filter.audience, parts });
+  if (!parsed.success) throw new Error(`The parts list does not match the spec: ${parsed.error.issues.slice(0, 5).map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`);
+  return parsed.data;
 }
