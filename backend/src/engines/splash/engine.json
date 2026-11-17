@@ -1,0 +1,12 @@
+{
+  "engine": "splash",
+  "floors": {
+    "memory_gb": 36,
+    "chip_generation": 3,
+    "macos": [26, 4]
+  },
+  "tiers": ["p64", "p128"],
+  "defaults": {
+    "reasoning_effort": "medium"
+  }
+}

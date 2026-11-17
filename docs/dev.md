@@ -2628,6 +2628,16 @@ a pause of up to 120 s; that the Responses converter honours `chat_template_kwar
 leaves `/props` `model_path` and the identity check alone (item 3); that the dry run's figure for the extension-less path matches the
 21.9 GB seen (item 5); the Splash decode speed against 27.6 tokens/s (S5).
 
+### Engine data beside the engine part (ENGINESPEC-STACK-01, 2026-11-17)
+
+Splash's floors (36 GB, an M3 chip or newer, macOS 26.4), the tiers it serves coding on (`p64`, `p128`) and its default reasoning effort
+are data in `backend/src/engines/splash/engine.json`, the way a model's limits are data in `backend/src/packs/<part-id>/`.
+`engines/splash/spec.ts` validates the file with a strict Zod schema when the Stack starts (`daemon.ts` logs `engines.spec.loaded`), and
+`lib/splash.ts` reads it, keeping the exported constant names so no caller changed. A Splash release that moves a floor edits the JSON
+and the pin in `engineCatalog.ts`, not code; `tests/splashSpec.test.ts` pins the file to the values the constants held before the move.
+Still in code, on purpose: the launch flags (`lib/engineArgs.ts`), the memory estimate and the start rules, which are logic, not
+declarations. Splash 1.7.0 (2026-11-17) was checked against all of this: no flag the Stack passes was removed and no floor moved.
+
 ### Slice S5a: Splash is the coding engine on Apple silicon (CODE-STACK-01, 2026-10-18)
 
 Stack only; tests use the scripted engine and a stand-in for Splash's process tree, never a real model. Catalog C1 (Splash 1.3.2 in
