@@ -12,6 +12,7 @@ import { LTX_LICENCE_NOTICE } from "@/lib/modelCatalog";
 import { StackPartList } from "@maipai/spec/stack/ts/stack-part-list.js";
 import type { HardwareInfo } from "@/lib/hardware";
 import { __setPartsHardwareForTests, listParts } from "@/lib/partsList";
+import { __resetPartChoicesForTests } from "@/lib/partChoices";
 
 const GB = 1_073_741_824;
 const hw = (over: Partial<HardwareInfo> = {}): HardwareInfo => ({ platform: "darwin", arch: "arm64", totalRamGb: 128, cpuCount: 16, isAppleSilicon: true, unifiedMemoryGb: 128, cudaDevices: [], freeDiskBytes: 1500 * GB, osVersion: "test", ...over });
@@ -24,8 +25,8 @@ const tinyPin: UnitDef["pins"][number] = { id: "tiny-picture", role: "image", re
 const unit = (): UnitDef => ({ id: "tiny-picture", label: "Tiny picture", summary: "A test picture model.", group: "pictures", role: "image", pins: [tinyPin], envs: [env], usedBy: () => ["Pictures"], busy: () => null });
 const fakeDownload = async (_url: string, dest: string, opts: { onProgress?: (p: never) => void }) => { mkdirSync(join(dest, ".."), { recursive: true }); writeFileSync(dest, BYTES); opts.onProgress?.({ completedBytes: BYTES.length, totalBytes: BYTES.length, itemId: "weights.safetensors", itemCompletedBytes: BYTES.length } as never); };
 
-beforeEach(() => { __resetJobsForTests(); envReady = false; rmSync(envDir, { recursive: true, force: true }); __setPartsHardwareForTests(null); __setComponentUnitsForTests(null); __setComponentDepsForTests(null); });
-afterEach(() => { __setPartsHardwareForTests(null); __setComponentUnitsForTests(null); __setComponentDepsForTests(null); rmSync(join(dataDir, "licence-acceptances.json"), { force: true }); });
+beforeEach(() => { __resetJobsForTests(); __resetPartChoicesForTests(); envReady = false; rmSync(envDir, { recursive: true, force: true }); __setPartsHardwareForTests(null); __setComponentUnitsForTests(null); __setComponentDepsForTests(null); });
+afterEach(() => { __resetPartChoicesForTests(); __setPartsHardwareForTests(null); __setComponentUnitsForTests(null); __setComponentDepsForTests(null); rmSync(join(dataDir, "licence-acceptances.json"), { force: true }); });
 
 test("adult and minor routes return the pinned part list shape", async () => {
   for (const audience of ["adult", "minor"]) {
@@ -42,7 +43,7 @@ test("minor list uses neutral labels and hides adult only parts", async () => {
   expect(rows.map((row) => row.id)).not.toContain("ltx-2-5-q8-distilled-mlx");
   expect(rows.map((row) => row.id)).not.toContain("minimax-h3");
   expect(rows.map((row) => row.id)).not.toContain("ltx-2-5-bf16-distilled-mlx-max");
-  const adultLabels = PART_DEFS.filter((def) => def.label.length > 6).map((def) => def.label);
+  const adultLabels = PART_DEFS.filter((def) => def.kind !== "engine" && def.label.length > 6).map((def) => def.label);
   expect(rows.some((row) => adultLabels.some((label) => row.label.includes(label)))).toBe(false);
 });
 

@@ -2,7 +2,7 @@
 // It imports nothing, so any module can read a label without an import cycle. `parts.ts` builds the full
 // StackPart records from it.
 export interface PartDef {
-  id: string; kind: "model" | "tool"; category: string; priority: number; label: string; neutralLabel: string; description: string; adultOnly: boolean; minorOnly?: boolean;
+  id: string; kind: "model" | "tool" | "engine"; category: string; priority: number; label: string; neutralLabel: string; description: string; adultOnly: boolean; minorOnly?: boolean;
 }
 
 export const PART_DEFS: readonly PartDef[] = [
@@ -57,6 +57,37 @@ export const PART_DEFS: readonly PartDef[] = [
   { id: "whisper-large-v3-turbo", kind: "model", category: "music", priority: 6, label: "Whisper Large v3 Turbo", neutralLabel: "Song maker", description: "Transcribes finished songs so Home can check the words.", adultOnly: false },
   { id: "ace-step-1-5-xl-turbo-bf16", kind: "model", category: "music", priority: 2, label: "ACE-Step XL Turbo", neutralLabel: "Song maker", description: "A larger song model with clearer voices, used for Boost songs.", adultOnly: false },
   { id: "ace-step-1-5-xl-sft-bf16", kind: "model", category: "music", priority: 3, label: "ACE-Step XL SFT", neutralLabel: "Song maker", description: "The best song model, with its larger planning model, used for Max songs.", adultOnly: false },
+  // Engines as parts (PARTS-ENABLE-01): the id is the pin's engine string or the pinned binary's name; the engine has no switch and
+  // installs with the first part that runs on it. mflux pins run in the image-gen environment and keep their catalog engine id;
+  // image-tools, liveportrait and score-gen are tool parts already, so a model that names them requires the tool part.
+  { id: "llama-server", kind: "engine", category: "engines", priority: 1, label: "llama.cpp server", neutralLabel: "llama.cpp server", description: "Runs chat, quick checks and the coding model from GGUF files.", adultOnly: false },
+  { id: "mlx-serve", kind: "engine", category: "engines", priority: 2, label: "MLX Serve", neutralLabel: "MLX Serve", description: "Runs chat models in the MLX format on Apple silicon.", adultOnly: false },
+  { id: "omlx", kind: "engine", category: "engines", priority: 3, label: "oMLX", neutralLabel: "oMLX", description: "A second MLX chat engine on Apple silicon.", adultOnly: false },
+  { id: "splash", kind: "engine", category: "engines", priority: 4, label: "Splash", neutralLabel: "Splash", description: "Runs the coding model quickly on newer Macs.", adultOnly: false },
+  { id: "splash-chat", kind: "engine", category: "engines", priority: 5, label: "Splash Chat", neutralLabel: "Splash Chat", description: "Runs the chat model quickly on newer Macs.", adultOnly: false },
+  { id: "pocket-tts", kind: "engine", category: "engines", priority: 6, label: "Pocket voice engine", neutralLabel: "Pocket voice engine", description: "Runs the standard speaking voice.", adultOnly: false },
+  { id: "mlx-audio", kind: "engine", category: "engines", priority: 7, label: "MLX voice engine", neutralLabel: "MLX voice engine", description: "Runs the expressive speaking voice on Apple silicon.", adultOnly: false },
+  { id: "recorded-speech", kind: "engine", category: "engines", priority: 8, label: "Recorded speech", neutralLabel: "Recorded speech", description: "Makes finished speech recordings.", adultOnly: false },
+  { id: "comfyui", kind: "engine", category: "engines", priority: 9, label: "ComfyUI", neutralLabel: "ComfyUI", description: "Runs picture workflows.", adultOnly: false },
+  { id: "image-gen", kind: "engine", category: "engines", priority: 10, label: "Picture engine", neutralLabel: "Picture engine", description: "Draws and edits pictures with the picture models.", adultOnly: false },
+  { id: "h3-image-gen", kind: "engine", category: "engines", priority: 11, label: "H3 picture engine", neutralLabel: "H3 picture engine", description: "Draws pictures with the MiniMax H3 picture model.", adultOnly: false },
+  { id: "video-gen", kind: "engine", category: "engines", priority: 12, label: "Silent video engine", neutralLabel: "Silent video engine", description: "Makes short silent clips.", adultOnly: false },
+  { id: "ltx25-gen", kind: "engine", category: "engines", priority: 13, label: "LTX video engine", neutralLabel: "LTX video engine", description: "Makes clips with sound.", adultOnly: false },
+  { id: "ltx25-max-gen", kind: "engine", category: "engines", priority: 14, label: "LTX Max video engine", neutralLabel: "LTX Max video engine", description: "Makes the largest clips with sound.", adultOnly: false },
+  { id: "mask-gen", kind: "engine", category: "engines", priority: 15, label: "Subject mask engine", neutralLabel: "Subject mask engine", description: "Tracks a subject through a clip for cutouts.", adultOnly: false },
+  { id: "music-gen", kind: "engine", category: "engines", priority: 16, label: "Song engine", neutralLabel: "Song engine", description: "Makes and changes songs.", adultOnly: false },
+  { id: "sfx-gen", kind: "engine", category: "engines", priority: 17, label: "Sound effects engine", neutralLabel: "Sound effects engine", description: "Makes short sound effects and ambience.", adultOnly: false },
+  { id: "stems", kind: "engine", category: "engines", priority: 18, label: "Stem engine", neutralLabel: "Stem engine", description: "Separates a song into vocals, drums, bass and other.", adultOnly: false },
+  { id: "align", kind: "engine", category: "engines", priority: 19, label: "Lyrics timing engine", neutralLabel: "Lyrics timing engine", description: "Finds when each word of a song is sung.", adultOnly: false },
+  { id: "beats", kind: "engine", category: "engines", priority: 20, label: "Beat engine", neutralLabel: "Beat engine", description: "Finds the beats and sections of a song.", adultOnly: false },
+  { id: "voice-convert", kind: "engine", category: "engines", priority: 21, label: "Singer engine", neutralLabel: "Singer engine", description: "Changes the singer in a vocal.", adultOnly: false },
+  { id: "sherpa-onnx-node", kind: "engine", category: "engines", priority: 22, label: "Sherpa ONNX", neutralLabel: "Sherpa ONNX", description: "Turns what you say into text and listens for the wake word.", adultOnly: false },
+  { id: "onnxruntime-web", kind: "engine", category: "engines", priority: 23, label: "ONNX Runtime", neutralLabel: "ONNX Runtime", description: "Runs small checking models.", adultOnly: false },
+  { id: "uv", kind: "engine", category: "engines", priority: 24, label: "uv", neutralLabel: "uv", description: "Builds the Python environments the engines run in.", adultOnly: false },
+  { id: "gguf-parser", kind: "engine", category: "engines", priority: 25, label: "GGUF parser", neutralLabel: "GGUF parser", description: "Reads a model file's size before it loads.", adultOnly: false },
+  { id: "minimax-h3-video-gen", kind: "engine", category: "engines", priority: 26, label: "H3 video engine", neutralLabel: "H3 video engine", description: "Makes clips with sound with the MiniMax H3 video model.", adultOnly: false },
+  { id: "chatterbox-vc", kind: "engine", category: "engines", priority: 27, label: "Chatterbox voice engine", neutralLabel: "Chatterbox voice engine", description: "Changes a voice toward a reference voice.", adultOnly: false },
+  { id: "face-repair", kind: "engine", category: "engines", priority: 28, label: "Face repair engine", neutralLabel: "Face repair engine", description: "Repairs faces in old or soft pictures.", adultOnly: false },
 ];
 
 export function partDef(id: string): PartDef | undefined { return PART_DEFS.find((part) => part.id === id); }

@@ -7,6 +7,10 @@ import { detectHardware, type HardwareInfo } from "@/lib/hardware";
 import { proposeProfile } from "@/profiles";
 import { reducedRoomBytes, tierRoomBytes } from "@/lib/governor";
 import { tierCandidateLists, type TierCategory } from "@/lib/tiers";
+import { readPartChoices, enabledFor, effectivePriority } from "@/lib/partChoices";
+import { ENGINE_BINARIES, installedEnginePin } from "@/lib/engineCatalog";
+import { PART_DEFS } from "@/lib/partDefs";
+import { componentDefs } from "@/lib/components";
 
 export type PartsAudience = "adult" | "minor";
 export interface PartsFilter { audience: PartsAudience; kind?: "model" | "tool" | "engine"; category?: string }
@@ -17,16 +21,18 @@ export function __setPartsHardwareForTests(hw: HardwareInfo | null): void { test
 const candidateCategories: TierCategory[] = ["chat", "pictures", "video", "music", "voice", "stems"];
 
 export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise<StackPartList> {
+  const choices = readPartChoices();
   const hardware = hw ?? (hasHardwareOverride ? testHardware! : await detectHardware());
   const [components, runtimeParts] = await Promise.all([listComponents(hardware), Promise.resolve(stackParts())]);
   const runtimeById = new Map(runtimeParts.map((part) => [part.id, part]));
-  const componentById = new Map(components.components.filter((component) => !component.id.startsWith("lora.")).map((component) => [component.id, component]));
-  const defs = [...componentById.keys()].flatMap((id) => { const def = partDef(id); return def ? [def] : []; });
+  const componentById = new Map(components.components.filter((component) => !component.id.startsWith("lora.") && partDef(component.id)?.kind !== "engine").map((component) => [component.id, component]));
+  const defs = [...componentById.keys()].flatMap((id) => { const def = partDef(id); return def && def.kind !== "engine" ? [def] : []; });
   const requiredBy = new Map<string, string[]>();
   for (const component of components.components) {
     if (component.id.startsWith("lora.")) continue;
     for (const dependency of component.depends_on) requiredBy.set(dependency, [...(requiredBy.get(dependency) ?? []), component.id]);
   }
+  for (const part of runtimeParts) for (const dependency of part.requires) requiredBy.set(dependency, [...(requiredBy.get(dependency) ?? []), part.id]);
   const profile = proposeProfile(hardware)?.id ?? null;
   const candidateLists = new Map<TierCategory, ReturnType<typeof tierCandidateLists>>();
   if (profile) for (const category of candidateCategories) candidateLists.set(category, tierCandidateLists(category, profile, tierRoomBytes(), reducedRoomBytes()));
@@ -50,10 +56,10 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
     }
     const state = unsupported ? "unsupported" : component.state === "installed" ? "ready" : component.state === "notInstalled" ? "missing" : component.state;
     const view = {
-      id: def.id, kind: def.kind, category: def.category, priority: def.priority,
+      id: def.id, kind: def.kind, category: def.category, priority: effectivePriority(def, choices),
       ...(runtimeById.get(def.id)?.chat ? { chat: runtimeById.get(def.id)!.chat } : {}),
       label: filter.audience === "adult" ? def.label : def.neutralLabel,
-      description: filter.audience === "adult" ? def.description : "", enabled: true, state,
+      description: filter.audience === "adult" ? def.description : "", enabled: enabledFor(def.id, def.category, choices), state,
       size_bytes: component.size_bytes ?? 0, download_bytes: component.download_bytes, percent: component.percent,
       fits, can_install: component.can_install, install_block: component.install_block,
       can_uninstall: component.can_uninstall, uninstall_block: component.uninstall_block,
@@ -62,6 +68,13 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
     } satisfies StackPartView;
     return [view];
   });
+  for (const def of PART_DEFS.filter((row) => row.kind === "engine")) {
+    const dependents = runtimeParts.filter((part) => part.requires.includes(def.id));
+    const binary = ENGINE_BINARIES.some((pin) => pin.name === def.id);
+    const envs = componentDefs().flatMap((unit) => unit.envs).filter((env) => env.name === def.id);
+    const ready = binary ? installedEnginePin(def.id) !== null : envs.some((env) => env.ready()) || (!envs.length && dependents.some((part) => componentById.get(part.id)?.state === "installed"));
+    parts.push({ id: def.id, kind: "engine", category: "engines", priority: effectivePriority(def, choices), label: def.label, description: filter.audience === "adult" ? def.description : "", enabled: true, state: ready ? "ready" : "missing", size_bytes: 0, download_bytes: 0, percent: null, fits: { standard: true, boost: true, max: true, reason: null }, can_install: false, install_block: "Installed with the first part that runs on it.", can_uninstall: false, uninstall_block: "Removed with the last part that runs on it.", licence_needed: false, required_by: [...new Set(requiredBy.get(def.id) ?? [])], update: { available: false, version: null } });
+  }
   if (filter.kind) parts = parts.filter((part) => part.kind === filter.kind);
   if (filter.category !== undefined) parts = parts.filter((part) => part.category === filter.category);
   parts.sort((a, b) => a.category.localeCompare(b.category) || a.priority - b.priority || a.id.localeCompare(b.id));

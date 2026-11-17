@@ -20973,7 +20973,7 @@
           "Parts"
         ],
         "summary": "Every part this Stack can install and run, for one audience (PARTS-API-01)",
-        "description": "`enabled` is always true and `update.available` is always false until PARTS-ENABLE-01 and PARTS-UPDATE-01. A minor's list has neutral labels, empty descriptions and no adult-only part. This answer comes from memory and starts no work.",
+        "description": "`enabled` and `priority` come from the one household choice Home pushes; `update.available` remains false until PARTS-UPDATE-01. A minor's list has neutral labels, empty descriptions and no adult-only part. This answer comes from memory and starts no work.",
         "parameters": [
           {
             "schema": {
@@ -21017,6 +21017,105 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StackPartList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/parts/choices": {
+      "put": {
+        "tags": [
+          "Parts"
+        ],
+        "summary": "The household's order and off list per category, pushed by Home (PARTS-ENABLE-01)",
+        "description": "Engines have no switch. The Stack stores only this one pushed value, no household data.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "off": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "required": [
+                    "order",
+                    "off"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored choices and the adult list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StackPartList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid choices or engine switch refused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A required part cannot be turned off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
                 }
               }
             }

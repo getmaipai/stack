@@ -15,9 +15,12 @@ export function registerPartUnits(provider: () => PartUnitLike[]): void { compon
 const require = createRequire(import.meta.url);
 const stackVersion = (require("../../package.json") as { version: string }).version;
 
+// A runner is required when it is a part of its own: an engine row, or a tool part that doubles as the runner (image-tools, liveportrait, score-gen).
+const ENGINE_PART_IDS = new Set(PART_DEFS.filter((def) => def.kind !== "model").map((def) => def.id));
+
 export function stackParts(): StackPart[] {
   const units = componentUnits();
-  return PART_DEFS.flatMap((def) => {
+  return PART_DEFS.filter((def) => def.kind !== "engine").flatMap((def) => {
     const unit = units.find((candidate) => candidate.id === def.id);
     if (!unit) return [];
     const pins = unit.pins.filter((pin) => pin.download && pin.revision);
@@ -40,7 +43,8 @@ export function stackParts(): StackPart[] {
       ...(primary.sampling ? { sampling: primary.sampling } : {}),
       ...(projector?.download ? { image_input: { projector: { file: projector.download.hub_file ?? projector.download.url.split("/").at(-1)!, download: { url: projector.download.url, sha256: projector.download.sha256, approx_bytes: projector.download.approx_bytes } } } } : {}),
     } : undefined;
-    const raw = { id: def.id, kind: def.kind, category: def.category, priority: def.priority, label: def.label, neutral_label: def.neutralLabel, description: def.description, adult_only: def.adultOnly, ...(def.minorOnly ? { minor_only: true } : {}), ...(def.category === "chat" && chat ? { chat } : {}), version: primary.revision!, files, licence: { name: primary.license ?? unit.licenceName ?? "Unknown", notice_id: noticeId }, runner: primary.engine ?? null, requires: [], builds, peaks, min_stack: stackVersion };
+    const runner = primary.engine ?? null;
+    const raw = { id: def.id, kind: def.kind, category: def.category, priority: def.priority, label: def.label, neutral_label: def.neutralLabel, description: def.description, adult_only: def.adultOnly, ...(def.minorOnly ? { minor_only: true } : {}), ...(def.category === "chat" && chat ? { chat } : {}), version: primary.revision!, files, licence: { name: primary.license ?? unit.licenceName ?? "Unknown", notice_id: noticeId }, runner, requires: runner && ENGINE_PART_IDS.has(runner) ? [runner] : [], builds, peaks, min_stack: stackVersion };
     return [StackPartSchema.parse(raw)];
   });
 }

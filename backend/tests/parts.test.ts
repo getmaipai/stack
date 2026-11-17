@@ -6,14 +6,31 @@ import { componentDefs, listComponents } from "@/lib/components";
 import { diskPlanForTier } from "@/lib/diskPlan";
 import { PART_DEFS, partDef, stackParts } from "@/lib/parts";
 import { tierCandidateLabel } from "@/lib/tiers";
+import { ENGINE_BINARIES } from "@/lib/engineCatalog";
+import { PART_DEFS as ALL_PART_DEFS } from "@/lib/partDefs";
 
 describe("canonical parts", () => {
   test("part definitions cover each component exactly once", () => {
-    const ids = PART_DEFS.map((part) => part.id);
+    const ids = PART_DEFS.filter((part) => part.kind !== "engine").map((part) => part.id);
     const unitIds = componentDefs().map((unit) => unit.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect([...ids].sort()).toEqual([...unitIds].sort());
     for (const unit of componentDefs()) expect(partDef(unit.id)).toBeDefined();
+  });
+
+  test("engine definitions cover every runner and pinned binary, with no unused engine rows", () => {
+    const { STACK_MODELS } = require("@/lib/modelCatalog") as typeof import("@/lib/modelCatalog");
+    const runners = STACK_MODELS.map((pin) => pin.engine).filter((value): value is string => !!value);
+    const required = new Set([...runners, ...ENGINE_BINARIES.map((pin) => pin.name)]);
+    const aliases = new Map([["mflux", "image-gen"], ["chatterbox-turbo", "chatterbox-vc"]]);
+    const expected = new Set([...required].map((id) => aliases.get(id) ?? id));
+    // A runner that is already a tool part (image-tools, liveportrait, score-gen) has no second engine row.
+    const engineDefs = ALL_PART_DEFS.filter((part) => part.kind !== "model");
+    const declared = new Set(engineDefs.map((part) => part.id));
+    expect([...expected].every((id) => declared.has(id))).toBe(true);
+    expect(["beats", "minimax-h3-video-gen", "face-repair"].every((id) => declared.has(id))).toBe(true);
+    expect(new Set(ALL_PART_DEFS.map((part) => part.id)).size).toBe(ALL_PART_DEFS.length);
+    for (const id of expected) expect(declared.has(id)).toBe(true);
   });
 
   test("stack part files preserve each downloadable component pin", () => {
@@ -46,7 +63,7 @@ describe("canonical parts", () => {
   test("display names live in parts.ts, except stable IDs", () => {
     const files = ["components.ts", "tiers.ts", "diskPlan.ts", "installPlan.ts"].map((name) => readFileSync(resolve(import.meta.dir, "../src/lib", name), "utf8"));
     const source = files.join("\n");
-    for (const part of PART_DEFS) if (part.label.length > 6) expect(source).not.toContain(part.label);
+    for (const part of PART_DEFS.filter((row) => row.kind !== "engine")) if (part.label.length > 6) expect(source).not.toContain(part.label);
     for (const forbidden of ["Wan2.2", "Wan 2.2", "Wan Video", "FastWan"]) expect(source).not.toContain(forbidden);
   });
 

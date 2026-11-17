@@ -4,6 +4,10 @@ import { StackPartView as StackPartViewSchema } from "@maipai/spec/stack/ts/stac
 import type { AppEnv } from "@/types";
 import { ComponentError, startComponentInstall, uninstallComponent } from "@/lib/components";
 import { listParts } from "@/lib/partsList";
+import { PART_DEFS } from "@/lib/partDefs";
+import { choicesRefusal, writePartChoices, type Choices } from "@/lib/partChoices";
+import { StackPartChoices } from "@maipai/spec/stack/ts/stack-part-choices.js";
+import { stackParts } from "@/lib/parts";
 
 const PartView = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/).max(200), kind: z.enum(["model", "tool", "engine"]), category: z.string().min(1), chat: StackPartViewSchema.shape.chat,
@@ -18,9 +22,15 @@ const ErrorBody = z.object({ error: z.string(), code: z.string() });
 const partId = z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/).max(200).openapi({ param: { name: "id", in: "path" }, example: "z-image-turbo" }) });
 const listRoute = createRoute({
   method: "get", path: "/", tags: ["Parts"], summary: "Every part this Stack can install and run, for one audience (PARTS-API-01)",
-  description: "`enabled` is always true and `update.available` is always false until PARTS-ENABLE-01 and PARTS-UPDATE-01. A minor's list has neutral labels, empty descriptions and no adult-only part. This answer comes from memory and starts no work.",
+  description: "`enabled` and `priority` come from the one household choice Home pushes; `update.available` remains false until PARTS-UPDATE-01. A minor's list has neutral labels, empty descriptions and no adult-only part. This answer comes from memory and starts no work.",
   request: { query: z.object({ audience: z.enum(["adult", "minor"]), kind: z.enum(["model", "tool", "engine"]).optional(), category: z.string().max(40).optional() }) },
   responses: { 200: { content: { "application/json": { schema: PartList } }, description: "The audience filtered list of parts." } },
+});
+const choicesRoute = createRoute({
+  method: "put", path: "/choices", tags: ["Parts"], summary: "The household's order and off list per category, pushed by Home (PARTS-ENABLE-01)",
+  description: "Engines have no switch. The Stack stores only this one pushed value, no household data.",
+  request: { body: { required: true, content: { "application/json": { schema: StackPartChoices } } } },
+  responses: { 200: { content: { "application/json": { schema: PartList } }, description: "Stored choices and the adult list." }, 400: { content: { "application/json": { schema: ErrorBody } }, description: "Invalid choices or engine switch refused." }, 409: { content: { "application/json": { schema: ErrorBody } }, description: "A required part cannot be turned off." } },
 });
 const installRoute = createRoute({
   method: "post", path: "/{id}/install", tags: ["Parts"], summary: "Install a part by id",
@@ -44,8 +54,20 @@ const removeRoute = createRoute({
 
 export const partsRoutes = apiRouter<AppEnv>();
 partsRoutes.openapi(listRoute, async (c) => c.json(await listParts(c.req.valid("query")), 200) as never);
+partsRoutes.openapi(choicesRoute, async (c) => {
+  let raw: unknown;
+  try { raw = await c.req.json(); } catch { return c.json({ error: "Choices must map categories to unique order and off ids.", code: "invalid_choices" }, 400); }
+  const parsed = StackPartChoices.safeParse(raw);
+  if (!parsed.success) return c.json({ error: "Choices must map categories to unique order and off ids.", code: "invalid_choices" }, 400);
+  const refusal = choicesRefusal(parsed.data as Choices);
+  if (refusal) return c.json({ error: refusal.error, code: refusal.code }, refusal.status);
+  writePartChoices(parsed.data as Choices);
+  return c.json(await listParts({ audience: "adult" }), 200) as never;
+});
 partsRoutes.openapi(installRoute, async (c) => {
   const id = c.req.valid("param").id;
+  const def = PART_DEFS.find((row) => row.id === id);
+  if (def?.kind === "engine") return c.json({ error: `${def.label} is installed with the first part that runs on it.`, code: "engine_part" }, 409);
   // A household LoRA is not a part; an unknown id is a 404 from startComponentInstall itself (no disk scan here).
   if (id.startsWith("lora.")) return c.json({ error: `There is no part called ${id.slice(0, 60)}.`, code: "unknown_component" }, 404);
   let raw: unknown = {};
@@ -70,6 +92,8 @@ partsRoutes.openapi(installRoute, async (c) => {
 });
 partsRoutes.openapi(removeRoute, async (c) => {
   const id = c.req.valid("param").id;
+  const def = PART_DEFS.find((row) => row.id === id);
+  if (def?.kind === "engine") return c.json({ error: `${def.label} is removed with the last part that runs on it.`, code: "engine_part" }, 409);
   if (id.startsWith("lora.")) return c.json({ error: `There is no part called ${id.slice(0, 60)}.`, code: "unknown_component" }, 404);
   try { const result = await uninstallComponent(id); return c.json({ part: result.component, freed_bytes: result.freed_bytes, removed: result.removed }, 200); }
   catch (error) { if (error instanceof ComponentError) return c.json({ error: error.message, code: error.code }, error.status as 404 | 409); throw error; }
