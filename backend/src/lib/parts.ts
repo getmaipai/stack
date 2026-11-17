@@ -1,8 +1,8 @@
+import packageJson from "../../package.json";
 import type { StackPart } from "@maipai/spec/stack/ts/stack-part.js";
 import { StackPart as StackPartSchema } from "@maipai/spec/stack/ts/stack-part.js";
 import { TIER_CANDIDATES } from "@/lib/tiers";
 import { STACK_MODELS } from "@/lib/modelCatalog";
-import { createRequire } from "node:module";
 import type { CatalogModelLike } from "@/lib/modelStore";
 
 import { PART_DEFS } from "@/lib/partDefs";
@@ -12,8 +12,8 @@ interface PartUnitLike { id: string; pins: CatalogModelLike[]; licenceName?: str
 let componentUnits: () => PartUnitLike[] = () => [];
 export function registerPartUnits(provider: () => PartUnitLike[]): void { componentUnits = provider; }
 
-const require = createRequire(import.meta.url);
-const stackVersion = (require("../../package.json") as { version: string }).version;
+// A static import, never createRequire: the compiled Stack binary (scripts/build-binary.sh) resolves no relative require (2026-11-17, a ship failed on it).
+const stackVersion = packageJson.version;
 
 // A runner is required when it is a part of its own: an engine row, or a tool part that doubles as the runner (image-tools, liveportrait, score-gen).
 const ENGINE_PART_IDS = new Set(PART_DEFS.filter((def) => def.kind !== "model").map((def) => def.id));
