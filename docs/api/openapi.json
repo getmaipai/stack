@@ -14848,6 +14848,853 @@
         }
       }
     },
+    "/stack/v1/jobs/catalog": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "What can be made here, now: the eight generic jobs for one audience (MODELPACK-JOBS-01)",
+        "description": "A view over the model packs, the parts list and the household's order. It starts nothing. The adult catalog lists every job with `available`, the part that would serve it, its limits, `why_not` and `alternatives`; the minor catalog lists only the jobs a part in the minor's list serves, with neutral labels and no reason and no alternative (rule C10). A minor's candidates are ordered by the shipped priority, never by the household's order (rule E6). Home reads capabilities and limits here and never a second readiness: readiness stays in the parts list and the role health.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "adult",
+                "minor"
+              ]
+            },
+            "required": true,
+            "name": "audience",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The jobs catalog for the audience.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "audience": {
+                          "type": "string",
+                          "enum": [
+                            "adult"
+                          ]
+                        },
+                        "jobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "job": {
+                                "type": "string",
+                                "enum": [
+                                  "picture",
+                                  "picture_edit",
+                                  "clip",
+                                  "clip_from_sheet",
+                                  "restyle",
+                                  "swap",
+                                  "character_sheet",
+                                  "contact_sheet"
+                                ]
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "available": {
+                                "type": "boolean"
+                              },
+                              "part": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "limits": {
+                                "type": "object",
+                                "properties": {
+                                  "levels": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "standard",
+                                        "boost",
+                                        "max"
+                                      ]
+                                    }
+                                  },
+                                  "max_seconds": {
+                                    "type": "object",
+                                    "properties": {
+                                      "standard": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "exclusiveMinimum": true
+                                      },
+                                      "boost": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "exclusiveMinimum": true
+                                      },
+                                      "max": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "exclusiveMinimum": true
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "max_references": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "shapes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "landscape": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "portrait": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "square": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "max_words": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "levels"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "capabilities": {
+                                "type": "object",
+                                "properties": {
+                                  "text": {
+                                    "type": "boolean"
+                                  },
+                                  "end_picture": {
+                                    "type": "boolean"
+                                  },
+                                  "sound": {
+                                    "type": "boolean"
+                                  },
+                                  "keeps_likeness": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "text",
+                                  "end_picture",
+                                  "sound",
+                                  "keeps_likeness"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "styles": {
+                                "type": "object",
+                                "properties": {
+                                  "bases": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                                        },
+                                        "label": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "label"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "max": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "bases",
+                                  "max"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "restyles": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "label"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "why_not": {
+                                "type": "string",
+                                "nullable": true,
+                                "minLength": 1
+                              },
+                              "alternatives": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "part": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "part",
+                                    "label"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "job",
+                              "label",
+                              "available",
+                              "part",
+                              "limits",
+                              "capabilities",
+                              "styles",
+                              "restyles",
+                              "why_not",
+                              "alternatives"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "audience",
+                        "jobs"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "audience": {
+                          "type": "string",
+                          "enum": [
+                            "minor"
+                          ]
+                        },
+                        "jobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "job": {
+                                "type": "string",
+                                "enum": [
+                                  "picture",
+                                  "picture_edit",
+                                  "clip",
+                                  "clip_from_sheet",
+                                  "restyle",
+                                  "swap",
+                                  "character_sheet",
+                                  "contact_sheet"
+                                ]
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "available": {
+                                "type": "boolean"
+                              },
+                              "part": {
+                                "type": "object",
+                                "nullable": true,
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "label"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "limits": {
+                                "type": "object",
+                                "properties": {
+                                  "levels": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "standard",
+                                        "boost",
+                                        "max"
+                                      ]
+                                    }
+                                  },
+                                  "max_seconds": {
+                                    "type": "object",
+                                    "properties": {
+                                      "standard": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "exclusiveMinimum": true
+                                      },
+                                      "boost": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "exclusiveMinimum": true
+                                      },
+                                      "max": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "exclusiveMinimum": true
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "max_references": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "shapes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "landscape": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "portrait": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "square": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "max_words": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "levels"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "capabilities": {
+                                "type": "object",
+                                "properties": {
+                                  "text": {
+                                    "type": "boolean"
+                                  },
+                                  "end_picture": {
+                                    "type": "boolean"
+                                  },
+                                  "sound": {
+                                    "type": "boolean"
+                                  },
+                                  "keeps_likeness": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "text",
+                                  "end_picture",
+                                  "sound",
+                                  "keeps_likeness"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "styles": {
+                                "type": "object",
+                                "properties": {
+                                  "bases": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                                        },
+                                        "label": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "label"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "max": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "bases",
+                                  "max"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "restyles": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "label"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "job",
+                              "label",
+                              "available",
+                              "part",
+                              "limits",
+                              "capabilities",
+                              "styles",
+                              "restyles"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "audience",
+                        "jobs"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/jobs": {
       "post": {
         "tags": [
