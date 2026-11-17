@@ -16,6 +16,7 @@ import { StackSetting } from "@maipai/spec/stack/ts/stack-setting.js";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { ENGINE_BINARIES } from "@/lib/engineCatalog";
+import { partLabel } from "@/lib/partDefs";
 
 export type SettingValue = number | boolean | string;
 
@@ -127,7 +128,7 @@ export const SETTINGS: SettingDeclaration[] = [
   // the tts role. `auto` is the tier's default (Chatterbox Turbo on 64 GB
   // and up, Pocket TTS below); an engine that is not installed or fails to
   // start falls back to Pocket TTS and says why on the role.
-  { ...stack, key: "stack.voice.engine", selector: "select", range: { options: [{ value: "auto", label: "Best for this computer" }, { value: "chatterbox-turbo", label: "Chatterbox Turbo (expressive: laughs, sighs, coughs; needs about 5 GB)" }, { value: "pocket", label: "Pocket TTS (small and fast, no sound effects)" }] }, default: "auto", label: "Voice engine", help: "Which engine speaks after the next restart of the voice engine. Best for this computer picks Chatterbox Turbo where there is room for it and Pocket TTS elsewhere. If the chosen engine is missing or will not start, the voice stays on Pocket TTS.", section: { id: "engines.tts", order: 5 }, level: "basic", needs_restart: true },
+  { ...stack, key: "stack.voice.engine", selector: "select", range: { options: [{ value: "auto", label: "Best for this computer" }, { value: "chatterbox-turbo", label: `${partLabel("chatterbox-turbo-fp16")} (expressive: laughs, sighs, coughs; needs about 5 GB)` }, { value: "pocket", label: `${partLabel("pocket-tts-english")} (small and fast, no sound effects)` }] }, default: "auto", label: "Voice engine", help: `Which engine speaks after the next restart of the voice engine. Best for this computer picks ${partLabel("chatterbox-turbo-fp16")} where there is room for it and ${partLabel("pocket-tts-english")} elsewhere. If the chosen engine is missing or will not start, the voice stays on ${partLabel("pocket-tts-english")}.`, section: { id: "engines.tts", order: 5 }, level: "basic", needs_restart: true },
   // Secret: encrypted at rest, never returned by the settings route, and
   // used by the Stack's own fetch of the gated cloning weights, never
   // handed to the engine (STACK-94c, 94d).

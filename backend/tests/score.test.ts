@@ -9,6 +9,7 @@ import { componentDefs } from "@/lib/components";
 import { buildDiskPlan } from "@/lib/diskPlan";
 import { STACK_SCORE_MODEL_BUNDLE } from "@/lib/modelCatalog";
 import { scoreInstallModels } from "@/lib/installPlan";
+import { partDef } from "@/lib/partDefs";
 import { dataDir } from "@/lib/paths";
 import { registerScoreJobs, SCORE_JOB_KIND, runScore, stashScore } from "@/score/jobs";
 import { useScoreDepsForTests, SCORE_PEAK_BYTES, type ScoreDeps } from "@/score/scoreGen";
@@ -62,7 +63,7 @@ test("score job dispatch reports a readable missing input", async () => {
 test("Basic Pitch is bundled with its component and its optional disk-plan engine row", () => {
   expect(STACK_SCORE_MODEL_BUNDLE).toMatchObject({ id: "basic-pitch-0.4.0", component: "score-gen", license: "Apache-2.0", bundled: true });
   expect(scoreInstallModels()).toEqual([]);
-  expect(componentDefs().find((component) => component.id === "score-gen")?.summary).toContain("bundled");
+  expect(componentDefs().find((component) => component.id === "score-gen")?.summary).toBe(partDef("score-gen")!.description);
   const row = buildDiskPlan({ id: "p128", level: "max", resident: [], onDemand: [], notAvailable: [] } as any).rows.find((candidate) => candidate.id === "score-transcription");
   expect(row).toMatchObject({ need: "optional", engines: ["engine:score", "engine:python"], model_ids: [] });
 });

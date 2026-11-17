@@ -9,6 +9,7 @@ import { PAUSED_LABEL } from "@/lib/genProgress";
 import { decode } from "@/routes/stems";
 import { TRANSCRIPTION_JOB_KIND, TRANSCRIPTION_MAX_BYTES, TRANSCRIPTION_MAX_SECONDS, transcriptionFailure, transcriptionMemory, transcriptionOutput, transcriptionStage, transcriptionTracker, stashTranscription, unstashTranscription, forgetTranscriptionOutput, validTranscriptionContainer, transcriptionAvailable } from "@/speech/transcriptionJobs";
 import { validateDiarizeOptions } from "@/speech/diarization";
+import { partLabel } from "@/lib/partDefs";
 
 const WAIT = 30_000, MAX_WAIT = 30 * 60_000;
 const Schema = z.object({ source: z.string().max(350_000_000), source_sha256: z.string().regex(/^[0-9a-fA-F]{64}$/), from_s: z.number().min(0).optional(), to_s: z.number().positive().optional(), language: z.string().optional(), diarize: z.boolean().optional(), num_speakers: z.number().optional(), vocabulary: z.array(z.string().min(1).max(100)).max(100).optional(), timeout_ms: z.number().int().positive().max(MAX_WAIT).optional() });
@@ -34,7 +35,7 @@ transcriptionV1Routes.openapi(post, async (c) => {
   if (body.from_s !== undefined && body.to_s! <= body.from_s) return fail(c, 422, "bad_range", "to_s must be after from_s. Pick an end later than the start.");
   { const problem = validateDiarizeOptions(body.diarize, body.num_speakers); if (problem) return fail(c, 422, "bad_request", problem); }
   if (source.length <= TRANSCRIPTION_MAX_BYTES && !validTranscriptionContainer(source)) return fail(c, 422, "bad_request", "Send a supported audio or video file as base64.");
-  if (!transcriptionAvailable()) return fail(c, 503, "not_installed", "Install Parakeet TDT 0.6B v2 and Silero VAD from Home's Engines page, then start the stt engine.");
+  if (!transcriptionAvailable()) return fail(c, 503, "not_installed", `Install ${partLabel("parakeet-tdt-0.6b-v2-int8")} and Silero VAD from Home's Engines page, then start the stt engine.`);
   if (!hasJobRunner(TRANSCRIPTION_JOB_KIND)) return fail(c, 503, "unsupported", "Long-file transcription is not available on this machine.");
   if (listJobs().filter((j) => j.kind === TRANSCRIPTION_JOB_KIND && active(j.state)).length >= 4) return fail(c, 503, "queue_full", "Four transcription jobs are already waiting. Try again when one finishes.");
   const estimate = transcriptionMemory({ input: { from_s: body.from_s, to_s: body.to_s, diarize: body.diarize } as never }); const governor = getGovernorStatus(); const resident = governor.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);

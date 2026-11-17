@@ -6,6 +6,7 @@ import { plannedPinsFor } from "@/lib/installPlan";
 import { STACK_MODELS, STACK_VIDEO_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_ZIMAGE_MODELS } from "@/lib/modelCatalog";
 import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS } from "@/profiles";
+import { partDef } from "@/lib/partDefs";
 import { app } from "@/app";
 
 const GB = 1_073_741_824;
@@ -84,8 +85,8 @@ test("tiers: p16 and p32 have no generators, p64 has Klein and ERNIE, p128 adds 
     const plan = buildDiskPlan(PROFILE_TIERS.find((candidate) => candidate.id === tier)!);
     const klein = plan.rows.find((row) => row.id === "pictures")!;
     const ernie = plan.rows.find((row) => row.id === "pictures-ernie")!;
-    expect(klein).toMatchObject({ label: "Change pictures (FLUX.2 Klein)", note: "Needed. Edits the pictures you already have, and makes new ones when ERNIE is not installed.", need: "required" });
-    expect(ernie).toMatchObject({ label: "Make pictures (ERNIE)", note: "Recommended. Draws words in pictures correctly. Makes new pictures from a sentence.", need: "recommended" });
+    expect(klein).toMatchObject({ label: partDef("flux2-klein-4b")!.label, note: partDef("flux2-klein-4b")!.description, need: "required" });
+    expect(ernie).toMatchObject({ label: partDef("ernie-image-turbo")!.label, note: partDef("ernie-image-turbo")!.description, need: "recommended" });
     expect(plan.default_selected).toContain("pictures");
     expect(plan.default_selected).toContain("pictures-ernie");
     expect(ernie.download_bytes).toBe(STACK_IMAGE_ERNIE_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0));
@@ -175,7 +176,7 @@ test("pictures is required on every tier that makes pictures", () => {
     const plan = buildDiskPlan(tier);
     const row = plan.rows.find((candidate) => candidate.id === "pictures");
     if (tier.notAvailable.includes("image")) { expect(row).toBeUndefined(); continue; }
-    expect(row).toMatchObject({ label: "Change pictures (FLUX.2 Klein)", note: "Needed. Edits the pictures you already have, and makes new ones when ERNIE is not installed.", need: "required", selectable: false });
+    expect(row).toMatchObject({ label: partDef("flux2-klein-4b")!.label, note: partDef("flux2-klein-4b")!.description, need: "required", selectable: false });
     // A required part rides the first-run install plan: Klein's pins are planned on exactly the tiers that have a pictures row.
     const planned = new Set(plannedPinsFor(tier).map((entry) => entry.pin.id));
     for (const pin of STACK_IMAGE_KLEIN_MODELS) expect(planned.has(pin.id)).toBe(true);
@@ -188,7 +189,7 @@ test("pictures is required on every tier that makes pictures", () => {
 
 test("the p128 video row is recommended and no Detailed row or pin is planned", () => {
   const plan = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
-  expect(plan.rows.find((r) => r.id === "video")!).toMatchObject({ label: "Make videos (Wan2.2)", need: "recommended", selectable: true });
+  expect(plan.rows.find((r) => r.id === "video")!).toMatchObject({ label: partDef("fastwan2-2-ti2v-5b-mlx-bf16")!.neutralLabel, need: "recommended", selectable: true });
   expect(plan.rows.some((r) => r.id === "video-detailed")).toBe(false);
   expect(plan.default_selected).not.toContain("video-detailed");
   const planned = new Set(plannedPinsFor(PROFILE_TIERS.find((t) => t.id === "p128")!).map((entry) => entry.pin.id));
@@ -210,7 +211,7 @@ test("Talking pictures (LivePortrait) is a plain, sized, licensed row with its e
   for (const tier of PROFILE_TIERS.filter((candidate) => !candidate.notAvailable.includes("image"))) {
     const plan = buildDiskPlan(tier);
     const row = plan.rows.find((candidate) => candidate.id === "talking-pictures")!;
-    expect(row.label).toBe("Talking pictures (LivePortrait)");
+    expect(row.label).toBe(partDef("liveportrait")!.label);
     expect(row.note).toContain("MIT licence");
     expect(row.model_ids).toHaveLength(6);
     expect(row.engines).toEqual(["engine:liveportrait", "engine:python"]);

@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:
 import { join } from "node:path";
 import { app } from "@/app";
 import { diskPlanForTier, diskTotalsFor } from "@/lib/diskPlan";
+import { partDef } from "@/lib/partDefs";
 import { DISK_ROW, ComponentError, __setComponentDepsForTests, __setComponentUnitsForTests, __settleComponentInstallsForTests, componentDefs, forgetSizes, listComponents, startComponentInstall, uninstallComponent, type EnvDef, type UnitDef } from "@/lib/components";
 import { noteComponentUse, __forgetUseForTests } from "@/lib/componentUse";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
@@ -69,7 +70,7 @@ test("the real list names Z-Image-Turbo as an optional picture model on a 128 GB
   const list = await listComponents(hw());
   expect(list.tier).toBe("p128");
   const z = list.components.find((c) => c.id === "z-image-turbo")!;
-  expect(z).toMatchObject({ label: "Pictures: Z-Image-Turbo", group: "pictures", requirement: "optional", state: "notInstalled", can_install: true, can_uninstall: false, size_bytes: null });
+  expect(z).toMatchObject({ label: partDef("z-image-turbo")!.label, group: "pictures", requirement: "optional", state: "notInstalled", can_install: true, can_uninstall: false, size_bytes: null });
   const pins = STACK_IMAGE_ZIMAGE_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0);
   expect(z.full_bytes).toBeGreaterThanOrEqual(pins);
   // The wizard's disk plan has the same row, optional (unchecked by default), and the fit uses its sums.
@@ -274,7 +275,7 @@ test("the Parakeet listening model shows a plain name, not its raw id", async ()
   __setComponentUnitsForTests(null);
   createJob({ kind: "noop" });
   const row = (await listComponents(hw())).components.find((c) => c.id === "parakeet-tdt-0.6b-v2-int8");
-  expect(row?.label).toBe("Listening: speech to text, more accurate");
+  expect(row?.label).toBe(partDef("parakeet-tdt-0.6b-v2-int8")!.label);
   expect(row?.summary).not.toBe("");
 });
 
@@ -284,7 +285,7 @@ test("the component list retires Detailed while keeping current video components
   __setComponentUnitsForTests(null);
   const list = await listComponents(hw());
   expect(list.components.some((component) => component.id === "ltx-2-3-distilled-mlx")).toBe(false);
-  expect(list.components.find((component) => component.id === "fastwan2-2-ti2v-5b-mlx-bf16")?.label).toContain("Quick");
+  expect(list.components.find((component) => component.id === "fastwan2-2-ti2v-5b-mlx-bf16")?.label).toBe(partDef("fastwan2-2-ti2v-5b-mlx-bf16")!.neutralLabel);
   expect(list.components.find((component) => component.id === "ltx-2-5-q8-distilled-mlx")).toBeDefined();
 });
 
@@ -351,10 +352,10 @@ test("every picture family has a component of its own, sized by its install-plan
   const planRows = new Set(diskPlanForTier("p128")!.rows.map((row) => row.id));
   for (const [component, row] of Object.entries(DISK_ROW)) if (ids.has(component)) expect(planRows.has(row)).toBe(true);
   const ernie = (await listComponents(hw())).components.find((c) => c.id === "ernie-image-turbo")!;
-  expect(ernie).toMatchObject({ label: "Pictures: ERNIE-Image-Turbo", group: "pictures", can_install: expect.any(Boolean) });
+  expect(ernie).toMatchObject({ label: partDef("ernie-image-turbo")!.label, group: "pictures", can_install: expect.any(Boolean) });
   expect(ernie.full_bytes).toBeGreaterThan(15e9);
   const qwen = (await listComponents(hw())).components.find((c) => c.id === "qwen-image-2512-q8")!;
-  expect(qwen).toMatchObject({ label: "Pictures: Qwen-Image 20B (best quality)", group: "pictures", requirement: "optional" });
+  expect(qwen).toMatchObject({ label: partDef("qwen-image-2512-q8")!.label, group: "pictures", requirement: "optional" });
   expect(qwen.full_bytes).toBeGreaterThan(35e9);
   expect((await listComponents(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }))).components.find((c) => c.id === "qwen-image-2512-q8")!.requirement).toBe("unsupported");
 });
@@ -368,7 +369,7 @@ test("the real list has a beat analysis unit with no model files that installs t
   expect(unit.busy()).toBeNull();
   const list = await listComponents(hw());
   const view = list.components.find((candidate) => candidate.id === "beats-analysis")!;
-  expect(view).toMatchObject({ label: "Music: beat and section analysis", group: "stems", requirement: "optional", used_by: ["Cut to the beat in a video edit"] });
+  expect(view).toMatchObject({ label: partDef("beats-analysis")!.label, group: "stems", requirement: "optional", used_by: ["Cut to the beat in a video edit"] });
 });
 
 test("ffmpeg is a listed, required tool with its size, licence and a row in the wizard's disk plan", async () => {
@@ -382,7 +383,7 @@ test("ffmpeg is a listed, required tool with its size, licence and a row in the 
   expect(row).toMatchObject({ need: "required", selectable: false, download_bytes: 32_902_204 });
   for (const tier of ["p16", "p32", "p64", "p128"] as const) expect(diskPlanForTier(tier)!.default_selected).toContain("ffmpeg");
   const view = (await listComponents(hw())).components.find((candidate) => candidate.id === "ffmpeg")!;
-  expect(view).toMatchObject({ label: "Audio and video tools (ffmpeg)", summary: "Cuts, mixes and changes sound and video", group: "tools", plan_need: "required", requirement: "required", can_uninstall: false });
+  expect(view).toMatchObject({ label: partDef("ffmpeg")!.label, summary: partDef("ffmpeg")!.description, group: "tools", plan_need: "required", requirement: "required", can_uninstall: false });
   expect(view.licence_name).toContain("GPL-3.0-or-later");
   expect(view.full_bytes).toBe(32_902_204);
 });
@@ -394,13 +395,13 @@ test("fpcalc is a listed song naming tool with the Chromaprint LGPL licence", as
   expect(unit.pins).toEqual([]);
   expect(unit.envs.map((e) => e.name)).toEqual(["fpcalc"]);
   const view = (await listComponents(hw())).components.find((candidate) => candidate.id === "fpcalc")!;
-  expect(view).toMatchObject({ label: "Song naming tool (chromaprint)", summary: "Listens to a few seconds of music and makes a fingerprint so Home can name the song", group: "tools", licence_name: "LGPL-2.1-or-later" });
+  expect(view).toMatchObject({ label: partDef("fpcalc")!.label, summary: partDef("fpcalc")!.description, group: "tools", licence_name: "LGPL-2.1-or-later" });
 });
 
 test("shazam-signature is a listed MIT song signature tool and explains unsupported platforms", async () => {
   __setComponentUnitsForTests(null);
   const unit = componentDefs().find((candidate) => candidate.id === "shazam-signature")!;
-  expect(unit).toMatchObject({ label: "Song signature tool (shazamio-core)", summary: "Makes a small signature from a few seconds of music so Home can name the song", group: "tools", role: "media", licenceName: "MIT" });
+  expect(unit).toMatchObject({ label: partDef("shazam-signature")!.label, summary: partDef("shazam-signature")!.description, group: "tools", role: "media", licenceName: "MIT" });
   expect(unit.pins).toEqual([]);
   expect(unit.envs.map((environment) => environment.name)).toEqual(["shazam-signature"]);
   expect(unit.envs[0]!.approxBytes).toBe(1_700_000);

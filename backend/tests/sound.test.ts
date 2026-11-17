@@ -14,6 +14,7 @@ import { ENGINE_BINARIES, ENGINE_ROLE, MANAGED_RUNTIMES } from "@/lib/engineCata
 import { buildDiskPlan } from "@/lib/diskPlan";
 import { PROFILE_TIERS } from "@/profiles";
 import { componentDefs, DISK_ROW, startComponentInstall } from "@/lib/components";
+import { partDef } from "@/lib/partDefs";
 import { licenceAcceptance } from "@/lib/licenceAcceptance";
 import { dataDir } from "@/lib/paths";
 import { __resetMusicProvenanceForTests, sha256Hex, wasMadeHere } from "@/music/provenance";
@@ -279,7 +280,7 @@ test("the worker runs offline with no token or proxy, and everything it caches s
 
 test("the component is in the music group, optional on p32 and up, with its pin, its engine and the maker's licence to accept first", async () => {
   const unit = componentDefs().find((candidate) => candidate.id === STACK_SFX_MODEL_ID)!;
-  expect(unit).toMatchObject({ group: "music", role: "music", tiers: ["p32", "p64", "p128"], label: "Make sound effects (Stable Audio 3 Small-SFX)" });
+  expect(unit).toMatchObject({ group: "music", role: "music", tiers: ["p32", "p64", "p128"], label: partDef("stable-audio-3-small-sfx")!.label });
   expect(unit.pins.map((pin) => pin.id)).toEqual([STACK_SFX_MODEL_ID]);
   expect(unit.envs.map((env) => env.name)).toEqual(["sfx-gen"]);
   expect(unit.licenceNotice).toBe(SFX_LICENCE_NOTICE);

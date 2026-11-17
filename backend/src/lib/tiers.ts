@@ -1,3 +1,5 @@
+import { partDef } from "@/lib/partDefs";
+
 // Ids are literals, not imports from modelCatalog: the governor imports this file, and the catalog reaches the governor through settings (an import cycle). tests/tiers.test.ts checks each literal against the catalog constant.
 const STACK_IMAGE_ERNIE_ID = "ernie-image-turbo";
 const STACK_IMAGE_H3_ID = "minimax-h3-image";
@@ -21,7 +23,6 @@ export interface TierCandidate {
   id: string;
   category: TierCategory;
   family: string;
-  label: string;
   profiles: ProfileId[];
   peaks: Array<{ options: OptionSet; peakBytes: number; status: PeakStatus; note?: string }>;
   tiers: TierId[];
@@ -31,35 +32,35 @@ export interface TierCandidate {
 
 // Peaks marked "measured" come from docs/design/tier-evaluations-2026-10-30.md in getmaipai/home (Mac Studio, Apple M5 Max, 128 GB). Max video is LTX-2.5 Video Max on p128 (LTX25-MAX-01); Max music has no candidate on purpose: a Max slot is catalogued only with a measured, heard gain over the slot below.
 export const TIER_CANDIDATES: TierCandidate[] = [
-  { id: "muse-glimmer-30b-q4-k-xl", category: "chat", family: "muse", label: "Muse Glimmer 30B Q4_K_XL", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 19_000_000_000, status: "measured", note: "Tier eval 2026-10-30, 18.6 GB resident, 19.0 GB peak." }, { options: { thinking: true, reasoningBudget: 4096 }, peakBytes: 22_500_000_000, status: "unverified" }], tiers: ["standard", "boost"] },
-  { id: "muse-glimmer-30b-q4-k-m", category: "chat", family: "muse", label: "Muse Glimmer 30B Q4_K_M", profiles: ["p32"], peaks: [{ options: {}, peakBytes: 17_000_000_000, status: "unverified" }], tiers: ["standard"] },
-  { id: "qwen3-8b-instruct-q4-k-m", category: "chat", family: "qwen3", label: "Qwen3 8B", profiles: ["p16"], peaks: [{ options: {}, peakBytes: 7_000_000_000, status: "unverified", note: "Tier eval 2026-10-30 measured 8.06 GB after eight turns, above this figure: at 0.6 of a 12 GB room Standard would not fit, so the figure stays until the p16 room is decided." }], tiers: ["standard"] },
-  { id: "qwen3-4b-q4-k-m", category: "chat", family: "qwen3", label: "Qwen3 4B", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 5_700_000_000, status: "measured", note: "Tier eval 2026-10-30, the judge profile flags, 5.70 GB after eight turns." }], tiers: ["reduced"] },
-  { id: "qwen3.8-27b-ud-q4-k-m", category: "chat", family: "qwen3.8", label: "Qwen3.8 27B", profiles: ["p64", "p128"], peaks: [{ options: { thinking: true }, peakBytes: 22_200_000_000, status: "unverified", note: "22.2 GB peak measured with thinking off and no MTP draft; the thinking figure and the MTP run are still open." }], tiers: ["boost"] },
-  { id: "qwen3-6-35b-a3b-ud-q4-k-xl", category: "chat", family: "qwen3.6", label: "Qwen3.6 35B A3B", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 23_600_000_000, status: "measured", note: "Tier eval 2026-10-30: 70 tok/s, 9 of 9 searches." }], tiers: [], vetting: "MODEL-VET-01: replacement candidate for Muse at Standard; CHAT-AB-01, KS-BENCH-01 and a licence read come first." },
-  { id: "ornith-1-5-122b-mlx-4bit", category: "chat", family: "ornith", label: "Ornith 122B", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 68_700_000_000, status: "measured", note: "Measured design note peak." }], tiers: ["max"] },
-  // H3-IMAGE-STACK-01: MiniMax H3-Image goes first, so it is the recommended Standard and Boost picture model wherever it fits; the others stay as candidates. Resident (22 GB held, 19.7 GB measured) on p64 and p128; a streaming Standard candidate (2.5 GB held, 1.8 GB measured) on p16 and p32. Max stays on Qwen-Image: the 2048 and 4096 px Max numbers are an open bench (H3-MAX-01).
-  { id: STACK_IMAGE_H3_ID, category: "pictures", family: "minimax-h3", label: "MiniMax H3-Image", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 22_000_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps: resident 11 to 15 s, 19.7 GB whole-process-tree peak (22 GB held); streaming from disk 27 to 33 s at 1.8 GB." }], tiers: ["standard", "boost"] },
-  { id: STACK_IMAGE_H3_ID, category: "pictures", family: "minimax-h3", label: "MiniMax H3-Image (streaming)", profiles: ["p16", "p32"], peaks: [{ options: { ditMode: "stream" }, peakBytes: 2_500_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps: streaming from disk 27 to 33 s at 1.8 GB (2.5 GB held)." }], tiers: ["standard"] },
-  { id: STACK_IMAGE_KLEIN3_ID, category: "pictures", family: "flux3-klein", label: "FLUX 3 Image Klein (optional)", profiles: ["p64", "p128"], peaks: [{ options: { steps: 16 }, peakBytes: 37_400_000_000, status: "unverified", note: "34 GB peak measured with diffusers; mflux 0.23.0 peak not yet measured. Local word bench: 18 to 19 of 20." }], tiers: ["standard"] },
-  { id: STACK_IMAGE_ERNIE_ID, category: "pictures", family: "ernie", label: "ERNIE Image Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 18_800_000_000, status: "measured" }], tiers: ["standard"] },
-  { id: STACK_IMAGE_KLEIN_ID, category: "pictures", family: "klein", label: "FLUX.2 Klein 4B", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 10_200_000_000, status: "measured" }], tiers: ["standard"] },
-  { id: STACK_IMAGE_ZIMAGE_ID, category: "pictures", family: "z-image", label: "Z-Image Turbo", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 25_800_000_000, status: "measured" }], tiers: ["boost"] },
-  { id: "qwen-image-2512-q8", category: "pictures", family: "qwen-image", label: "Qwen-Image 20B", profiles: ["p128"], peaks: [{ options: { steps: 30 }, peakBytes: 37_400_000_000, status: "measured", note: "Tier eval 2026-10-30, 1024 x 1024, 181 to 212 s. Nine of 22 prompts; the Max picture slot is the owner's decision of 2026-10-30." }], tiers: ["max"] },
-  { id: STACK_VIDEO_MODEL_ID, category: "video", family: "wan", label: "Wan Video", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 25_400_000_000, status: "measured", note: "Tier eval 2026-10-30, 832 x 480, 49 frames. Known artifact: a head can appear behind an umbrella." }], tiers: ["standard"] },
-  { id: STACK_VIDEO_MASK_MODEL_ID, category: "video", family: "sam2", label: "SAM 2.1 subject masks", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_900_000_000, status: "measured", note: "LOCAL-BENCH-01, 2026-11-06, 4.9 GB peak; tracking at about 5.5 fps on MPS." }], tiers: [] },
-  { id: STACK_VIDEO_LTX25_MODEL_ID, category: "video", family: "ltx", label: "LTX-2.5 Video with sound", profiles: ["p128"], peaks: [
+  { id: "muse-glimmer-30b-q4-k-xl", category: "chat", family: "muse", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 19_000_000_000, status: "measured", note: "Tier eval 2026-10-30, 18.6 GB resident, 19.0 GB peak." }, { options: { thinking: true, reasoningBudget: 4096 }, peakBytes: 22_500_000_000, status: "unverified" }], tiers: ["standard", "boost"] },
+  { id: "muse-glimmer-30b-q4-k-m", category: "chat", family: "muse", profiles: ["p32"], peaks: [{ options: {}, peakBytes: 17_000_000_000, status: "unverified" }], tiers: ["standard"] },
+  { id: "qwen3-8b-instruct-q4-k-m", category: "chat", family: "qwen3", profiles: ["p16"], peaks: [{ options: {}, peakBytes: 7_000_000_000, status: "unverified", note: "Tier eval 2026-10-30 measured 8.06 GB after eight turns, above this figure: at 0.6 of a 12 GB room Standard would not fit, so the figure stays until the p16 room is decided." }], tiers: ["standard"] },
+  { id: "qwen3-4b-q4-k-m", category: "chat", family: "qwen3", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 5_700_000_000, status: "measured", note: "Tier eval 2026-10-30, the judge profile flags, 5.70 GB after eight turns." }], tiers: ["reduced"] },
+  { id: "qwen3.8-27b-ud-q4-k-m", category: "chat", family: "qwen3.8", profiles: ["p64", "p128"], peaks: [{ options: { thinking: true }, peakBytes: 22_200_000_000, status: "unverified", note: "22.2 GB peak measured with thinking off and no MTP draft; the thinking figure and the MTP run are still open." }], tiers: ["boost"] },
+  { id: "qwen3-6-35b-a3b-ud-q4-k-xl", category: "chat", family: "qwen3.6", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 23_600_000_000, status: "measured", note: "Tier eval 2026-10-30: 70 tok/s, 9 of 9 searches." }], tiers: [], vetting: "MODEL-VET-01: replacement candidate for Muse at Standard; CHAT-AB-01, KS-BENCH-01 and a licence read come first." },
+  { id: "ornith-1-5-122b-mlx-4bit", category: "chat", family: "ornith", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 68_700_000_000, status: "measured", note: "Measured design note peak." }], tiers: ["max"] },
+  // H3-IMAGE-STACK-01: The H3 picture model goes first, so it is the recommended Standard and Boost picture model wherever it fits; the others stay as candidates. Resident (22 GB held, 19.7 GB measured) on p64 and p128; a streaming Standard candidate (2.5 GB held, 1.8 GB measured) on p16 and p32. Max stays on Qwen-Image: the 2048 and 4096 px Max numbers are an open bench (H3-MAX-01).
+  { id: STACK_IMAGE_H3_ID, category: "pictures", family: "minimax-h3", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 22_000_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps: resident 11 to 15 s, 19.7 GB whole-process-tree peak (22 GB held); streaming from disk 27 to 33 s at 1.8 GB." }], tiers: ["standard", "boost"] },
+  { id: STACK_IMAGE_H3_ID, category: "pictures", family: "minimax-h3", profiles: ["p16", "p32"], peaks: [{ options: { ditMode: "stream" }, peakBytes: 2_500_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps: streaming from disk 27 to 33 s at 1.8 GB (2.5 GB held)." }], tiers: ["standard"] },
+  { id: STACK_IMAGE_KLEIN3_ID, category: "pictures", family: "flux3-klein", profiles: ["p64", "p128"], peaks: [{ options: { steps: 16 }, peakBytes: 37_400_000_000, status: "unverified", note: "34 GB peak measured with diffusers; mflux 0.23.0 peak not yet measured. Local word bench: 18 to 19 of 20." }], tiers: ["standard"] },
+  { id: STACK_IMAGE_ERNIE_ID, category: "pictures", family: "ernie", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 18_800_000_000, status: "measured" }], tiers: ["standard"] },
+  { id: STACK_IMAGE_KLEIN_ID, category: "pictures", family: "klein", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 10_200_000_000, status: "measured" }], tiers: ["standard"] },
+  { id: STACK_IMAGE_ZIMAGE_ID, category: "pictures", family: "z-image", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 25_800_000_000, status: "measured" }], tiers: ["boost"] },
+  { id: "qwen-image-2512-q8", category: "pictures", family: "qwen-image", profiles: ["p128"], peaks: [{ options: { steps: 30 }, peakBytes: 37_400_000_000, status: "measured", note: "Tier eval 2026-10-30, 1024 x 1024, 181 to 212 s. Nine of 22 prompts; the Max picture slot is the owner's decision of 2026-10-30." }], tiers: ["max"] },
+  { id: STACK_VIDEO_MODEL_ID, category: "video", family: "wan", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 25_400_000_000, status: "measured", note: "Tier eval 2026-10-30, 832 x 480, 49 frames. Known artifact: a head can appear behind an umbrella." }], tiers: ["standard"] },
+  { id: STACK_VIDEO_MASK_MODEL_ID, category: "video", family: "sam2", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_900_000_000, status: "measured", note: "LOCAL-BENCH-01, 2026-11-06, 4.9 GB peak; tracking at about 5.5 fps on MPS." }], tiers: [] },
+  { id: STACK_VIDEO_LTX25_MODEL_ID, category: "video", family: "ltx", profiles: ["p128"], peaks: [
     { options: { size: "512x256", seconds: 5 }, peakBytes: 25_300_000_000, status: "measured", note: "VIDEO-TIERS-01, M5 Max OS footprint, 2026-11-02." },
     { options: { size: "512x256", seconds: 10 }, peakBytes: 39_400_000_000, status: "measured", note: "Standard slot: 241 frames, 43 s." },
     { options: { size: "640x320", seconds: 5 }, peakBytes: 32_400_000_000, status: "measured", note: "Boost slot." },
     { options: { size: "768x448", seconds: 5 }, peakBytes: 45_800_000_000, status: "measured", note: "Boost slot." },
-  ], tiers: [], vetting: "VIDEO-TIERS-01: the Stack runs it (LTX25-ENGINE-01); Home's design step moves the Standard and Boost video slots here while the Wan Quick lane remains available for minors. The Max profile (1024x576, 10 s, 48.6 GB, LTX25-MAX-01) is the separate model ltx-2-5-bf16-distilled-mlx-max on the dgrauet runtime; its slot is Home's to enable." },
-  { id: STACK_VIDEO_LTX25_MAX_MODEL_ID, category: "video", family: "ltx", label: "LTX-2.5 Video Max", profiles: ["p128"], peaks: [{ options: { input: "words" }, peakBytes: 51_000_000_000, status: "measured", note: "LTX25 Max words peak from video/ltx25.ts." }, { options: { input: "picture" }, peakBytes: 61_500_000_000, status: "measured", note: "LTX25 Max picture peak from video/ltx25.ts." }], tiers: ["max"] },
-  { id: STACK_MUSIC_MODEL_ID, category: "music", family: "ace-step", label: "ACE-Step 1.5 Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 16_400_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
-  { id: "chatterbox-turbo-fp16", category: "voice", family: "chatterbox", label: "Chatterbox Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_580_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
-  { id: "chatterbox-nano", category: "voice", family: "chatterbox", label: "Chatterbox Nano", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 2_770_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak with cloning; needs a pinned mlx-audio or a config-reading patch before it ships." }], tiers: ["reduced"] },
-  { id: "pocket-tts-english", category: "voice", family: "pocket", label: "Pocket TTS", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_600_000_000, status: "measured", note: "Tier eval 2026-10-30, whole process peak." }], tiers: ["reduced", "standard"] },
-  { id: "htdemucs", category: "stems", family: "demucs", label: "Demucs 4 stems", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_210_000_000, status: "measured", note: "Tier eval 2026-10-30, 40 s song in 2 to 5 s. Boost htdemucs_ft stays out until a listen finds it cleaner." }], tiers: ["standard"] },
+  ], tiers: [], vetting: "VIDEO-TIERS-01: the Stack runs it (LTX25-ENGINE-01); Home's design step moves the Standard and Boost video slots here while the minor video lane remains available for children and teens. The Max profile (1024x576, 10 s, 48.6 GB, LTX25-MAX-01) is the separate model ltx-2-5-bf16-distilled-mlx-max on the dgrauet runtime; its slot is Home's to enable." },
+  { id: STACK_VIDEO_LTX25_MAX_MODEL_ID, category: "video", family: "ltx", profiles: ["p128"], peaks: [{ options: { input: "words" }, peakBytes: 51_000_000_000, status: "measured", note: "LTX25 Max words peak from video/ltx25.ts." }, { options: { input: "picture" }, peakBytes: 61_500_000_000, status: "measured", note: "LTX25 Max picture peak from video/ltx25.ts." }], tiers: ["max"] },
+  { id: STACK_MUSIC_MODEL_ID, category: "music", family: "ace-step", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 16_400_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
+  { id: "chatterbox-turbo-fp16", category: "voice", family: "chatterbox", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_580_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
+  { id: "chatterbox-nano", category: "voice", family: "chatterbox", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 2_770_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak with cloning; needs a pinned mlx-audio or a config-reading patch before it ships." }], tiers: ["reduced"] },
+  { id: "pocket-tts-english", category: "voice", family: "pocket", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_600_000_000, status: "measured", note: "Tier eval 2026-10-30, whole process peak." }], tiers: ["reduced", "standard"] },
+  { id: "htdemucs", category: "stems", family: "demucs", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_210_000_000, status: "measured", note: "Tier eval 2026-10-30, 40 s song in 2 to 5 s. Boost htdemucs_ft stays out until a listen finds it cleaner." }], tiers: ["standard"] },
 ];
 
 export const TIER_CAP_FRACTIONS = { standard: 0.6, boost: 0.85, max: 1 } as const;
@@ -73,7 +74,7 @@ export function tierCapBytes(tier: TierId, roomBytes: number, reducedFreedBytes 
 
 export interface Resolved { tier: TierId; model: string; options: OptionSet; switchCost: SwitchCost; peakBytes: number; verified: boolean; family: string; }
 export interface ResolveInput { category: TierCategory; tier: TierId; profile: ProfileId; roomBytes: number; reducedFreedBytes?: number; slot?: { model: string | "recommended" | "off"; options?: OptionSet }; below?: Resolved | null; }
-/** Reduced chat is the judge model everywhere; Reduced voice is Chatterbox Nano on p64 and p128 (same family as Standard) and Pocket TTS on p16 and p32 (owner ruling 2026-10-30; Pocket stays the fallback). */
+/** Reduced chat is the judge model everywhere; Reduced voice is Chatterbox Nano on p64 and p128 (same family as Standard) and the standard speech model on p16 and p32 (owner ruling 2026-10-30; it stays the fallback). */
 const reducedModelFor = (category: TierCategory, profile: ProfileId): string | undefined => category === "chat" ? "qwen3-4b-q4-k-m" : category === "voice" ? (profile === "p64" || profile === "p128" ? "chatterbox-nano" : "pocket-tts-english") : undefined;
 const equalOptions = (a: OptionSet, b: OptionSet): boolean => JSON.stringify(Object.entries(a).sort(([x], [y]) => x.localeCompare(y))) === JSON.stringify(Object.entries(b).sort(([x], [y]) => x.localeCompare(y)));
 const candidatesFor = (category: TierCategory, tier: TierId, profile: ProfileId): TierCandidate[] => TIER_CANDIDATES.filter((candidate) => candidate.category === category && candidate.profiles.includes(profile) && candidate.tiers.includes(tier));
@@ -169,6 +170,12 @@ export function reducedFreedBytes(profile: ProfileId, roomBytes: number, loadedC
 export function minorTierClamp(tier: TierId): TierId { return tier === "boost" || tier === "max" ? "standard" : tier; }
 export function thinkingAllowedFor(band: "child" | "teen" | "adult"): boolean { return band === "adult"; }
 
+export function tierCandidateLabel(id: string, options: OptionSet = {}): string {
+  const part = partDef(id);
+  const label = id === "fastwan2-2-ti2v-5b-mlx-bf16" ? part?.neutralLabel : part?.label;
+  return `${label ?? id}${id === "minimax-h3-image" && options.ditMode === "stream" ? " (streaming)" : ""}`;
+}
+
 export interface TierCandidateRow { id: string; label: string; family: string; peakBytes: number; verified: boolean; fits: boolean; refusal: string | null }
 export interface TierCandidateList { tier: "standard" | "boost" | "max"; capBytes: number; recommended: string | null; candidates: TierCandidateRow[] }
 
@@ -183,7 +190,7 @@ export function tierCandidateLists(category: TierCategory, profile: ProfileId, r
     candidates: pickable.map((candidate) => {
       const peak = candidate.peaks.reduce((largest, item) => (item.peakBytes > largest.peakBytes ? item : largest), candidate.peaks[0]!);
       const refusal = customPickRefusal({ category, tier, profile, roomBytes, reducedFreedBytes, model: candidate.id, options: peak.options });
-      return { id: candidate.id, label: candidate.label, family: candidate.family, peakBytes: peak.peakBytes, verified: candidate.peaks.every((item) => item.status === "measured"), fits: refusal === null, refusal };
+      return { id: candidate.id, label: tierCandidateLabel(candidate.id, peak.options), family: candidate.family, peakBytes: peak.peakBytes, verified: candidate.peaks.every((item) => item.status === "measured"), fits: refusal === null, refusal };
     }),
   }));
 }

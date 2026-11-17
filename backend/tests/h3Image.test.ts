@@ -20,6 +20,7 @@ import { readResult } from "@/images/results";
 import { __setInstalledFamiliesForTests, familyInstalled, H3_MAX_PICTURES, IMAGE_FAMILIES, isFamilyId, peakBytes, referencesMaxFor, runsOnTier } from "@/images/models";
 import { diskPlanForTier } from "@/lib/diskPlan";
 import { componentDefs } from "@/lib/components";
+import { partDef } from "@/lib/partDefs";
 import { PROFILE_TIERS } from "@/profiles";
 import { resolveTier, resolveLadder, tierCandidateLists, TIER_CANDIDATES } from "@/lib/tiers";
 import { dataDir } from "@/lib/paths";
@@ -161,7 +162,7 @@ test("the engine: h3-image-gen is a managed runtime on its own hashed requiremen
   expect(h3RequirementsFileFor("linux", "x64")).toBeNull();
   // It is a component unit of its own, with the licence to accept and its own environment.
   const unit = componentDefs().find((candidate) => candidate.id === STACK_IMAGE_H3_ID)!;
-  expect(unit).toMatchObject({ label: "Pictures: MiniMax H3-Image", summary: "Makes pictures and changes them, keeps words spelled right, and takes up to sixteen reference pictures. One model for new pictures and edits.", group: "pictures", licenceNotice: H3_LICENCE_NOTICE });
+  expect(unit).toMatchObject({ label: partDef("minimax-h3-image")!.label, summary: partDef("minimax-h3-image")!.description, group: "pictures", licenceNotice: H3_LICENCE_NOTICE });
   expect(unit.usedBy()[0]).toBe("Pictures in chat and the Pictures app");
   expect(unit.envs.map((env) => env.name)).toEqual(["h3-image-gen"]);
   expect(unit.pins.map((pin) => pin.id)).toEqual(STACK_IMAGE_H3_MODELS.map((pin) => pin.id));
@@ -454,7 +455,7 @@ test("(d) the disk plan lists pictures-h3 at 49.3 GB: recommended on 64 and 128 
   const rows = (tier: string) => diskPlanForTier(tier as never)!.rows;
   for (const tier of ["p64", "p128"]) {
     const row = rows(tier).find((candidate) => candidate.id === "pictures-h3")!;
-    expect(row).toMatchObject({ label: "Make and change pictures (MiniMax H3-Image)", kind: "model", need: "recommended", selectable: true, download_bytes: 49_296_196_495, installed_bytes: 49_296_196_495, engines: ["engine:pictures-h3", "engine:python"] });
+    expect(row).toMatchObject({ label: partDef("minimax-h3-image")!.label, kind: "model", need: "recommended", selectable: true, download_bytes: 49_296_196_495, installed_bytes: 49_296_196_495, engines: ["engine:pictures-h3", "engine:python"] });
     expect(row.model_ids).toEqual(STACK_IMAGE_H3_MODELS.map((pin) => pin.id));
     expect(Math.round(row.download_bytes / 1e8) / 10).toBe(49.3);
     expect(diskPlanForTier(tier as never)!.default_selected).toContain("pictures-h3");
@@ -477,7 +478,7 @@ test("(e) the tier candidates include the family, and recommended resolves to it
   expect(by("boost").recommended).toBe("minimax-h3-image");
   expect(by("max").recommended).toBe("qwen-image-2512-q8");
   const row = by("standard").candidates.find((candidate) => candidate.id === "minimax-h3-image")!;
-  expect(row).toMatchObject({ label: "MiniMax H3-Image", family: "minimax-h3", peakBytes: 22 * GB, verified: true, fits: true, refusal: null });
+  expect(row).toMatchObject({ label: partDef("minimax-h3-image")!.label, family: "minimax-h3", peakBytes: 22 * GB, verified: true, fits: true, refusal: null });
   // ERNIE, Z-Image, Klein and Qwen-Image stay candidates.
   expect(by("standard").candidates.map((candidate) => candidate.id)).toEqual(expect.arrayContaining(["ernie-image-turbo", "flux2-klein-4b", "z-image-turbo", "qwen-image-2512-q8", "minimax-h3-image"]));
   expect(resolveTier({ category: "pictures", tier: "standard", profile: "p128", roomBytes: room })).toMatchObject({ model: "minimax-h3-image", peakBytes: 22 * GB, verified: true });

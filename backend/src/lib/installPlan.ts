@@ -127,20 +127,20 @@ export function recordedSpeechInstallModels(installedIds: Iterable<string> = [])
   return STACK_MODELS.filter((pin) => pin.component === "recorded-speech").flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
-/** The pins the picture generator needs, in the shape of a pull, for the image status route: Home installs a family when the person turns pictures on (FLUX.2 Klein 4B by default; Z-Image-Turbo is offered on the biggest computers). Klein is in the first-run plan on every tier that has image (AIMODELS-DATA-01); the other families are not. */
+/** The pins the picture generator needs, in the shape of a pull, for the image status route: Home installs a family when the person turns pictures on (the standard family by default; a higher-detail option is offered on the biggest computers). Klein is in the first-run plan on every tier that has image (AIMODELS-DATA-01); the other families are not. */
 export function imageInstallModels(family: ImageFamilyId, installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   const pins = family === "flux2-klein-4b" ? STACK_IMAGE_KLEIN_MODELS : family === "flux3-image-klein" ? STACK_IMAGE_KLEIN3_MODELS : family === "z-image-turbo" ? STACK_IMAGE_ZIMAGE_MODELS : family === "qwen-image-2512-q8" ? STACK_IMAGE_QWEN_MODELS : family === "minimax-h3-image" ? STACK_IMAGE_H3_MODELS : STACK_IMAGE_ERNIE_MODELS;
   return pins.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
-/** MAKE-CLEARER-2026-11-13: the two SeedVR2 3B weight files (Best level of Make clearer) in the shape of a pull. Nothing here downloads. */
+/** MAKE-CLEARER-2026-11-13: the two picture repair weight files (Best level of Make clearer) in the shape of a pull. Nothing here downloads. */
 export function restoreInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_IMAGE_RESTORE_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 
-/** The six Talking pictures (LivePortrait) weights in the shape of a pull. Installation stays an explicit action: nothing here downloads. */
+/** The six companion animation weights in the shape of a pull. Installation stays an explicit action: nothing here downloads. */
 export function talkingPicturesInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
   return STACK_LIVEPORTRAIT_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
@@ -178,7 +178,7 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
     // is the default on every tier (ENGINE-MLX-02), and the 19 GB MLX weights
     // are fetched only when the admin chooses oMLX (an optional disk-plan row,
     // or the engine setting set to `omlx`).
-    // The tier's expressive voice rides beside Pocket TTS, which stays as
+    // The tier's expressive voice rides beside the standard speech model, which stays as
     // the fallback (VOICE-STUDIO-01): only where the tier runs it by default.
     if (role === "tts" && tierDefaultTtsEngine(tier.id) === "chatterbox-turbo") { add(STACK_TTS_CHATTERBOX_MODEL); for (const part of STACK_TTS_CHATTERBOX_PARTS) add(part); add(STACK_DEREVERB_MODEL); }
   }

@@ -13,6 +13,7 @@ import { STEMS_MODELS as STEMS_SPECS, STEMS_PEAK_BYTES } from "@/stems/stems";
 import { STEMS_MODEL_ID, STEMS_MAX_SOURCE_BYTES, stems, type StemModelId } from "@/stems/stems";
 import { STEMS_JOB_KIND, stashSource, unstashSource, stemsFailure, stemsStage, stemsTracker } from "@/stems/jobs";
 import { STACK_STEMS_MODEL_ID } from "@/lib/modelCatalog";
+import { partLabel } from "@/lib/partDefs";
 
 export const STEM_MODELS = { htdemucs: STACK_STEMS_MODEL_ID, htdemucs_ft: "htdemucs_ft", htdemucs_6s: "htdemucs_6s" } as const;
 const DEFAULT_WAIT_MS = 30_000;
@@ -43,7 +44,7 @@ stemsV1Routes.openapi(post, async (c) => {
   // An audio file the person owns may be split and nothing else (stems of it are never written to the ledger, so they cannot become an edit or cover source); every other caller still needs a song this Stack made.
   if (!owned && !wasMadeHere(source)) return fail(c, 422, "source_not_made_here", "I can only split a song that was made here.");
   if (!stems.depsAvailable) return fail(c, 503, "unsupported", "Stem splitting is not available on this computer.");
-  if (!stems.isInstalled(body.model as StemModelId)) return fail(c, 503, "not_installed", body.model === "htdemucs_ft" ? "Install the fine-tuned stem model from Home's Engines page, then try again." : body.model === "htdemucs_6s" ? "Install the six-part stem model from Home's Engines page, then try again." : "Install HTDemucs from Home's Engines page, then try again.");
+  if (!stems.isInstalled(body.model as StemModelId)) return fail(c, 503, "not_installed", body.model === "htdemucs_ft" ? `Install ${partLabel("htdemucs-ft")} from Home's Engines page, then try again.` : body.model === "htdemucs_6s" ? `Install ${partLabel("htdemucs-6s")} from Home's Engines page, then try again.` : `Install ${partLabel("htdemucs")} from Home's Engines page, then try again.`);
   if (!hasJobRunner(STEMS_JOB_KIND)) return fail(c, 503, "unsupported", "Stem splitting is not available on this machine.");
   const activeCount = listJobs().filter((job) => job.kind === STEMS_JOB_KIND && ["queued", "running", "stalled"].includes(job.state)).length;
   if (activeCount >= 4) return fail(c, 429, "queue_full", "Four stem jobs are already waiting. Try again when one finishes.");

@@ -9,6 +9,9 @@
 // voice engine clears.
 import type { GovernorTier } from "@/lib/governor";
 import { CHATTERBOX_ENGINE } from "@/lib/modelCatalog";
+import { partLabel } from "@/lib/partDefs";
+
+const pocketLabel = partLabel("pocket-tts-english");
 
 export type TtsEngineId = "chatterbox-turbo" | "orpheus" | "pocket";
 export const TTS_ENGINE_SETTING = "stack.voice.engine";
@@ -31,9 +34,9 @@ export interface TtsEngineDefinition {
 }
 
 export const TTS_ENGINES: Record<TtsEngineId, TtsEngineDefinition> = {
-  pocket: { id: "pocket", label: "Pocket TTS", catalogEngine: "pocket-tts", runtime: "pocket-tts", built: true, tags: [], estimatedFootprintBytes: 1_073_741_824, repo: null },
+  pocket: { id: "pocket", label: pocketLabel, catalogEngine: "pocket-tts", runtime: "pocket-tts", built: true, tags: [], estimatedFootprintBytes: 1_073_741_824, repo: null },
   "chatterbox-turbo": {
-    id: "chatterbox-turbo", label: "Chatterbox Turbo", catalogEngine: CHATTERBOX_ENGINE, runtime: "mlx-audio", built: true,
+    id: "chatterbox-turbo", label: partLabel("chatterbox-turbo-fp16"), catalogEngine: CHATTERBOX_ENGINE, runtime: "mlx-audio", built: true,
     // Verified 2026-10-17 by synthesizing each tag alone and measuring
     // voicing and spectral flatness against spoken words (design note,
     // "Tags the engine honors"). The model's tokenizer knows 19 bracket
@@ -84,9 +87,9 @@ export function resolveTtsEngine(options: { setting: unknown; tier: GovernorTier
   const requested = requestedTtsEngine(options.setting, options.tier);
   if (requested === "pocket") return { engine: "pocket", requested, reason: null };
   const definition = TTS_ENGINES[requested];
-  if (!definition.built) return { engine: "pocket", requested, reason: `${definition.label} is not available in this Stack yet, so the voice stays on Pocket TTS.` };
+  if (!definition.built) return { engine: "pocket", requested, reason: `${definition.label} is not available in this Stack yet, so the voice stays on ${pocketLabel}.` };
   const failure = failed.get(requested);
-  if (failure) return { engine: "pocket", requested, reason: `${definition.label} did not start (${failure}), so the voice fell back to Pocket TTS. Restart the voice engine to try again.` };
-  if (!options.installed(requested)) return { engine: "pocket", requested, reason: `${definition.label} is not installed on this computer, so the voice stays on Pocket TTS. Install it from the engines page.` };
+  if (failure) return { engine: "pocket", requested, reason: `${definition.label} did not start (${failure}), so the voice fell back to ${pocketLabel}. Restart the voice engine to try again.` };
+  if (!options.installed(requested)) return { engine: "pocket", requested, reason: `${definition.label} is not installed on this computer, so the voice stays on ${pocketLabel}. Install it from the engines page.` };
   return { engine: requested, requested, reason: null };
 }

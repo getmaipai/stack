@@ -1,0 +1,63 @@
+// The one table of parts: the only place a part's name, description and priority are written (PARTS-STACK-01).
+// It imports nothing, so any module can read a label without an import cycle. `parts.ts` builds the full
+// StackPart records from it.
+export interface PartDef {
+  id: string; kind: "model" | "tool"; category: string; priority: number; label: string; neutralLabel: string; description: string; adultOnly: boolean; minorOnly?: boolean;
+}
+
+export const PART_DEFS: readonly PartDef[] = [
+  { id: "qwen3-1.7b-q8-0", kind: "model", category: "chat", priority: 8, label: "Qwen3 1.7B", neutralLabel: "Chat helper", description: "A small, quick chat model.", adultOnly: false },
+  { id: "qwen3-8b-instruct-q4-k-m", kind: "model", category: "chat", priority: 3, label: "Qwen3 8B", neutralLabel: "Chat helper", description: "A mid-size chat model for computers with less memory.", adultOnly: false },
+  { id: "muse-glimmer-30b-q4-k-xl", kind: "model", category: "chat", priority: 1, label: "Muse Glimmer 30B Q4_K_XL", neutralLabel: "Chat helper", description: "The household chat model on larger computers that can also read pictures.", adultOnly: false },
+  { id: "muse-glimmer-30b-q4-k-m", kind: "model", category: "chat", priority: 2, label: "Muse Glimmer 30B Q4_K_M", neutralLabel: "Chat helper", description: "The same chat model in a smaller file for computers with less memory.", adultOnly: false },
+  { id: "muse-glimmer-30b-mlx-4bit", kind: "model", category: "chat", priority: 9, label: "Muse Glimmer 30B MLX 4-bit", neutralLabel: "Chat helper", description: "Runs the chat model with the MLX engine on Apple silicon.", adultOnly: false },
+  { id: "qwen3-6-35b-a3b-ud-q4-k-xl", kind: "model", category: "chat", priority: 6, label: "Qwen3.6 35B A3B", neutralLabel: "Chat helper", description: "A large chat model with a compact active expert set.", adultOnly: false },
+  { id: "qwen3-8-27b-huihui-abliterated-iq4-xs", kind: "model", category: "chat", priority: 10, label: "Qwen3.8 27B", neutralLabel: "Chat helper", description: "An optional chat model selected by an admin.", adultOnly: false },
+  { id: "qwen3-4b-q4-k-m", kind: "model", category: "checks", priority: 1, label: "Qwen3 4B", neutralLabel: "Quick checks", description: "A small model for fast side tasks like titles and safety checks.", adultOnly: false },
+  { id: "qwen3.8-27b-ud-q4-k-m", kind: "model", category: "coding", priority: 1, label: "Qwen3.8 27B", neutralLabel: "Coding helper", description: "The model that writes code for the coding tools you connect.", adultOnly: false },
+  { id: "ornith-1-5-122b-mlx-4bit", kind: "model", category: "chat", priority: 7, label: "Ornith 1.5 122B MLX 4-bit", neutralLabel: "Chat helper", description: "A large chat model for computers with ample memory.", adultOnly: false },
+  { id: "qwen3-1.7b-mlx-4bit", kind: "model", category: "chat", priority: 11, label: "Qwen3 1.7B", neutralLabel: "Chat helper", description: "A small chat model in the format the second chat engine runs.", adultOnly: false },
+  { id: "moonshine-tiny-en-int8", kind: "model", category: "voice", priority: 3, label: "Moonshine Tiny English", neutralLabel: "Voice helper", description: "Turns what you say into text.", adultOnly: false },
+  { id: "parakeet-tdt-0.6b-v2-int8", kind: "model", category: "voice", priority: 4, label: "Parakeet TDT 0.6B v2", neutralLabel: "Voice helper", description: "A larger listening model that makes about three times fewer mistakes with names and background noise.", adultOnly: false },
+  { id: "pocket-tts-english", kind: "model", category: "voice", priority: 2, label: "Pocket TTS", neutralLabel: "Voice helper", description: "The standard speaking voice.", adultOnly: false },
+  { id: "chatterbox-turbo-fp16", kind: "model", category: "voice", priority: 1, label: "Chatterbox Turbo", neutralLabel: "Voice helper", description: "A more expressive speaking voice for larger computers.", adultOnly: false },
+  { id: "nomic-embed-text-v1-5-q4-k-m", kind: "model", category: "search", priority: 1, label: "Memory and search model", neutralLabel: "Memory and search", description: "Lets Home find the right memory or page by meaning.", adultOnly: false },
+  { id: "qwen3-vl-4b-instruct-q4-k-m", kind: "model", category: "vision", priority: 1, label: "Qwen3-VL 4B", neutralLabel: "Picture reader", description: "Describes pictures for the parts of Home that need to look at one.", adultOnly: false },
+  { id: "qwen3-vl-8b-instruct-q4-k-m", kind: "model", category: "vision", priority: 2, label: "Qwen3-VL 8B", neutralLabel: "Picture reader", description: "A chat model that can look at pictures you share.", adultOnly: false },
+  { id: "wakeword", kind: "model", category: "voice", priority: 5, label: "Wake word", neutralLabel: "Voice helper", description: "Lets a speaker or robot wake up when someone says the wake word.", adultOnly: false },
+  { id: "flux2-klein-4b", kind: "model", category: "pictures", priority: 4, label: "FLUX.2 Klein 4B", neutralLabel: "Picture maker", description: "The everyday picture model.", adultOnly: false },
+  { id: "flux3-image-klein", kind: "model", category: "pictures", priority: 1, label: "FLUX 3 Image Klein", neutralLabel: "Picture maker", description: "Makes and edits pictures from words, including legible lettering, with up to nine reference pictures.", adultOnly: false },
+  { id: "z-image-turbo", kind: "model", category: "pictures", priority: 5, label: "Z-Image-Turbo", neutralLabel: "Picture maker", description: "A higher-detail picture model for the largest computers.", adultOnly: false },
+  { id: "ernie-image-turbo", kind: "model", category: "pictures", priority: 3, label: "ERNIE-Image-Turbo", neutralLabel: "Picture maker", description: "Draws words inside pictures correctly.", adultOnly: false },
+  { id: "qwen-image-2512-q8", kind: "model", category: "pictures", priority: 6, label: "Qwen-Image 20B", neutralLabel: "Picture maker", description: "The best picture model, used for Max pictures.", adultOnly: false },
+  { id: "minimax-h3-image", kind: "model", category: "pictures", priority: 2, label: "MiniMax H3-Image", neutralLabel: "Picture maker", description: "Makes pictures and changes them, keeps words spelled right, and takes up to sixteen reference pictures.", adultOnly: false },
+  { id: "seedvr2-3b", kind: "tool", category: "restore", priority: 1, label: "SeedVR2 3B", neutralLabel: "Picture repair", description: "The most careful repair for old, soft or damaged pictures, used by the Best level of Make clearer.", adultOnly: false },
+  { id: "image-tools", kind: "tool", category: "tools", priority: 1, label: "Image editor", neutralLabel: "Tools", description: "Remove a background, erase an object, upscale, resize or make a depth map for a picture.", adultOnly: false },
+  { id: "ffmpeg", kind: "tool", category: "tools", priority: 2, label: "FFmpeg", neutralLabel: "Tools", description: "Cuts, mixes and changes sound and video.", adultOnly: false },
+  { id: "fpcalc", kind: "tool", category: "tools", priority: 3, label: "Chromaprint", neutralLabel: "Tools", description: "Listens to a few seconds of music and makes a fingerprint so Home can name the song.", adultOnly: false },
+  { id: "shazam-signature", kind: "tool", category: "tools", priority: 4, label: "Shazam signature", neutralLabel: "Tools", description: "Makes a small signature from a few seconds of music so Home can name the song.", adultOnly: false },
+  { id: "liveportrait", kind: "tool", category: "tools", priority: 5, label: "LivePortrait", neutralLabel: "Tools", description: "Makes the mouth and blink pictures a talking companion plays back while it speaks.", adultOnly: false },
+  { id: "tool-look", kind: "tool", category: "tools", priority: 6, label: "Look", neutralLabel: "Tools", description: "Names household objects, wall colour and light in a picture.", adultOnly: false },
+  { id: "fastwan2-2-ti2v-5b-mlx-bf16", kind: "model", category: "video", priority: 99, label: "Wan 2.2 FastWan", neutralLabel: "Silent video", description: "Makes short silent clips.", adultOnly: false, minorOnly: true },
+  { id: "ltx-2-5-q8-distilled-mlx", kind: "model", category: "video", priority: 1, label: "LTX-2.5 with sound", neutralLabel: "Video maker", description: "Makes clips up to 10 seconds with a sound track and spoken words, from a sentence.", adultOnly: true },
+  { id: "minimax-h3", kind: "model", category: "video", priority: 2, label: "MiniMax H3", neutralLabel: "Video maker", description: "Makes five-second clips with stereo sound from a written description.", adultOnly: true },
+  { id: "ltx-2-5-bf16-distilled-mlx-max", kind: "model", category: "video", priority: 3, label: "LTX-2.5 Max with sound", neutralLabel: "Video maker", description: "Makes 1024 by 576 clips up to 10 seconds with a sound track and spoken words, from a sentence.", adultOnly: true },
+  { id: "sam2.1-hiera-small", kind: "model", category: "video", priority: 4, label: "SAM 2.1 subject masks", neutralLabel: "Video maker", description: "Tracks a selected subject through a clip for cutouts and background removal, and makes still-picture masks.", adultOnly: false },
+  { id: "htdemucs", kind: "model", category: "stems", priority: 1, label: "HTDemucs", neutralLabel: "Audio tools", description: "Separates a song made here into vocals, drums, bass and other.", adultOnly: false },
+  { id: "htdemucs-ft", kind: "model", category: "stems", priority: 2, label: "HTDemucs fine-tuned", neutralLabel: "Audio tools", description: "Separates songs into four finer stems.", adultOnly: false },
+  { id: "mms-fa-align", kind: "model", category: "stems", priority: 3, label: "MMS aligner", neutralLabel: "Audio tools", description: "Finds when each word of a song's lyrics is sung.", adultOnly: false },
+  { id: "beats-analysis", kind: "tool", category: "stems", priority: 4, label: "Beat and section tool", neutralLabel: "Audio tools", description: "Finds the beats, bars and sections of a song so edits can land on the beat.", adultOnly: false },
+  { id: "soulx-singer-svc", kind: "model", category: "stems", priority: 5, label: "SoulX-Singer", neutralLabel: "Audio tools", description: "Changes the singer in a vocal toward a reference voice.", adultOnly: false },
+  { id: "mossformer2-se-48k", kind: "model", category: "voice", priority: 6, label: "MossFormer2 SE", neutralLabel: "Voice helper", description: "Removes room echo and background noise from speech.", adultOnly: false },
+  { id: "fish-audio-drama-3-4bit", kind: "model", category: "voice", priority: 7, label: "Fish Audio Drama 3", neutralLabel: "Voice helper", description: "Makes a finished speech recording with optional voice references and dialogue.", adultOnly: false },
+  { id: "htdemucs-6s", kind: "model", category: "stems", priority: 6, label: "HTDemucs 6-stem", neutralLabel: "Audio tools", description: "Separates songs into six stems, including guitar and piano.", adultOnly: false },
+  { id: "ace-step-1-5-turbo", kind: "model", category: "music", priority: 1, label: "ACE-Step 1.5", neutralLabel: "Song maker", description: "Makes and changes songs in chat.", adultOnly: false },
+  { id: "stable-audio-3-small-sfx", kind: "model", category: "music", priority: 4, label: "Stable Audio 3 Small-SFX", neutralLabel: "Song maker", description: "Makes short sound effects and ambience from a sentence, up to 47 seconds.", adultOnly: false },
+  { id: "score-gen", kind: "tool", category: "music", priority: 5, label: "Spotify Basic Pitch", neutralLabel: "Song maker", description: "Turns audio into MIDI and a note list using the bundled model.", adultOnly: false },
+  { id: "whisper-large-v3-turbo", kind: "model", category: "music", priority: 6, label: "Whisper Large v3 Turbo", neutralLabel: "Song maker", description: "Transcribes finished songs so Home can check the words.", adultOnly: false },
+  { id: "ace-step-1-5-xl-turbo-bf16", kind: "model", category: "music", priority: 2, label: "ACE-Step XL Turbo", neutralLabel: "Song maker", description: "A larger song model with clearer voices, used for Boost songs.", adultOnly: false },
+  { id: "ace-step-1-5-xl-sft-bf16", kind: "model", category: "music", priority: 3, label: "ACE-Step XL SFT", neutralLabel: "Song maker", description: "The best song model, with its larger planning model, used for Max songs.", adultOnly: false },
+];
+
+export function partDef(id: string): PartDef | undefined { return PART_DEFS.find((part) => part.id === id); }
+export function partLabel(id: string): string { const part = partDef(id); return part ? (part.minorOnly ? part.neutralLabel : part.label) : id; }

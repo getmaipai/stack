@@ -5,10 +5,11 @@
 import { existsSync } from "node:fs";
 import { getModel } from "@/lib/modelStore";
 import { STACK_IMAGE_RESTORE_ID, STACK_IMAGE_RESTORE_MODELS } from "@/lib/modelCatalog";
+import { partLabel } from "@/lib/partDefs";
 
 export const RESTORE_FAMILY = STACK_IMAGE_RESTORE_ID;
 export type RestoreFamilyId = typeof RESTORE_FAMILY;
-export const RESTORE_LABEL = "Make clearer, best quality (SeedVR2 3B)";
+export const RESTORE_LABEL = `Make clearer, best quality (${partLabel("seedvr2-3b")})`;
 const GB = 1_000_000_000;
 /** Low-RAM mode peak (macOS footprint) for a picture up to about 1 megapixel, measured on the Studio; the figure the governor holds. */
 export const RESTORE_PEAK_BYTES = 12 * GB;

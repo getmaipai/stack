@@ -29,6 +29,7 @@ import { __resetGenHistoryForTests, GenTracker, MUSIC_STAGES } from "@/lib/genPr
 import { buildDiskPlan } from "@/lib/diskPlan";
 import { collectComponentsCatalog } from "@/lib/componentsDoc";
 import { componentDefs } from "@/lib/components";
+import { partDef } from "@/lib/partDefs";
 import { removeWorkerDir, startLeakyWorker, waitForWorkerRequest, waitForWorkerTreeGone, waitForWorkerPids } from "./helpers/leakyWorker";
 
 const GB = 1_073_741_824;
@@ -661,11 +662,11 @@ test("the worker keeps the keep-warm, offline and memory settings the note measu
 
 test("the component is listed in the group music for p64 and p128, optional, with both pins and the music engine", () => {
   const unit = componentDefs().find((candidate) => candidate.group === "music" && candidate.id === STACK_MUSIC_MODEL.id)!;
-  expect(unit).toMatchObject({ id: STACK_MUSIC_MODEL.id, label: "Music: ACE-Step 1.5", summary: "Makes and changes songs in chat", role: "music", tiers: ["p64", "p128"] });
+  expect(unit).toMatchObject({ id: STACK_MUSIC_MODEL.id, label: partDef("ace-step-1-5-turbo")!.label, summary: partDef("ace-step-1-5-turbo")!.description, role: "music", tiers: ["p64", "p128"] });
   expect(unit.pins.map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id]);
   expect(unit.envs.map((env) => env.name)).toEqual(["music-gen"]);
   const whisper = componentDefs().find((candidate) => candidate.id === STACK_MUSIC_WHISPER.id)!;
-  expect(whisper).toMatchObject({ label: "Music: sung words check", group: "music", role: "music", tiers: ["p64", "p128"] });
+  expect(whisper).toMatchObject({ label: partDef("whisper-large-v3-turbo")!.label, group: "music", role: "music", tiers: ["p64", "p128"] });
   expect(whisper.pins.map((pin) => pin.id)).toEqual([STACK_MUSIC_WHISPER.id]);
   const catalog = collectComponentsCatalog();
   expect(catalog.models.filter((pin) => pin.role === "music").map((pin) => pin.id)).toEqual([STACK_MUSIC_MODEL.id, STACK_MUSIC_LM_06.id, STACK_MUSIC_WHISPER.id, STACK_MUSIC_XL.id, STACK_MUSIC_XL_CONFIG.id, STACK_MUSIC_SFT.id, STACK_MUSIC_SFT_CONFIG.id, STACK_MUSIC_LM_4.id, "htdemucs", "htdemucs_ft", "htdemucs_6s", "mms-fa-align", "stable-audio-3-small-sfx", "soulx-singer-svc", "soulx-singer-rmvpe", "soulx-singer-whisper-base"]);

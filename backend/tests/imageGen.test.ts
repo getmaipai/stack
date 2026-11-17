@@ -21,6 +21,7 @@ import { __setInstalledFamiliesForTests, IMAGE_FAMILIES, parseSize, peakBytes, q
 import { __setRestoreInstalledForTests, RESTORE_PEAK_BYTES, restoreOutputSize } from "@/images/restore";
 import { STACK_IMAGE_RESTORE_MODELS } from "@/lib/modelCatalog";
 import { componentDefs } from "@/lib/components";
+import { partDef } from "@/lib/partDefs";
 import { __resetProvenanceForTests, wasGeneratedHere } from "@/video/provenance";
 import { LoraError, scanWords } from "@/lib/media/loraLibrary";
 import { parseRegion } from "@/routes/imageGenerations";
@@ -614,9 +615,9 @@ test("GET /stack/v1/image reports state, models, limits, edit and what to instal
   expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo", "qwen-image-2512-q8", "minimax-h3-image", "flux3-image-klein"]);
   expect(image.models[0]).toMatchObject({ installed: true, default: true, edit: true, steps_default: 4, peak_gb: 15, quantize: 8, available: true });
   expect(image.models[1]).toMatchObject({ steps_default: 9, edit: false, peak_gb: 34 });
-  expect(image.models[2]).toMatchObject({ label: "ERNIE-Image-Turbo", steps_default: 8, edit: false, peak_gb: 21 });
+  expect(image.models[2]).toMatchObject({ label: partDef("ernie-image-turbo")!.label, steps_default: 8, edit: false, peak_gb: 21 });
   expect(image.models[2].install.models).toHaveLength(12);
-  expect(image.models[3]).toMatchObject({ label: "Qwen-Image 20B", steps_default: 30, edit: false, peak_gb: 41, quantize: null });
+  expect(image.models[3]).toMatchObject({ label: partDef("qwen-image-2512-q8")!.label, steps_default: 30, edit: false, peak_gb: 41, quantize: null });
   expect(image.limits).toMatchObject({ min_side: 256, max_side: 2048, size_step: 16, max_n: 4, max_loras: 4, queue_max: 4 });
   expect(image.memory.fits).toBe(true);
   __setInstalledFamiliesForTests([]);
@@ -1012,7 +1013,7 @@ test("SeedVR2 3B is two pinned files at one revision with sha256 and size, Apach
   expect(STACK_IMAGE_ENGINE_MODELS.some((pin) => pin.id.startsWith("seedvr2"))).toBe(false);
   const unit = componentDefs().find((def) => def.id === "seedvr2-3b")!;
   expect(unit).toMatchObject({ group: "tools", role: "image", tiers: ["p64", "p128"] });
-  expect(unit.label).toContain("Make clearer");
+  expect(unit.label).toBe(partDef("seedvr2-3b")!.label);
   expect(unit.pins).toHaveLength(2);
   expect(RESTORE_PEAK_BYTES).toBeGreaterThanOrEqual(9_840_000_000);
 });
