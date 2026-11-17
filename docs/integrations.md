@@ -272,6 +272,24 @@ the label and calls `POST /stack/v1/health/{code}/fix`, which returns
 `{ ok, result }`. A code that needs a human (a host to plug back in)
 has no `fix` and Home shows the cause.
 
+## Status: one read (STACK-STATUS-01)
+
+`GET /stack/v1/status` returns the spec's `StackStatus` in one composed,
+read-only response. Home's status page reads this contract (HOME-STATUS-01).
+Health is `ok` when no blocking issue is present, `degraded` for an error
+or critical health item, critical memory pressure or a nearly full disk,
+`down` only when the chat engine is stopped, and `updating` while an engine
+update runs. Each problem includes its plain cause, an optional related
+part and one fix label (or the standing message that the Stack is watching
+and nothing can be pressed yet). The disk-full problem appears below the
+5 GB margin and clears when free space returns above it.
+
+Jobs are returned newest first, up to 50. `running` stays `running`;
+`queued`, `stalled`, `paused` and `waiting_for_you` map to `waiting`;
+`failed` and `cancelled` map to `failed`; and `done` stays `done`. The
+response composes the health list, job list, governor and memory watchdog;
+it starts no work.
+
 The chat engine setting `context_length` defaults to `0`, which selects the largest context admitted by the fit plan up to the model's trained context. A positive owner setting is used as-is; the governor still makes the final memory admission decision.
 
 ## The settings declaration

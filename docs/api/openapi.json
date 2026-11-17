@@ -15672,6 +15672,209 @@
         }
       }
     },
+    "/stack/v1/status": {
+      "get": {
+        "tags": [
+          "Status"
+        ],
+        "summary": "One status read: health, busy, memory, jobs and problems with a fix each (STACK-STATUS-01)",
+        "responses": {
+          "200": {
+            "description": "health is updating while an engine update runs and down only when the chat engine is stopped. Every problem has a plain cause and a fix. Composed from the health list, job list, governor and memory watchdog; starts no work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "health": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "degraded",
+                        "down",
+                        "updating"
+                      ]
+                    },
+                    "busy": {
+                      "type": "object",
+                      "properties": {
+                        "running": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "waiting": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "running",
+                        "waiting"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "using": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "part_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "job_id": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "part_id",
+                          "bytes",
+                          "job_id"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "memory": {
+                      "type": "object",
+                      "properties": {
+                        "total_bytes": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "free_bytes": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "budget_bytes": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "pressure": {
+                          "type": "string",
+                          "enum": [
+                            "normal",
+                            "warn",
+                            "critical"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "total_bytes",
+                        "free_bytes",
+                        "budget_bytes",
+                        "pressure"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "jobs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "part_id": {
+                            "type": "string",
+                            "nullable": true,
+                            "minLength": 1,
+                            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "waiting",
+                              "failed",
+                              "done"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "percent": {
+                            "type": "number",
+                            "nullable": true,
+                            "minimum": 0,
+                            "maximum": 100
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "part_id",
+                          "state",
+                          "reason",
+                          "percent"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "problems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "part_id": {
+                            "type": "string",
+                            "nullable": true,
+                            "minLength": 1,
+                            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                          },
+                          "plain": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "fix": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "since": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "part_id",
+                          "plain",
+                          "fix",
+                          "since"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "health",
+                    "busy",
+                    "using",
+                    "memory",
+                    "jobs",
+                    "problems"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/check": {
       "post": {
         "tags": [

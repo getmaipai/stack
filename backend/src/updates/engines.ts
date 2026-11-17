@@ -23,7 +23,14 @@ export interface EngineSwapOptions {
   emitEvents?: boolean;
 }
 
+let updateCount = 0;
+let updateOverride: boolean | null = null;
+export function updateInProgress(): boolean { return updateOverride ?? updateCount > 0; }
+export function __setUpdateInProgressForTests(on: boolean | null): void { updateOverride = on; }
+
 export async function swapEngine(name: string, tag: string, options: EngineSwapOptions = {}): Promise<void> {
+  updateCount++;
+  try {
   const target = engineTagRoot(name, tag);
   // The directory exists from the moment a download starts; only the
   // ready marker means the build finished installing and verified.
@@ -49,6 +56,7 @@ export async function swapEngine(name: string, tag: string, options: EngineSwapO
     if (options.emitEvents !== false) failedSwap(error instanceof Error ? error.message : String(error), name);
     throw error;
   } finally { endHold(); }
+  } finally { updateCount = Math.max(0, updateCount - 1); }
 }
 export async function rollbackEngine(name: string, tag: string): Promise<void> { await swapEngine(name, tag); }
 /** The tag the `current` link names; one read, defined with the store. */
@@ -109,8 +117,11 @@ let engineUpdateRunner: EngineUpdateRunner = stageAndSwap;
 export function setEngineUpdateRunnerForTests(value: EngineUpdateRunner): void { engineUpdateRunner = value; }
 export function resetEngineUpdateRunnerForTests(): void { engineUpdateRunner = stageAndSwap; }
 export async function applyAvailableEngineUpdate(): Promise<{ tag: string; previous: string | null } | null> {
+  updateCount++;
+  try {
   const target = pendingEngineUpdate("llama-server"); if (!target) return null;
   const previous = currentEngine("llama-server");
   await engineUpdateRunner("llama-server", target.tag, { url: target.url, sha256: target.sha256, size: target.size, requires: target.requires, extra: target.extra });
   return { tag: target.tag, previous };
+  } finally { updateCount = Math.max(0, updateCount - 1); }
 }

@@ -432,6 +432,7 @@ are never copied. Nothing migrates Home until STACK-16.
 
 ## Health, readiness and updates
 
+- [x] STACK-STATUS-01: `GET /stack/v1/status` composes health, busy, using, memory, jobs and problems (record: home `docs/design/stack-home-catalog-separation-2026-11-16.md` section 7).
 - [x] **STACK-09b: the health list.** Keyed, durable, one fix per item,
   `health.changed` on every change, producers explicit. Kept.
 - [x] **STACK-87 (M, re-scoped): ready and current claims time-bound
