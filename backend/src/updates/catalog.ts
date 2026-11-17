@@ -81,6 +81,13 @@ export function catalogModelForId(id: string): CatalogModelLike | null {
   return entry ? { ...entry, role: entry.role as CatalogModelLike["role"], sizing: { profile: entry.profile, quality: entry.quality } } : null;
 }
 
+/** One parsed Catalog model index for a parts-list projection. */
+export function catalogModelsForIds(ids: readonly string[]): Map<string, CatalogModelLike> {
+  const wanted = new Set(ids);
+  const index = readModelIndex();
+  return new Map((index?.models ?? []).filter((entry) => wanted.has(entry.id)).map((entry) => [entry.id, { ...entry, role: entry.role as CatalogModelLike["role"], sizing: { profile: entry.profile, quality: entry.quality } }]));
+}
+
 async function fetchIndex(kind: "modelIndex" | "engineIndex", url: string, fetcher: UpdateFetcher): Promise<"updated" | "unchanged" | "missing"> {
   const response = await fetcher(url, { headers: conditionalHeaders(read(`${kind}.etag`)) });
   if (response.status === 304) { write(`${kind}.checked`, new Date().toISOString()); return "unchanged"; }

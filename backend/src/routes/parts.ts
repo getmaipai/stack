@@ -8,6 +8,9 @@ import { PART_DEFS } from "@/lib/partDefs";
 import { choicesRefusal, writePartChoices, type Choices } from "@/lib/partChoices";
 import { StackPartChoices } from "@maipai/spec/stack/ts/stack-part-choices.js";
 import { stackParts } from "@/lib/parts";
+import { startModelUpdate, rollbackModel } from "@/updates/models";
+import { applyAvailableEngineUpdate, previousEngine, rollbackEngine } from "@/updates/engines";
+import { stopRole, restartRole } from "@/lib/supervisor";
 
 const PartView = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/).max(200), kind: z.enum(["model", "tool", "engine"]), category: z.string().min(1), chat: StackPartViewSchema.shape.chat,
@@ -22,7 +25,7 @@ const ErrorBody = z.object({ error: z.string(), code: z.string() });
 const partId = z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/).max(200).openapi({ param: { name: "id", in: "path" }, example: "z-image-turbo" }) });
 const listRoute = createRoute({
   method: "get", path: "/", tags: ["Parts"], summary: "Every part this Stack can install and run, for one audience (PARTS-API-01)",
-  description: "`enabled` and `priority` come from the one household choice Home pushes; `update.available` remains false until PARTS-UPDATE-01. A minor's list has neutral labels, empty descriptions and no adult-only part. This answer comes from memory and starts no work.",
+  description: "`enabled` and `priority` come from the one household choice Home pushes. `update.available` reflects a newer pinned Catalog revision for ready models and engines with an applicable update. A minor's list has neutral labels, empty descriptions and no adult-only part. This answer starts no work.",
   request: { query: z.object({ audience: z.enum(["adult", "minor"]), kind: z.enum(["model", "tool", "engine"]).optional(), category: z.string().max(40).optional() }) },
   responses: { 200: { content: { "application/json": { schema: PartList } }, description: "The audience filtered list of parts." } },
 });
@@ -51,6 +54,13 @@ const removeRoute = createRoute({
     409: { content: { "application/json": { schema: ErrorBody } }, description: "The part is in use or required." },
   },
 });
+const updateRoute = createRoute({ method: "post", path: "/{id}/update", tags: ["Parts"], summary: "Apply the available update for a part, by id (PARTS-UPDATE-01)", request: { params: partId, body: { required: false, content: { "application/json": { schema: z.unknown() } } } }, responses: {
+  200: { content: { "application/json": { schema: z.object({ applied: z.boolean(), part: z.string(), version: z.string().nullable(), previous: z.string().nullable() }) } }, description: "Engine update result." },
+  202: { content: { "application/json": { schema: z.object({ job: z.string(), part: z.string(), joined: z.boolean() }) } }, description: "Model update started or joined." }, 400: { content: { "application/json": { schema: ErrorBody } }, description: "Caller supplied update pins." }, 404: { content: { "application/json": { schema: ErrorBody } }, description: "Unknown part." }, 409: { content: { "application/json": { schema: ErrorBody } }, description: "No update is available." },
+} });
+const rollbackRoute = createRoute({ method: "post", path: "/{id}/rollback", tags: ["Parts"], summary: "Roll back a part to its remembered previous version (PARTS-UPDATE-01)", request: { params: partId }, responses: {
+  200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), part: z.string(), version: z.string() }) } }, description: "Rolled back." }, 404: { content: { "application/json": { schema: ErrorBody } }, description: "Unknown part." }, 409: { content: { "application/json": { schema: ErrorBody } }, description: "No previous version is available." },
+} });
 
 export const partsRoutes = apiRouter<AppEnv>();
 partsRoutes.openapi(listRoute, async (c) => c.json(await listParts(c.req.valid("query")), 200) as never);
@@ -97,4 +107,36 @@ partsRoutes.openapi(removeRoute, async (c) => {
   if (id.startsWith("lora.")) return c.json({ error: `There is no part called ${id.slice(0, 60)}.`, code: "unknown_component" }, 404);
   try { const result = await uninstallComponent(id); return c.json({ part: result.component, freed_bytes: result.freed_bytes, removed: result.removed }, 200); }
   catch (error) { if (error instanceof ComponentError) return c.json({ error: error.message, code: error.code }, error.status as 404 | 409); throw error; }
+});
+partsRoutes.openapi(updateRoute, async (c) => {
+  const id = c.req.valid("param").id;
+  const def = PART_DEFS.find((row) => row.id === id);
+  if (!def) return c.json({ error: `There is no part called ${id.slice(0, 60)}.`, code: "unknown_component" }, 404);
+  const text = await c.req.text();
+  if (text.trim()) {
+    try { const raw = JSON.parse(text); if (!raw || typeof raw !== "object" || Array.isArray(raw) || Object.keys(raw).length) return c.json({ error: "The update body is not accepted; the Stack owns the pinned URL and checksum.", code: "body_not_allowed" }, 400); }
+    catch { return c.json({ error: "The update body is not accepted; the Stack owns the pinned URL and checksum.", code: "body_not_allowed" }, 400); }
+  }
+  if (def.kind === "model") {
+    const part = (await listParts({ audience: "adult" })).parts.find((row) => row.id === id);
+    if (!part || part.state !== "ready" || !part.update.available) return c.json({ error: `${def.label} has no update the Stack can apply yet.`, code: "no_update" }, 409);
+    const started = startModelUpdate(id);
+    return started ? c.json({ job: started.job, part: id, joined: started.joined }, 202) : c.json({ error: `${def.label} has no update the Stack can apply yet.`, code: "no_update" }, 409);
+  }
+  if (def.kind === "engine" && id === "llama-server") {
+    try { const result = await applyAvailableEngineUpdate(); return result ? c.json({ applied: true, part: id, version: result.tag, previous: result.previous }, 200) : c.json({ error: `${def.label} has no update the Stack can apply yet.`, code: "no_update" }, 409); }
+    catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error), code: "update_failed" }, 409); }
+  }
+  return c.json({ error: `${def.label} has no update the Stack can apply yet.`, code: "no_update" }, 409);
+});
+partsRoutes.openapi(rollbackRoute, async (c) => {
+  const id = c.req.valid("param").id; const def = PART_DEFS.find((row) => row.id === id);
+  if (!def) return c.json({ error: `There is no part called ${id.slice(0, 60)}.`, code: "unknown_component" }, 404);
+  if (def.kind === "model") { const result = await rollbackModel(id); return result.ok ? c.json({ ok: true as const, part: id, version: result.revision }, 200) : c.json({ error: result.reason, code: "no_previous" }, 409); }
+  if (def.kind === "engine" && id === "llama-server") {
+    const previous = previousEngine(id); if (!previous) return c.json({ error: "No previous engine version is recorded or installed.", code: "no_previous" }, 409);
+    try { await stopRole("chat", "Draining for a rollback.", "rollback-drain"); await rollbackEngine(id, previous); await restartRole("chat", "rollback-restart"); return c.json({ ok: true as const, part: id, version: previous }, 200); }
+    catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error), code: "no_previous" }, 409); }
+  }
+  return c.json({ error: `${def.label} has no previous version to restore.`, code: "no_previous" }, 409);
 });

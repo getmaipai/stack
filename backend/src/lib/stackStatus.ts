@@ -38,6 +38,13 @@ export async function stackStatus(hw?: HardwareInfo): Promise<StackStatusType> {
     const component = componentIdOfFailureCode(item.code);
     let partId = component && partDef(component) ? component : null;
     if (!partId) {
+      const updatePrefix = "update-failed.";
+      if (item.code.startsWith(updatePrefix)) {
+        const candidate = item.code.slice(updatePrefix.length);
+        if (partDef(candidate)) partId = candidate;
+      }
+    }
+    if (!partId) {
       const suffix = item.code.split(".").at(-1) ?? "";
       if (ROLE_IDS.includes(suffix as RoleId)) { const model = selectedModel(suffix as RoleId)?.id; if (model && partDef(model)) partId = model; }
     }

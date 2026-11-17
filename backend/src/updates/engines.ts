@@ -27,6 +27,12 @@ let updateCount = 0;
 let updateOverride: boolean | null = null;
 export function updateInProgress(): boolean { return updateOverride ?? updateCount > 0; }
 export function __setUpdateInProgressForTests(on: boolean | null): void { updateOverride = on; }
+export function beginUpdate(): () => void {
+  updateCount++;
+  const endHold = holdSelfHeal("A part update");
+  let ended = false;
+  return () => { if (ended) return; ended = true; endHold(); updateCount = Math.max(0, updateCount - 1); };
+}
 
 export async function swapEngine(name: string, tag: string, options: EngineSwapOptions = {}): Promise<void> {
   updateCount++;
@@ -117,11 +123,11 @@ let engineUpdateRunner: EngineUpdateRunner = stageAndSwap;
 export function setEngineUpdateRunnerForTests(value: EngineUpdateRunner): void { engineUpdateRunner = value; }
 export function resetEngineUpdateRunnerForTests(): void { engineUpdateRunner = stageAndSwap; }
 export async function applyAvailableEngineUpdate(): Promise<{ tag: string; previous: string | null } | null> {
-  updateCount++;
+  const endUpdate = beginUpdate();
   try {
   const target = pendingEngineUpdate("llama-server"); if (!target) return null;
   const previous = currentEngine("llama-server");
   await engineUpdateRunner("llama-server", target.tag, { url: target.url, sha256: target.sha256, size: target.size, requires: target.requires, extra: target.extra });
   return { tag: target.tag, previous };
-  } finally { updateCount = Math.max(0, updateCount - 1); }
+  } finally { endUpdate(); }
 }

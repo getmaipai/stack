@@ -11,6 +11,9 @@ import { readPartChoices, enabledFor, effectivePriority } from "@/lib/partChoice
 import { ENGINE_BINARIES, installedEnginePin } from "@/lib/engineCatalog";
 import { PART_DEFS } from "@/lib/partDefs";
 import { componentDefs } from "@/lib/components";
+import { getModel } from "@/lib/modelStore";
+import { catalogModelsForIds, pendingEngineUpdate } from "@/updates/catalog";
+import { modelUpdateJob } from "@/updates/models";
 
 export type PartsAudience = "adult" | "minor";
 export interface PartsFilter { audience: PartsAudience; kind?: "model" | "tool" | "engine"; category?: string }
@@ -24,6 +27,13 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
   const choices = readPartChoices();
   const hardware = hw ?? (hasHardwareOverride ? testHardware! : await detectHardware());
   const [components, runtimeParts] = await Promise.all([listComponents(hardware), Promise.resolve(stackParts())]);
+  const modelEntries = catalogModelsForIds(runtimeParts.filter((part) => part.kind === "model").map((part) => part.id));
+  const modelUpdates = new Map(runtimeParts.filter((part) => part.kind === "model").map((part) => {
+    const installed = getModel(part.id);
+    const entry = modelEntries.get(part.id);
+    const available = !!installed?.modelPath && !!entry?.revision && entry.revision !== installed.revision;
+    return [part.id, { available, version: available ? entry!.revision! : null } as const];
+  }));
   const runtimeById = new Map(runtimeParts.map((part) => [part.id, part]));
   const componentById = new Map(components.components.filter((component) => !component.id.startsWith("lora.") && partDef(component.id)?.kind !== "engine").map((component) => [component.id, component]));
   const defs = [...componentById.keys()].flatMap((id) => { const def = partDef(id); return def && def.kind !== "engine" ? [def] : []; });
@@ -55,7 +65,7 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
       }
     }
     const state = unsupported ? "unsupported" : component.state === "installed" ? "ready" : component.state === "notInstalled" ? "missing" : component.state;
-    const view = {
+    const view: StackPartView = {
       id: def.id, kind: def.kind, category: def.category, priority: effectivePriority(def, choices),
       ...(runtimeById.get(def.id)?.chat ? { chat: runtimeById.get(def.id)!.chat } : {}),
       label: filter.audience === "adult" ? def.label : def.neutralLabel,
@@ -64,8 +74,9 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
       fits, can_install: component.can_install, install_block: component.install_block,
       can_uninstall: component.can_uninstall, uninstall_block: component.uninstall_block,
       licence_needed: component.licence !== null && component.licence.accepted_at === null,
-      required_by: requiredBy.get(def.id) ?? [], update: { available: false, version: null },
-    } satisfies StackPartView;
+      required_by: requiredBy.get(def.id) ?? [], update: modelUpdates.get(def.id) ?? { available: false, version: null },
+    };
+    if (modelUpdateJob(def.id)) view.state = "updating";
     return [view];
   });
   for (const def of PART_DEFS.filter((row) => row.kind === "engine")) {
@@ -73,7 +84,8 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
     const binary = ENGINE_BINARIES.some((pin) => pin.name === def.id);
     const envs = componentDefs().flatMap((unit) => unit.envs).filter((env) => env.name === def.id);
     const ready = binary ? installedEnginePin(def.id) !== null : envs.some((env) => env.ready()) || (!envs.length && dependents.some((part) => componentById.get(part.id)?.state === "installed"));
-    parts.push({ id: def.id, kind: "engine", category: "engines", priority: effectivePriority(def, choices), label: def.label, description: filter.audience === "adult" ? def.description : "", enabled: true, state: ready ? "ready" : "missing", size_bytes: 0, download_bytes: 0, percent: null, fits: { standard: true, boost: true, max: true, reason: null }, can_install: false, install_block: "Installed with the first part that runs on it.", can_uninstall: false, uninstall_block: "Removed with the last part that runs on it.", licence_needed: false, required_by: [...new Set(requiredBy.get(def.id) ?? [])], update: { available: false, version: null } });
+    const engineUpdate = def.id === "llama-server" ? pendingEngineUpdate(def.id) : null;
+    parts.push({ id: def.id, kind: "engine", category: "engines", priority: effectivePriority(def, choices), label: def.label, description: filter.audience === "adult" ? def.description : "", enabled: true, state: ready ? "ready" : "missing", size_bytes: 0, download_bytes: 0, percent: null, fits: { standard: true, boost: true, max: true, reason: null }, can_install: false, install_block: "Installed with the first part that runs on it.", can_uninstall: false, uninstall_block: "Removed with the last part that runs on it.", licence_needed: false, required_by: [...new Set(requiredBy.get(def.id) ?? [])], update: engineUpdate ? { available: true, version: engineUpdate.tag } : { available: false, version: null } });
   }
   if (filter.kind) parts = parts.filter((part) => part.kind === filter.kind);
   if (filter.category !== undefined) parts = parts.filter((part) => part.category === filter.category);

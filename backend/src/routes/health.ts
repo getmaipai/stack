@@ -12,6 +12,7 @@ import { ROLE_IDS, type RoleId } from "@/roles";
 import { ensureEngine } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
 import { DDGS_HEALTH_CODE, ddgsSupervisor } from "@/search/ddgsSidecar";
+import { applyModelUpdate } from "@/updates/models";
 
 import { HealthItem as HealthItemSchema } from "@maipai/spec/stack/ts/health-item.js";
 
@@ -65,6 +66,11 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
       } catch (error) { return { ok: false, result: (error as Error).message }; }
     }
     case "retry_download": {
+      if (code.startsWith("update-failed.")) {
+        const id = code.slice("update-failed.".length);
+        const result = await applyModelUpdate(id);
+        return result.applied ? { ok: true, result: `Updated ${id} to ${result.revision}.` } : { ok: false, result: result.reason };
+      }
       const componentId = componentIdOfFailureCode(code);
       if (componentId) {
         try { await startComponentInstall(componentId); return { ok: true, result: "The install started again; this item clears when it finishes." }; }
