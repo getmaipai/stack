@@ -14187,6 +14187,52 @@
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "tier": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            "reduced",
+                            "standard",
+                            "boost",
+                            "max",
+                            null
+                          ]
+                        },
+                        "window": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "tier_reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "profile": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "lowered": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "queued": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "off": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "closed_apps": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "closed_bytes": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -14373,6 +14419,52 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "tier": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "reduced",
+                              "standard",
+                              "boost",
+                              "max",
+                              null
+                            ]
+                          },
+                          "window": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "tier_reason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "profile": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "lowered": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "queued": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "off": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "closed_apps": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "closed_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -14550,6 +14642,52 @@
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "tier": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            "reduced",
+                            "standard",
+                            "boost",
+                            "max",
+                            null
+                          ]
+                        },
+                        "window": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "tier_reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "profile": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "lowered": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "queued": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "off": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "closed_apps": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "closed_bytes": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -14734,6 +14872,52 @@
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "tier": {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            "reduced",
+                            "standard",
+                            "boost",
+                            "max",
+                            null
+                          ]
+                        },
+                        "window": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "tier_reason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "profile": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "lowered": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "queued": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "off": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "closed_apps": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "closed_bytes": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "required": [
