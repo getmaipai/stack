@@ -462,6 +462,16 @@ models tree, refuses symbolic links and record or catalog references, and report
 removal with its id, byte count and reason. A real tidy run is blocked from deleting orphan folders if it would remove more than three folders or 25 GB in one run. The existing `POST /stack/v1/storage/sweep` prunes orphaned blobs, then runs tidy for real; Home's current
 sweep schedule therefore handles both.
 
+## Parts: one list by audience, install and uninstall by id (PARTS-API-01)
+
+`GET /stack/v1/parts?audience=adult|minor` returns `{ audience, parts }`, one row per declared part, excluding household LoRAs. Optional `kind=model|tool|engine` and `category` filters narrow the rows; unknown values return an empty list. Adult rows use the declared label and description, except minor-only parts are hidden. Minor rows use neutral labels, empty descriptions and omit every adult-only part. `enabled` is always true and `update.available` is always false until PARTS-ENABLE-01 and PARTS-UPDATE-01; listing reads current memory state and starts no work.
+
+Part state maps component `installed` to `ready`, `notInstalled` to `missing`, and preserves `installing` and `failed`; `requirement=unsupported` takes precedence. Size, download progress, install and uninstall permissions, and licence-needed state come from the component view. `fits` uses the tier candidate list for each level; parts without a candidate fit all levels. Unsupported parts fail every level with the component's requirement reason; when no profile can be proposed, candidate parts fail every level with "This computer is too small for this part."
+
+`POST /stack/v1/parts/{id}/install` starts or joins the existing component install job and returns `{ job, part, joined }` (202), or `{ job: null, part, already_installed: true }` (200). The optional strict body accepts only `accepted_licence` and `accepted_by`. Caller supplied URLs and checksums are rejected; the Stack owns pins. Errors use the component error codes and statuses. `DELETE /stack/v1/parts/{id}` returns `{ part, freed_bytes, removed }`; unknown ids, including `lora.*`, return 404.
+
+The components, models, model catalog, tier candidates, capabilities and install-plan routes are deleted in the second landing with Home.
+
 ## Image tools (IMAGETOOLS-01)
 
 `POST /v1/images/edits` (multipart: `image`, `operation` = `remove_background` | `erase` | `upscale` | `resize` | `depth`; depth returns a same-size grayscale PNG from Depth Anything V2 Small, near white and far black; `mask` for erase, white is

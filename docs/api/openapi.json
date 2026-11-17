@@ -188,6 +188,471 @@
           "read",
           "write"
         ]
+      },
+      "StackPartList": {
+        "type": "object",
+        "properties": {
+          "audience": {
+            "type": "string",
+            "enum": [
+              "adult",
+              "minor"
+            ]
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackPartView"
+            }
+          }
+        },
+        "required": [
+          "audience",
+          "parts"
+        ],
+        "additionalProperties": false
+      },
+      "StackPartView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "model",
+              "tool",
+              "engine"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1
+          },
+          "chat": {
+            "type": "object",
+            "properties": {
+              "sampling": {
+                "type": "object",
+                "properties": {
+                  "temperature": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2
+                  },
+                  "top_p": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "top_k": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "min_p": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "presence_penalty": {
+                    "type": "number",
+                    "minimum": -2,
+                    "maximum": 2
+                  },
+                  "xtc_probability": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "xtc_threshold": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "dry_multiplier": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "dry_base": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "dry_allowed_length": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "additionalProperties": false,
+                "description": "MODEL-ADD-01 and design rule 3: the sampling this model runs on. Every field but source is optional and a missing field sends nothing, so the engine's own default applies. 'source' names where the values came from."
+              },
+              "thinking_mode": {
+                "type": "string",
+                "enum": [
+                  "switchable",
+                  "none",
+                  "always"
+                ],
+                "description": "VISION-02a: whether this model can reason before it answers, declared by the record and never inferred from a model id (Home rule 8). 'switchable' means a turn can ask for thinking or not (Qwen3's hybrid template); 'none' means the model has no thinking mode (an Instruct edition such as Qwen3-VL-8B-Instruct), so a host offers no thinking control and never asks for it; 'always' means the template opens a reasoning block on every turn (a Thinking edition) and a request cannot turn it off. Absent on a record written before this field: the turn budget's thinking_budget_tokens_toggled decides (above 0 reads as switchable, 0 or no budget as none)."
+              },
+              "image_input": {
+                "type": "object",
+                "properties": {
+                  "projector": {
+                    "type": "object",
+                    "properties": {
+                      "file": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "The file name as published, e.g. 'mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf'."
+                      },
+                      "download": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                          },
+                          "approx_bytes": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "sha256",
+                          "approx_bytes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "file",
+                      "download"
+                    ],
+                    "additionalProperties": false,
+                    "description": "One file a model needs beside its weights, pinned by URL, sha256 and size; never selectable alone."
+                  }
+                },
+                "required": [
+                  "projector"
+                ],
+                "additionalProperties": false,
+                "description": "VISION-01a: present when this model file is proven to read pictures, and absent for a text-only model. It names the multimodal projector the engine loads beside the weights (llama-server's --mmproj), so declaring image input without its projector cannot validate. A host offers picture input only when the role's selected model carries this field and the role is healthy, never by model id (Home rule 8)."
+              },
+              "turn_budget": {
+                "type": "object",
+                "properties": {
+                  "rounds": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "enum": [
+                          0
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          1
+                        ]
+                      },
+                      {
+                        "type": "number",
+                        "enum": [
+                          2
+                        ]
+                      }
+                    ],
+                    "description": "Tool rounds the model may take in one turn (turn-machine-state-record-2026-09-22.md's TurnBudget.rounds)."
+                  },
+                  "rounds_thinking": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 12,
+                    "description": "RESEARCH-TIER-01: tool rounds an adult's written turn may take when the person picked Thinking for that message. Absent means the model has no Thinking research depth and the turn keeps `rounds`."
+                  },
+                  "rounds_max": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 12,
+                    "description": "RESEARCH-TIER-01: tool rounds an adult's written turn may take when the person picked Max for that message. Absent means the model has no Max research depth and the turn keeps `rounds` (or `rounds_thinking` when Thinking is also on)."
+                  },
+                  "max_tools": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 16,
+                    "description": "TOOL-OFFER-01: maximum measured tool definitions this model may receive in one adult written turn. Home fails closed when the derived offer set exceeds this cap; it never trims the set silently."
+                  },
+                  "tools_offered": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Deprecated by TOOL-OFFER-01. Retained as optional migration compatibility only; Home derives tool offers from installed manifests and max_tools."
+                  },
+                  "background_turns": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "MODEL-BG-SPEC-01: whether the model may run unattended background turns (the heartbeat, errands, price watches), the ones no person is waiting on. Optional, and absent means false. A model with no record, or a record with no turn_budget, is treated as false too (org rule 8, fail safe): an unattended turn never starts on a model nobody has measured."
+                  },
+                  "always_search": {
+                    "type": "boolean",
+                    "description": "The interim rule (simple-turn-pipeline-2026-09-22.md point 3): a question whose target is the world runs the model call with tool_choice required over the search tool."
+                  },
+                  "model_transitions": {
+                    "type": "boolean",
+                    "description": "Whether the model may drive the machine's second transition (a tool round). False on the robot's Pi and any model with no measured record; the model node then runs with tool_choice none and the machine goes straight to answer."
+                  },
+                  "context_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "thinking_budget_tokens": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "THINK-DEFAULT-01 (home/docs/dev.md 'U6 rerun ruling' (b) 1): the default for an ordinary turn - 0 on every real budget, so thinking is off unless the person turns it on for that turn (RESP-04's composer toggle). Reasoning is a second output, never the budget's own default."
+                  },
+                  "thinking_budget_tokens_toggled": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "THINK-DEFAULT-01: the value used for a turn where the person explicitly toggled thinking on (the composer's RESP-04 toggle, the old path's own `thinking` request field, mirrored onto the new path's RunTurnNextOpts.thinking). Kept as its own field, per model, rather than a single hardcoded constant, since a different chat model may reason usefully at a different token count."
+                  },
+                  "thinking_for_minors": {
+                    "type": "boolean",
+                    "description": "GROUND-01 (home/docs/plans/turn-machine-state-record-2026-09-22.md, 'Reasoning is a second output'): whether the model node even asks the engine to think on a minor's turn - false by default, so a minor's turn sends thinking:false regardless of thinking_budget_tokens. This is a cost control, not the safety gate: a minor's turn never emits or persists reasoning either way (context.ts's decideReasoning() forces reasoning.emit false from the age band alone), so turning this on only spends the tokens on a span the household will never see or keep."
+                  },
+                  "reply_ceiling_tokens": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "The reply floor (home/docs/plans/turn-machine-state-record-2026-09-22.md, 'The reply floor', owner's rule 2026-09-23): the most visible tokens one written adult reply may take - a guard against a reply that never stops, never a length target (the written plan's own length numbers, register.ts's writtenBudgetFor, are room the model's own end-of-reply decides inside, not a ceiling read out in full every time). Per model, since how long a reply may run before it has plainly run away depends on the model, not the turn; sized so this ceiling plus thinking_budget_tokens_toggled (when the person turns thinking on) still fits inside context_tokens alongside the prompt. The spoken and glance classes, and a child's turn, keep their own act-and-word-based caps instead - the floor is a written-class-only, adult-only backstop, the same role FORCED-CALL-01's own cap plays for a runaway forced call."
+                  },
+                  "deadlines_ms": {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "exclusiveMinimum": true
+                      },
+                      "tool": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "exclusiveMinimum": true
+                      },
+                      "total": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "exclusiveMinimum": true
+                      }
+                    },
+                    "required": [
+                      "model",
+                      "tool",
+                      "total"
+                    ],
+                    "additionalProperties": false,
+                    "description": "Per-node deadlines in milliseconds (simple-turn-pipeline-2026-09-22.md section 11: 'every node has a deadline, and it can be cut')."
+                  },
+                  "measured": {
+                    "type": "object",
+                    "properties": {
+                      "false_call_rate": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Fraction of negative-corpus turns the model called a tool on when it should not have."
+                      },
+                      "inverse_miss_rate": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Fraction of world-question turns the model answered from memory instead of a fitting search."
+                      },
+                      "rewrite_pass_rate": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Query-rewrite bench pass rate: the model's own search words carry the referent from a pronoun in the second turn."
+                      },
+                      "on": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "What corpus, date, and repeat count the measured numbers are from, e.g. 'ARCH-MEASURE-01, tool-calling bench, 2026-09-22, 50 repeats'."
+                      }
+                    },
+                    "required": [
+                      "false_call_rate",
+                      "inverse_miss_rate",
+                      "rewrite_pass_rate",
+                      "on"
+                    ],
+                    "additionalProperties": false,
+                    "description": "ARCH-MEASURE-01's numbers for this model, recorded with the budget they set."
+                  }
+                },
+                "required": [
+                  "rounds",
+                  "always_search",
+                  "model_transitions",
+                  "context_tokens",
+                  "thinking_budget_tokens",
+                  "thinking_budget_tokens_toggled",
+                  "thinking_for_minors",
+                  "reply_ceiling_tokens",
+                  "deadlines_ms",
+                  "measured"
+                ],
+                "additionalProperties": false,
+                "description": "U2's per-model tool-calling budget (home/docs/plans/turn-machine-state-record-2026-09-22.md, 'The budget record'): how many tool rounds the model may take, the maximum number of measured tools Home may offer, whether the always-search interim rule is on, whether the model may drive a second machine transition (false on the robot's Pi), the context and thinking-token allowances, each node's deadline, and the measured numbers ARCH-MEASURE-01 records this budget under. Absent for a chat model with no measured record yet; turnNext.ts then runs it with model_transitions false."
+              },
+              "model_cutoff": {
+                "type": "string",
+                "format": "date",
+                "description": "Last date represented in this model's training data, when the model publisher provides one."
+              }
+            },
+            "additionalProperties": false
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "missing",
+              "installing",
+              "updating",
+              "failed",
+              "unsupported"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "download_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "percent": {
+            "type": "number",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 100
+          },
+          "fits": {
+            "type": "object",
+            "properties": {
+              "standard": {
+                "type": "boolean"
+              },
+              "boost": {
+                "type": "boolean"
+              },
+              "max": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "required": [
+              "standard",
+              "boost",
+              "max",
+              "reason"
+            ]
+          },
+          "can_install": {
+            "type": "boolean"
+          },
+          "install_block": {
+            "type": "string",
+            "nullable": true
+          },
+          "can_uninstall": {
+            "type": "boolean"
+          },
+          "uninstall_block": {
+            "type": "string",
+            "nullable": true
+          },
+          "licence_needed": {
+            "type": "boolean"
+          },
+          "required_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "update": {
+            "type": "object",
+            "properties": {
+              "available": {
+                "type": "boolean"
+              },
+              "version": {
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "required": [
+              "available",
+              "version"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "category",
+          "priority",
+          "label",
+          "description",
+          "enabled",
+          "state",
+          "size_bytes",
+          "download_bytes",
+          "percent",
+          "fits",
+          "can_install",
+          "install_block",
+          "can_uninstall",
+          "uninstall_block",
+          "licence_needed",
+          "required_by",
+          "update"
+        ],
+        "additionalProperties": false
       }
     },
     "parameters": {}
@@ -20276,6 +20741,310 @@
           },
           "409": {
             "description": "in_use (a request or job is using it), required (Home needs it on this tier), chat_model_in_use or only_chat_model (chat would be left with no model); the error says what to do first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/parts": {
+      "get": {
+        "tags": [
+          "Parts"
+        ],
+        "summary": "Every part this Stack can install and run, for one audience (PARTS-API-01)",
+        "description": "`enabled` is always true and `update.available` is always false until PARTS-ENABLE-01 and PARTS-UPDATE-01. A minor's list has neutral labels, empty descriptions and no adult-only part. This answer comes from memory and starts no work.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "adult",
+                "minor"
+              ]
+            },
+            "required": true,
+            "name": "audience",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "model",
+                "tool",
+                "engine"
+              ]
+            },
+            "required": false,
+            "name": "kind",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "required": false,
+            "name": "category",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The audience filtered list of parts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StackPartList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/parts/{id}/install": {
+      "post": {
+        "tags": [
+          "Parts"
+        ],
+        "summary": "Install a part by id",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "example": "z-image-turbo"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "nullable": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Already installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "nullable": true
+                    },
+                    "part": {
+                      "type": "string"
+                    },
+                    "already_installed": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "part",
+                    "already_installed"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Install started or joined.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    },
+                    "part": {
+                      "type": "string"
+                    },
+                    "joined": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "part",
+                    "joined"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body contains a key the Stack does not accept.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unknown_component.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The part cannot be installed on this computer or needs licence acceptance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/parts/{id}": {
+      "delete": {
+        "tags": [
+          "Parts"
+        ],
+        "summary": "Uninstall a part by id",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "example": "z-image-turbo"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed, or removed=false when it was not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "part": {
+                      "type": "string"
+                    },
+                    "freed_bytes": {
+                      "type": "integer"
+                    },
+                    "removed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "part",
+                    "freed_bytes",
+                    "removed"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unknown_component.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The part is in use or required.",
             "content": {
               "application/json": {
                 "schema": {

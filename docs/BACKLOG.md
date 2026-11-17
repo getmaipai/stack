@@ -760,6 +760,8 @@ Rules: `home/docs/design/RULES.md` chat rules 4 and 11; record:
 
 ## Home adoption
 
+- [x] PARTS-API-01 (first landing): `GET /stack/v1/parts?audience=`, `POST /stack/v1/parts/{id}/install`, `DELETE /stack/v1/parts/{id}`, additive; the old list routes go in the second landing with Home (record: home `docs/design/stack-home-catalog-separation-2026-11-16.md`).
+
 - [ ] **STACK-75 (M): pin the Stack/Home contract.** A contract test
   suite (every route in `integrations.md`'s tables, its shapes, the
   identity headers, the 503 and 409 forms, the event ids, the settings
