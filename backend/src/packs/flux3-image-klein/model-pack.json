@@ -1,0 +1,94 @@
+{
+  "id": "flux3-image-klein-pack",
+  "version": "1.0.0",
+  "part": "flux3-image-klein",
+  "jobs": [
+    {
+      "job": "picture",
+      "limits": {
+        "shapes": {
+          "square": {
+            "standard": {
+              "width": 1024,
+              "height": 1024
+            },
+            "boost": {
+              "width": 1536,
+              "height": 1536
+            },
+            "max": {
+              "width": 2048,
+              "height": 2048
+            }
+          }
+        },
+        "steps_fixed": true
+      },
+      "audiences": [
+        "adult",
+        "minor"
+      ],
+      "capabilities": {
+        "text": true,
+        "end_picture": false,
+        "sound": false,
+        "keeps_likeness": false
+      },
+      "recipe": "recipes/picture.md",
+      "peaks": [
+        {
+          "shape": "square",
+          "level": "standard",
+          "bytes": 37400000000,
+          "status": "unverified"
+        }
+      ]
+    },
+    {
+      "job": "picture_edit",
+      "limits": {
+        "shapes": {
+          "square": {
+            "standard": {
+              "width": 1024,
+              "height": 1024
+            },
+            "boost": {
+              "width": 1536,
+              "height": 1536
+            },
+            "max": {
+              "width": 2048,
+              "height": 2048
+            }
+          }
+        },
+        "steps_fixed": true,
+        "max_references": 10
+      },
+      "audiences": [
+        "adult",
+        "minor"
+      ],
+      "capabilities": {
+        "text": true,
+        "end_picture": false,
+        "sound": false,
+        "keeps_likeness": true
+      },
+      "recipe": "recipes/picture_edit.md",
+      "peaks": [
+        {
+          "shape": "square",
+          "level": "standard",
+          "bytes": 37400000000,
+          "status": "unverified"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Fixed 16 steps (distilled).",
+    "Peak is the 2026-10-20 diffusers figure, not yet measured with the Stack's mflux worker."
+  ]
+}

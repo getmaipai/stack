@@ -1,0 +1,94 @@
+{
+  "id": "minimax-h3-image-pack",
+  "version": "1.0.0",
+  "part": "minimax-h3-image",
+  "jobs": [
+    {
+      "job": "picture",
+      "limits": {
+        "shapes": {
+          "square": {
+            "standard": {
+              "width": 1024,
+              "height": 1024
+            },
+            "boost": {
+              "width": 1536,
+              "height": 1536
+            },
+            "max": {
+              "width": 2048,
+              "height": 2048
+            }
+          }
+        },
+        "steps_fixed": true
+      },
+      "audiences": [
+        "adult",
+        "minor"
+      ],
+      "capabilities": {
+        "text": true,
+        "end_picture": false,
+        "sound": false,
+        "keeps_likeness": false
+      },
+      "recipe": "recipes/picture.md",
+      "peaks": [
+        {
+          "shape": "square",
+          "level": "standard",
+          "bytes": 22000000000,
+          "status": "measured"
+        }
+      ]
+    },
+    {
+      "job": "picture_edit",
+      "limits": {
+        "shapes": {
+          "square": {
+            "standard": {
+              "width": 1024,
+              "height": 1024
+            },
+            "boost": {
+              "width": 1536,
+              "height": 1536
+            },
+            "max": {
+              "width": 2048,
+              "height": 2048
+            }
+          }
+        },
+        "steps_fixed": true,
+        "max_references": 16
+      },
+      "audiences": [
+        "adult",
+        "minor"
+      ],
+      "capabilities": {
+        "text": true,
+        "end_picture": false,
+        "sound": false,
+        "keeps_likeness": true
+      },
+      "recipe": "recipes/picture_edit.md",
+      "peaks": [
+        {
+          "shape": "square",
+          "level": "standard",
+          "bytes": 24000000000,
+          "status": "measured"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Fixed 6 steps.",
+    "Can stream its weights from disk when memory is short (2.5 GB), slower."
+  ]
+}
