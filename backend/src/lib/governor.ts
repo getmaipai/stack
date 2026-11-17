@@ -166,6 +166,7 @@ let tuning: GovernorTuning = { ...GovernorRules, tiers: undefined as never, engi
 let activeTier: GovernorTier = "p16";
 let totalMemoryBytes = 0;
 let metalCapBytes: number | null = null;
+let budgetPercent = 100;
 let freeMemoryBytes = 0;
 let availablePercent = 0;
 let pressure: MemoryPressure = "normal";
@@ -316,9 +317,12 @@ function effectiveCapBytes(): number {
   const osCap = Math.max(0, totalMemoryBytes - tuning.osMarginBytes);
   return metalCapBytes === null ? osCap : Math.min(osCap, metalCapBytes);
 }
-export function defaultModelBudgetBytes(): number { return Math.min(Math.max(0, totalMemoryBytes - GovernorRules.osMarginBytes), metalCapBytes ?? Number.POSITIVE_INFINITY); }
-export function setGovernorMemorySettings(values: { modelBudgetBytes?: number; systemLowWaterPct?: number; systemLowWaterFloorBytes?: number; systemSustainedPolls?: number }): void {
-  if (values.modelBudgetBytes !== undefined) tuning.osMarginBytes = Math.max(0, totalMemoryBytes - values.modelBudgetBytes);
+export function defaultModelBudgetBytes(): number { return Math.min(Math.max(0, Math.floor(totalMemoryBytes * budgetPercent / 100) - GovernorRules.osMarginBytes), metalCapBytes ?? Number.POSITIVE_INFINITY); }
+export function setGovernorMemorySettings(values: { budgetPercent?: number; systemLowWaterPct?: number; systemLowWaterFloorBytes?: number; systemSustainedPolls?: number }): void {
+  if (values.budgetPercent !== undefined && Number.isFinite(values.budgetPercent)) {
+    budgetPercent = Math.min(100, Math.max(1, values.budgetPercent));
+    tuning.osMarginBytes = Math.max(0, totalMemoryBytes - Math.floor(totalMemoryBytes * budgetPercent / 100)) + GovernorRules.osMarginBytes;
+  }
   if (values.systemLowWaterPct !== undefined) tuning.systemLowWaterPct = values.systemLowWaterPct;
   if (values.systemLowWaterFloorBytes !== undefined) tuning.systemLowWaterFloorBytes = values.systemLowWaterFloorBytes;
   if (values.systemSustainedPolls !== undefined) tuning.systemSustainedPolls = values.systemSustainedPolls;
@@ -396,6 +400,7 @@ export function tierRoomBytes(mode: "resident" | "max" = "resident"): number {
 }
 function residentRoomBytes(): number {
   const reservedBytes = [...loaded.values()].filter((item) => item.class === "reserved").reduce((sum, item) => sum + item.peakBytes, 0);
+  // effectiveCapBytes() already carries the budget: the OS margin grows by the share outside it (setGovernorMemorySettings).
   return Math.max(0, Math.min(effectiveCapBytes() - reservedBytes, totalMemoryBytes - reservedBytes - workingMargin()));
 }
 /** TIER-ROOM-01: the bytes Reduced would free for a Max job on top of the resident room. The live ledger decides while chat is
@@ -1250,6 +1255,8 @@ export function __resetGovernorForTests(): void {
   videoShrinkCount = 0; videoRestoreCount = 0; videoShrunkSince = null; videoShrinkMaxWaitSeconds = 600; videoQuietSeconds = 60; videoGoneSince = null;
   codingModeActive = false;
   metalCapBytes = null;
+  budgetPercent = 100;
+  tuning.osMarginBytes = GovernorRules.osMarginBytes;
   admissionGate = null;
   loaded.clear();
   flexBandBorrowerToken = null;

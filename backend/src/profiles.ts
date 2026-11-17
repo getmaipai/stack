@@ -71,6 +71,13 @@ export const PROFILE_TIERS: ProfileTier[] = [
   },
 ];
 
+let currentBudgetPercent = 100;
+export function setBudgetPercent(percent: number): void {
+  if (!Number.isFinite(percent)) return;
+  currentBudgetPercent = Math.min(100, Math.max(1, percent));
+}
+export function budgetPercent(): number { return currentBudgetPercent; }
+
 /** Household chat pin by tier (STACK-MUSE-01, the owner's rule of
  * 2026-10-16): Qwen3 8B on p16, which is every Mac of 24 GB or less;
  * Muse Glimmer 30B above that, the 17 GB Q4_K_M on p32 and the
@@ -89,7 +96,8 @@ export const PROFILE_MODEL_BINDINGS: Partial<Record<ProfileTier["id"], Partial<R
  * the memory it was judged on. The figure is rounded to a whole GB first,
  * so a "16 GB" card that reports 15.99 GiB is a 16 GB card. */
 export function sizeMachine(hw: HardwareInfo, overrideGb?: number | null): { tier: ProfileTier | null; memoryGb: number; source: MemorySource } {
-  const { bytes, source } = sizingMemory(hw, overrideGb);
+  let { bytes, source } = sizingMemory(hw, overrideGb);
+  if (bytes > 0 && currentBudgetPercent < 100) bytes = Math.floor(bytes * currentBudgetPercent / 100);
   const memoryGb = Math.round((bytes / 1_073_741_824) * 10) / 10;
   const wholeGb = Math.round(memoryGb);
   const unified = source === "unified";

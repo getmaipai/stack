@@ -17,6 +17,7 @@ import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { ENGINE_BINARIES } from "@/lib/engineCatalog";
 import { partLabel } from "@/lib/partDefs";
+import { setBudgetPercent } from "@/profiles";
 
 export type SettingValue = number | boolean | string;
 
@@ -73,12 +74,11 @@ export function gpuLayersFor(role: string, values: Record<string, SettingValue> 
 
 export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.storage.tidy_grace_hours", selector: "number", range: { min: 0, max: 8760 }, default: 24, label: "Storage tidy grace period", help: "How long a replacement must be ready before the Stack removes the older model.", section: { id: "storage", order: 10 }, level: "advanced", needs_restart: false },
-  { ...stack, key: "stack.memory.model_budget_bytes", selector: "number", range: { min: 0, max: defaultModelBudgetBytes() + 8 * 1_073_741_824 }, default: defaultModelBudgetBytes(), label: "Memory for models", help: "The maximum memory the Stack may use for loaded models. The rest stays available for the computer.", section: { id: "memory", order: 10 }, level: "basic", needs_restart: false },
+  { ...stack, key: "stack.memory.budget_percent", selector: "number", range: { min: 1, max: 100 }, default: 100, label: "Share of this computer for AI", help: "How much of this computer the Stack may use for models and jobs, as a percent. At 100 it uses everything the computer can give it; at 50 a 128 GB computer is treated like a 64 GB one. The rest stays for the rest of the computer.", section: { id: "memory", order: 10 }, level: "basic", needs_restart: false },
   { ...stack, key: "stack.memory.low_water_pct", selector: "number", range: { min: 1, max: 99 }, default: 10, label: "Low memory percentage", help: "Warn when available memory falls below this percentage.", section: { id: "memory", order: 20 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.memory.low_water_floor_bytes", selector: "number", range: { min: 0, max: defaultModelBudgetBytes() }, default: 1_073_741_824, label: "Low memory floor", help: "Warn when available memory falls below this many bytes.", section: { id: "memory", order: 30 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.memory.sustained_polls", selector: "number", range: { min: 1, max: 20 }, default: 2, label: "Pressure confirmation polls", help: "How many low readings confirm memory pressure.", section: { id: "memory", order: 40 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.memory.watchdog", selector: "boolean", default: true, label: "Memory watchdog", help: "Watch the whole computer's memory, not only the Stack's own engines. When memory runs short the Stack waits before starting picture and video work, then stops it, and tells you what is using the memory. It never stops programs that are not the Stack's.", section: { id: "memory", order: 50 }, level: "advanced", needs_restart: false },
-  { ...stack, key: "stack.memory.reserve_gb", selector: "number", range: { min: 0, max: 256 }, default: 0, label: "Memory kept free", help: "Gigabytes of memory the watchdog keeps free for the rest of the computer before it starts picture or video work. Zero means automatic: the larger of 8 GB and 8 percent of the memory, never more than a quarter of it.", section: { id: "memory", order: 60 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.memory.reap_orphans", selector: "boolean", default: true, label: "Stop abandoned engines", help: "Stop an engine from this Stack's own engines folder that lost its parent program, has no one connected, and has been running 90 seconds or more. These hold gigabytes for nothing. Only the Stack's own engines are ever matched.", section: { id: "memory", order: 70 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.updates.enabled", selector: "boolean", default: false, label: "Check for updates", help: "Allow the Stack to read the Catalog's signed index when Home asks it to check. Nothing is downloaded or installed without an explicit action.", section: { id: "updates", order: 10 }, level: "basic", needs_restart: false },
   { ...stack, key: "stack.updates.model_host", selector: "text", default: "https://huggingface.co", label: "Model host", help: "Where model files are downloaded from: Hugging Face, or a mirror you run.", section: { id: "updates", order: 20 }, level: "advanced", needs_restart: false },
@@ -146,7 +146,7 @@ const byKey = new Map(SETTINGS.map((declaration) => [declaration.key, declaratio
 // is renamed once at load so no stored value is orphaned (org: no data
 // debt); the old row is deleted after the copy.
 const RENAMED_KEYS: Record<string, string> = {
-  modelBudgetBytes: "stack.memory.model_budget_bytes", systemLowWaterPct: "stack.memory.low_water_pct", systemLowWaterFloorBytes: "stack.memory.low_water_floor_bytes", systemSustainedPolls: "stack.memory.sustained_polls",
+  systemLowWaterPct: "stack.memory.low_water_pct", systemLowWaterFloorBytes: "stack.memory.low_water_floor_bytes", systemSustainedPolls: "stack.memory.sustained_polls",
   updatesEnabled: "stack.updates.enabled", huggingFaceEndpoint: "stack.updates.model_host",
   idleUnloadMinutes: "stack.runtime.idle_unload_minutes", idleUnloadOnBatteryMinutes: "stack.runtime.idle_unload_on_battery_minutes", downloadCapMbps: "stack.runtime.download_cap_mbps", port: "stack.runtime.port",
   "engines.llama-server.contextLength": "stack.engines.llama_server.context_length", "engines.llama-server.slots": "stack.engines.llama_server.slots", "engines.llama-server.threads": "stack.engines.llama_server.threads", "engines.llama-server.cacheRamMb": "stack.engines.llama_server.cache_ram_mb", "engines.llama-server.flashAttention": "stack.engines.llama_server.flash_attention",
@@ -168,7 +168,17 @@ export function migrateRenamedSettingKeys(): number {
   }
   return moved;
 }
+export const REMOVED_KEYS = ["stack.memory.model_budget_bytes", "stack.memory.reserve_gb", "modelBudgetBytes"] as const;
+export function removeRetiredSettingKeys(): number {
+  let removed = 0;
+  for (const key of REMOVED_KEYS) for (const state of ["in_effect", "pending", "inEffect"] as const) {
+    const rowKey = `settings.${key}.${state}`;
+    if (db.select({ key: meta.key }).from(meta).where(eq(meta.key, rowKey)).get()) { db.delete(meta).where(eq(meta.key, rowKey)).run(); removed++; }
+  }
+  return removed;
+}
 migrateRenamedSettingKeys();
+removeRetiredSettingKeys();
 
 function metaKey(key: string, state: "in_effect" | "pending"): string { return `settings.${key}.${state}`; }
 function read(key: string): string | null { return db.select({ value: meta.value }).from(meta).where(eq(meta.key, key)).get()?.value ?? null; }
@@ -285,11 +295,12 @@ export function applyPendingSettings(): StackSetting[] {
 export function applySettingsToRuntime(): void {
   const values = settingValues();
   setGovernorMemorySettings({
-    modelBudgetBytes: Number(values["stack.memory.model_budget_bytes"]),
+    budgetPercent: Number(values["stack.memory.budget_percent"]),
     systemLowWaterPct: Number(values["stack.memory.low_water_pct"]) / 100,
     systemLowWaterFloorBytes: Number(values["stack.memory.low_water_floor_bytes"]),
     systemSustainedPolls: Number(values["stack.memory.sustained_polls"]),
   });
+  setBudgetPercent(Number(values["stack.memory.budget_percent"]));
   setDownloadCapMbps(Number(values["stack.runtime.download_cap_mbps"]));
   // The coding engine idles out after its own keep-warm minutes, not the governor-wide limit (CODE-STACK-01 S2).
   setIdleTtlSeconds("coding", Number(values["stack.engines.coding.keep_warm_minutes"]) * 60);

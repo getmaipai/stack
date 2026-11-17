@@ -575,7 +575,7 @@ test("null Metal cap preserves the OS-margin budget, and smaller OS margin wins"
 });
 
 test("a live model budget setting refuses a request that can never fit", async () => {
-  setGovernorMemorySettings({ modelBudgetBytes: 2 * GB });
+  setGovernorMemorySettings({ budgetPercent: 1 });
   expect(await admit({ id: "too-large", kind: "resident", requestedBytes: 3 * GB })).toMatchObject({ refused: true });
   expect(await admit({ id: "refused", kind: "resident", requestedBytes: 3 * GB })).toMatchObject({ refused: true });
   expect(getGovernorDecisions().some((item) => item.decision === "Refused" && item.model === "refused")).toBe(true);

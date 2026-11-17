@@ -379,7 +379,7 @@ gives back without compressing a working set; one definition, below)
 and the requested peak. A load starts only when available memory minus
 the requested peak leaves the profile's working margin (4 GB on p16, 8 GB on p32, 12 GB on p64, 20 GB on p128)
 and the loaded total stays under the cap (total memory minus the OS
-margin, 8 GB by default, declared as `stack.memory.model_budget_bytes`). Only one
+margin, 8 GB by default, derived from `stack.memory.budget_percent`). Only one
 generator runs at a time. A request that cannot be admitted enters a
 queue with a position, or is refused with a reason. Reserved engine
 loads queue ahead of generators and keep their arrival order. They do

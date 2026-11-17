@@ -763,7 +763,7 @@ Rules: `home/docs/design/RULES.md` chat rules 4 and 11; record:
 
 - [x] PARTS-API-01 (first landing): `GET /stack/v1/parts?audience=`, `POST /stack/v1/parts/{id}/install`, `DELETE /stack/v1/parts/{id}`, additive; the old list routes go in the second landing with Home (record: home `docs/design/stack-home-catalog-separation-2026-11-16.md`).
 - [x] PARTS-ENABLE-01: enabled and the effective order from the pushed choices (PUT /stack/v1/parts/choices), engines listed as parts with no switch, required_by, and refusals that say why (record: home docs/design/stack-home-catalog-separation-2026-11-16.md section 4).
-
+- [x] BUDGET-01: one `stack.memory.budget_percent` setting replaces `model_budget_bytes` and `reserve_gb`; the machine class, the governor cap, the warm set and the watchdog reserve all follow it (record: home `docs/design/stack-home-catalog-separation-2026-11-16.md` section 5).
 - [ ] **STACK-75 (M): pin the Stack/Home contract.** A contract test
   suite (every route in `integrations.md`'s tables, its shapes, the
   identity headers, the 503 and 409 forms, the event ids, the settings

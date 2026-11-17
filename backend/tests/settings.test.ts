@@ -1,7 +1,7 @@
 import { beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
 import { __resetSettingsForTests, applyPendingSettings, engineSettingValues, gpuLayersFor, readSettings, SETTINGS, settingValues, updateSettings } from "@/settings";
-import { getGovernorStatus } from "@/lib/governor";
+import { getGovernorStatus, __setGovernorTuningForTestsOnly } from "@/lib/governor";
 
 beforeEach(() => __resetSettingsForTests());
 
@@ -15,13 +15,14 @@ test("every setting is declared once, in the spec's StackSetting shape, with a s
     expect(setting.lives_in).toBe("stack");
     expect(setting.key).toMatch(/^stack(\.[a-z][a-z0-9_]*)+$/);
   }
-  expect(keys).toEqual(expect.arrayContaining(["stack.memory.model_budget_bytes", "stack.updates.enabled", "stack.runtime.port", "stack.engines.llama_server.context_length", "stack.engines.chat.host_url", "stack.engines.tts.host_url"]));
+  expect(keys).toEqual(expect.arrayContaining(["stack.memory.budget_percent", "stack.updates.enabled", "stack.runtime.port", "stack.engines.llama_server.context_length", "stack.engines.chat.host_url", "stack.engines.tts.host_url"]));
 });
 
 test("a live key applies at once and reaches the module that consumes it", () => {
-  updateSettings({ "stack.memory.model_budget_bytes": 4 * 1_073_741_824 });
-  expect(settingValues()["stack.memory.model_budget_bytes"]).toBe(4 * 1_073_741_824);
-  expect(getGovernorStatus().capBytes).toBe(4 * 1_073_741_824);
+  updateSettings({ "stack.memory.budget_percent": 50 });
+  expect(settingValues()["stack.memory.budget_percent"]).toBe(50);
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * 1_073_741_824, freeMemoryBytes: 128 * 1_073_741_824 });
+  expect(getGovernorStatus().capBytes).toBe(56 * 1_073_741_824);
 });
 
 test("a restart key stays pending until applied, and a value equal to the one in effect clears it", () => {

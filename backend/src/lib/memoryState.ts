@@ -9,6 +9,7 @@
 import { getSystemSampler, type SystemSample } from "@/lib/memory/system";
 import type { GovernorRequest } from "@/lib/governor";
 import { settingValues } from "@/settings";
+import { budgetPercent } from "@/profiles";
 
 const GB = 1_073_741_824;
 
@@ -65,10 +66,11 @@ const state: MemoryState = { level: "normal", since: Date.now(), latest: null, c
 export function watchdogEnabled(): boolean { return settingValues()["stack.memory.watchdog"] !== false; }
 export function orphanReaperEnabled(): boolean { return settingValues()["stack.memory.reap_orphans"] !== false; }
 
-/** The reserve: `stack.memory.reserve_gb` when set, else the larger of 8 GB and 8 percent of the memory. */
+/** The reserve is the larger of the automatic safety reserve and the share left outside the Stack budget. */
 export function reserveBytes(totalBytes: number): number {
-  const configured = Number(settingValues()["stack.memory.reserve_gb"] ?? 0);
-  return configured > 0 ? configured * GB : Math.min(Math.max(8 * GB, totalBytes * 0.08), totalBytes * 0.25);
+  const automatic = Math.min(Math.max(8 * GB, totalBytes * 0.08), totalBytes * 0.25);
+  const outsideBudget = totalBytes - Math.floor(totalBytes * budgetPercent() / 100);
+  return Math.max(automatic, outsideBudget);
 }
 
 export function memoryLevel(): WatchdogLevel { return state.level; }

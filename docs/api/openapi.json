@@ -16602,7 +16602,7 @@
         "summary": "Hardware facts and the proposed profile",
         "responses": {
           "200": {
-            "description": "The probe's facts (no computer name) and the tier this machine clears.",
+            "description": "The probe's facts (no computer name), the applied AI budget and the tier this machine clears.",
             "content": {
               "application/json": {
                 "schema": {
@@ -16825,6 +16825,9 @@
                         "speedRange"
                       ]
                     },
+                    "budget_percent": {
+                      "type": "number"
+                    },
                     "tiers": {
                       "type": "array",
                       "items": {
@@ -16974,6 +16977,7 @@
                   "required": [
                     "hardware",
                     "proposed",
+                    "budget_percent",
                     "tiers"
                   ]
                 }
