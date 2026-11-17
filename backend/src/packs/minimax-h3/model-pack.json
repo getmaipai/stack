@@ -1,0 +1,46 @@
+{
+  "id": "minimax-h3-pack",
+  "version": "1.0.0",
+  "part": "minimax-h3",
+  "jobs": [
+    {
+      "job": "clip",
+      "limits": {
+        "max_seconds": {
+          "standard": 5
+        },
+        "shapes": {
+          "landscape": {
+            "standard": {
+              "width": 864,
+              "height": 480
+            }
+          }
+        }
+      },
+      "audiences": [
+        "adult"
+      ],
+      "capabilities": {
+        "text": false,
+        "end_picture": true,
+        "sound": true,
+        "keeps_likeness": false
+      },
+      "recipe": "recipes/clip.md",
+      "peaks": [
+        {
+          "shape": "landscape",
+          "level": "standard",
+          "bytes": 34000000000,
+          "status": "measured",
+          "measured_on": "2026-11-15, 4-bit streaming build, 864x480, 5 s, 178 to 193 s"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Settled recipe (2026-11-17): 24 steps, handheld-camera wording, then a 1.5x lanczos upscale with a light sharpen.",
+    "Audio: high-pass at 70 Hz, a noise gate, a gentle compressor, then loudness to -15. The clip opens with about 1.2 seconds of very quiet room noise, so the gate must come before any loudness step."
+  ]
+}

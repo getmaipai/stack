@@ -1,0 +1,59 @@
+{
+  "id": "ltx-2-5-q8-distilled-mlx-pack",
+  "version": "1.0.0",
+  "part": "ltx-2-5-q8-distilled-mlx",
+  "jobs": [
+    {
+      "job": "clip",
+      "limits": {
+        "max_seconds": {
+          "standard": 10,
+          "boost": 5
+        },
+        "shapes": {
+          "landscape": {
+            "standard": {
+              "width": 512,
+              "height": 256
+            },
+            "boost": {
+              "width": 768,
+              "height": 448
+            }
+          }
+        },
+        "steps_fixed": true
+      },
+      "audiences": [
+        "adult"
+      ],
+      "capabilities": {
+        "text": false,
+        "end_picture": true,
+        "sound": true,
+        "keeps_likeness": false
+      },
+      "recipe": "recipes/clip.md",
+      "peaks": [
+        {
+          "shape": "landscape",
+          "level": "standard",
+          "bytes": 39400000000,
+          "status": "measured",
+          "measured_on": "2026-11-02, 512x256, 10 s"
+        },
+        {
+          "shape": "landscape",
+          "level": "boost",
+          "bytes": 45800000000,
+          "status": "measured",
+          "measured_on": "768x448, 5 s"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "A 640x320 clip (5 s, 32.4 GB) also runs at Boost; 5 s at the Standard size needs 25.3 GB.",
+    "Clips from a start picture need up to 27.1 GB at the Standard size."
+  ]
+}

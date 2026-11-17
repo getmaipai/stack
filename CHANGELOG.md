@@ -11,6 +11,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 ### Added
 
 - MODELPACK-STACK-01 (first slice): model packs. A pack folder `backend/src/packs/<part-id>/` (`model-pack.json` plus `recipes/<job>.md`) holds one model's limits, peaks, capabilities and recipes as data, validated against `@maipai/spec` `StackModelPack` (pin spec-v0.1.423) when the Stack starts; a pack that does not validate, names an unknown part or lacks a recipe stops the Stack with the folder and the fix. First packs: the two picture models. A parity test ties each pack to today's picture family table, and a shrinking-baseline test (rule E8) fails when a model name appears in a new place outside a pack.
+- MODELPACK-STACK-01 (video slice): packs for the LTX-2.5 Standard and Boost model, the LTX-2.5 Max model (clip and the sheet clip) and the MiniMax H3 video model, with the settled H3 recipe notes. Parity tests tie them to the LTX measured tables; a test fails if a pack widens its part's audience.
 
 ### Added
 - PARTS-STACK-01: define every component part name, description, neutral label, priority, and age scope once in `backend/src/lib/parts.ts`; component, tier, and disk plan labels now read from that table. Export pinned part metadata in the `StackPart` spec shape, mark speech-generating video parts adult-only, and keep the child video label neutral. Bump `@maipai/spec` to `spec-v0.1.411`.

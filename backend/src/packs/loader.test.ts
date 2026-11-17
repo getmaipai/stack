@@ -6,6 +6,7 @@ import { PACK_SOURCES } from "@/packs/index.generated";
 import { renderManifest } from "@/packs/gen";
 import { IMAGE_FAMILIES } from "@/images/models";
 import { PART_DEFS } from "@/lib/partDefs";
+import { LTX25_MEASURED, LTX25_MAX_MEASURED, LTX25_INGREDIENTS_PEAK_MEASURED_BYTES, LTX25_INGREDIENTS_MAX_SECONDS } from "@/video/ltx25";
 
 const packsDir = join(import.meta.dir);
 const srcDir = join(import.meta.dir, "..");
@@ -37,6 +38,9 @@ describe("model packs: format and boot validation (MODELPACK-STACK-01)", () => {
     const ids = new Set(PART_DEFS.map((p) => p.id));
     for (const p of packs()) expect(ids.has(p.pack.part)).toBe(true);
   });
+  test("a pack never widens its part's audience: an adult-only part's jobs are adult only", () => {
+    for (const p of packs()) if (PART_DEFS.find((d) => d.id === p.pack.part)!.adultOnly) for (const j of p.pack.jobs) expect(j.audiences).toEqual(["adult"]);
+  });
   test("packs serve jobs through the lookup", () => {
     expect(partsServing("picture").length).toBe(packs().filter((p) => p.pack.jobs.some((j) => j.job === "picture")).length);
     expect(packFor("no-such-part")).toBeNull();
@@ -58,6 +62,37 @@ describe("model packs: parity with today's picture family table", () => {
       if (edit) expect(edit.peaks.find((x) => x.level === "standard")!.bytes).toBe(family.peak.edit);
     });
   }
+});
+
+describe("model packs: parity with today's LTX-2.5 tables", () => {
+  const find = (part: string, job: string) => packFor(part)!.pack.jobs.find((j) => j.job === job)!;
+  test("the Standard and Boost pack rows equal the measured rows", () => {
+    const clip = find("ltx-2-5-q8-distilled-mlx", "clip");
+    const standard = LTX25_MEASURED.find((r) => r.profile === "standard")!;
+    const boost = LTX25_MEASURED.find((r) => r.size === "768x448")!;
+    expect(clip.limits.shapes!.landscape!.standard).toEqual({ width: standard.width, height: standard.height });
+    expect(clip.limits.max_seconds!.standard).toBe(standard.maxSeconds);
+    expect(clip.peaks.find((x) => x.level === "standard")!.bytes).toBe(Math.floor(standard.peakBytes));
+    expect(clip.limits.shapes!.landscape!.boost).toEqual({ width: boost.width, height: boost.height });
+    expect(clip.limits.max_seconds!.boost).toBe(boost.maxSeconds);
+    expect(clip.peaks.find((x) => x.level === "boost")!.bytes).toBe(Math.floor(boost.peakBytes));
+  });
+  test("the Max pack row and the sheet clip equal the Max and Ingredients constants", () => {
+    const max = LTX25_MAX_MEASURED[0]!;
+    const clip = find("ltx-2-5-bf16-distilled-mlx-max", "clip");
+    expect(clip.limits.shapes!.landscape!.max).toEqual({ width: max.width, height: max.height });
+    expect(clip.limits.max_seconds!.max).toBe(max.maxSeconds);
+    expect(clip.peaks[0]!.bytes).toBe(Math.floor(max.peakBytes));
+    const sheet = find("ltx-2-5-bf16-distilled-mlx-max", "clip_from_sheet");
+    expect(sheet.limits.max_seconds!.standard).toBe(LTX25_INGREDIENTS_MAX_SECONDS);
+    expect(sheet.peaks[0]!.bytes).toBe(Math.floor(LTX25_INGREDIENTS_PEAK_MEASURED_BYTES));
+  });
+  test("every video pack serves adults only, as its part row says", () => {
+    for (const part of ["ltx-2-5-q8-distilled-mlx", "ltx-2-5-bf16-distilled-mlx-max", "minimax-h3"]) {
+      expect(PART_DEFS.find((d) => d.id === part)!.adultOnly).toBe(true);
+      for (const j of packFor(part)!.pack.jobs) expect(j.audiences).toEqual(["adult"]);
+    }
+  });
 });
 
 // Rule E8: a model's name or part id belongs in its pack folder and the part table, not in routes or shared libraries. Files that

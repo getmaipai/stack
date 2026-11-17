@@ -1,0 +1,83 @@
+{
+  "id": "ltx-2-5-bf16-distilled-mlx-max-pack",
+  "version": "1.0.0",
+  "part": "ltx-2-5-bf16-distilled-mlx-max",
+  "jobs": [
+    {
+      "job": "clip",
+      "limits": {
+        "max_seconds": {
+          "max": 10
+        },
+        "shapes": {
+          "landscape": {
+            "max": {
+              "width": 1024,
+              "height": 576
+            }
+          }
+        },
+        "steps_fixed": true
+      },
+      "audiences": [
+        "adult"
+      ],
+      "capabilities": {
+        "text": false,
+        "end_picture": true,
+        "sound": true,
+        "keeps_likeness": false
+      },
+      "recipe": "recipes/clip.md",
+      "peaks": [
+        {
+          "shape": "landscape",
+          "level": "max",
+          "bytes": 48600000000,
+          "status": "measured",
+          "measured_on": "2026-11-02, 1024x576, 10 s, OS footprint"
+        }
+      ]
+    },
+    {
+      "job": "clip_from_sheet",
+      "limits": {
+        "max_seconds": {
+          "standard": 8
+        },
+        "shapes": {
+          "landscape": {
+            "standard": {
+              "width": 768,
+              "height": 448
+            }
+          }
+        },
+        "steps_fixed": true
+      },
+      "audiences": [
+        "adult"
+      ],
+      "capabilities": {
+        "text": false,
+        "end_picture": false,
+        "sound": true,
+        "keeps_likeness": true
+      },
+      "recipe": "recipes/clip_from_sheet.md",
+      "peaks": [
+        {
+          "shape": "landscape",
+          "level": "standard",
+          "bytes": 32299999999,
+          "status": "measured",
+          "measured_on": "INGREDIENTS-01, one sheet, 121 frames, 768x448"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "The Max clip must be given the model's text-encoder folder or the prompt is silently ignored.",
+    "A sheet clip runs 4 to 8 seconds at 768x448."
+  ]
+}

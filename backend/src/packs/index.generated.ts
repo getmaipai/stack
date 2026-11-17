@@ -2,11 +2,21 @@
 import pack0 from "./flux3-image-klein/model-pack.json" with { type: "json" };
 import recipe0_0 from "./flux3-image-klein/recipes/picture.md" with { type: "text" };
 import recipe0_1 from "./flux3-image-klein/recipes/picture_edit.md" with { type: "text" };
-import pack1 from "./minimax-h3-image/model-pack.json" with { type: "json" };
-import recipe1_0 from "./minimax-h3-image/recipes/picture.md" with { type: "text" };
-import recipe1_1 from "./minimax-h3-image/recipes/picture_edit.md" with { type: "text" };
+import pack1 from "./ltx-2-5-bf16-distilled-mlx-max/model-pack.json" with { type: "json" };
+import recipe1_0 from "./ltx-2-5-bf16-distilled-mlx-max/recipes/clip.md" with { type: "text" };
+import recipe1_1 from "./ltx-2-5-bf16-distilled-mlx-max/recipes/clip_from_sheet.md" with { type: "text" };
+import pack2 from "./ltx-2-5-q8-distilled-mlx/model-pack.json" with { type: "json" };
+import recipe2_0 from "./ltx-2-5-q8-distilled-mlx/recipes/clip.md" with { type: "text" };
+import pack3 from "./minimax-h3/model-pack.json" with { type: "json" };
+import recipe3_0 from "./minimax-h3/recipes/clip.md" with { type: "text" };
+import pack4 from "./minimax-h3-image/model-pack.json" with { type: "json" };
+import recipe4_0 from "./minimax-h3-image/recipes/picture.md" with { type: "text" };
+import recipe4_1 from "./minimax-h3-image/recipes/picture_edit.md" with { type: "text" };
 
 export const PACK_SOURCES: ReadonlyArray<{ dir: string; pack: unknown; recipes: Readonly<Record<string, string>> }> = [
   { dir: "flux3-image-klein", pack: pack0, recipes: { "recipes/picture.md": recipe0_0, "recipes/picture_edit.md": recipe0_1 } },
-  { dir: "minimax-h3-image", pack: pack1, recipes: { "recipes/picture.md": recipe1_0, "recipes/picture_edit.md": recipe1_1 } },
+  { dir: "ltx-2-5-bf16-distilled-mlx-max", pack: pack1, recipes: { "recipes/clip.md": recipe1_0, "recipes/clip_from_sheet.md": recipe1_1 } },
+  { dir: "ltx-2-5-q8-distilled-mlx", pack: pack2, recipes: { "recipes/clip.md": recipe2_0 } },
+  { dir: "minimax-h3", pack: pack3, recipes: { "recipes/clip.md": recipe3_0 } },
+  { dir: "minimax-h3-image", pack: pack4, recipes: { "recipes/picture.md": recipe4_0, "recipes/picture_edit.md": recipe4_1 } },
 ];
