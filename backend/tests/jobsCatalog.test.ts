@@ -24,7 +24,7 @@ test("the adult catalog lists all eight jobs and a plain reason for any job noth
   const catalog = await jobsCatalog("adult");
   expect(catalog.audience).toBe("adult");
   expect(catalog.jobs.map((j) => j.job)).toEqual(["picture", "picture_edit", "clip", "clip_from_sheet", "restyle", "swap", "character_sheet", "contact_sheet"]);
-  const swap = catalog.jobs.find((j) => j.job === "swap") as { available: boolean; why_not: string | null; alternatives: unknown[] };
+  const swap = catalog.jobs.find((j) => j.job === "swap") as unknown as { available: boolean; why_not: string | null; alternatives: unknown[] };
   expect(swap.available).toBe(false);
   expect(swap.why_not).toContain("An admin can");
   expect(swap.alternatives).toEqual([]);
@@ -46,12 +46,12 @@ test("the minor catalog lists only jobs a part in the minor's list serves, and s
 });
 
 test("an adult's candidates follow the household's order; a minor's never read it", async () => {
-  const adultBefore = (await jobsCatalog("adult")).jobs.find((j) => j.job === "picture") as { alternatives: Array<{ part: string }> };
+  const adultBefore = (await jobsCatalog("adult")).jobs.find((j) => j.job === "picture") as unknown as { alternatives: Array<{ part: string }> };
   const ids = adultBefore.alternatives.map((a) => a.part);
   expect(ids.length).toBeGreaterThan(1);
   const reversed = [...ids].reverse();
   writePartChoices({ pictures: { order: reversed, off: [] } });
-  const adultAfter = (await jobsCatalog("adult")).jobs.find((j) => j.job === "picture") as { alternatives: Array<{ part: string }> };
+  const adultAfter = (await jobsCatalog("adult")).jobs.find((j) => j.job === "picture") as unknown as { alternatives: Array<{ part: string }> };
   expect(adultAfter.alternatives.map((a) => a.part)).toEqual(reversed);
   const minorBefore = JSON.stringify(await jobsCatalog("minor"));
   writePartChoices({ pictures: { order: ids, off: [] } });
