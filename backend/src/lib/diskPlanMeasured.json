@@ -760,6 +760,70 @@
     "minimax-h3-image-vae-config": {
       "download_bytes": 1826,
       "installed_bytes": 1826
+    },
+    "flux3-image-klein-transformer-config": {
+      "download_bytes": 436,
+      "installed_bytes": 436
+    },
+    "flux3-image-klein": {
+      "download_bytes": 9907529352,
+      "installed_bytes": 9907529352
+    },
+    "flux3-image-klein-transformer-diffusion-pytorch-model-00002-of-00002": {
+      "download_bytes": 1189878064,
+      "installed_bytes": 1189878064
+    },
+    "flux3-image-klein-transformer-diffusion-pytorch-model-safetensors-index": {
+      "download_bytes": 37951,
+      "installed_bytes": 37951
+    },
+    "flux3-image-klein-text-encoder-config": {
+      "download_bytes": 1505,
+      "installed_bytes": 1505
+    },
+    "flux3-image-klein-text-encoder-generation-config": {
+      "download_bytes": 269,
+      "installed_bytes": 269
+    },
+    "flux3-image-klein-text-encoder-model-00001-of-00002": {
+      "download_bytes": 4967229296,
+      "installed_bytes": 4967229296
+    },
+    "flux3-image-klein-text-encoder-model-00002-of-00002": {
+      "download_bytes": 3908490048,
+      "installed_bytes": 3908490048
+    },
+    "flux3-image-klein-text-encoder-model-safetensors-index": {
+      "download_bytes": 64742,
+      "installed_bytes": 64742
+    },
+    "flux3-image-klein-text-encoder-tokenizer": {
+      "download_bytes": 7032403,
+      "installed_bytes": 7032403
+    },
+    "flux3-image-klein-text-encoder-tokenizer-config": {
+      "download_bytes": 10868,
+      "installed_bytes": 10868
+    },
+    "flux3-image-klein-text-encoder-merges": {
+      "download_bytes": 1671839,
+      "installed_bytes": 1671839
+    },
+    "flux3-image-klein-text-encoder-vocab": {
+      "download_bytes": 2776833,
+      "installed_bytes": 2776833
+    },
+    "flux3-image-klein-vae-config": {
+      "download_bytes": 808,
+      "installed_bytes": 808
+    },
+    "flux3-image-klein-vae-diffusion-pytorch-model": {
+      "download_bytes": 336213556,
+      "installed_bytes": 336213556
+    },
+    "flux3-image-klein-text-encoder-chat-template": {
+      "download_bytes": 5502,
+      "installed_bytes": 5502
     }
   }
 }

@@ -9,7 +9,8 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus } from "@/lib/governor";
 import { __resetJobsForTests, getJob, listJobs } from "@/lib/jobs";
-import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_IMAGE_ENGINE_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_MODELS, KLEIN3_LICENCE_NOTICE } from "@/lib/modelCatalog";
+import { KLEIN3_FILES, KLEIN3_REVISION } from "@/images/pins";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { resolveRoleState } from "@/lib/router";
 import { detectImageBase, imageLoras, parseHfLoraUrl, startLoraInstall } from "@/images/loras";
@@ -265,6 +266,35 @@ test("Z-Image-Turbo runs when named, with its own steps, and a smaller tier refu
   expect(requests.at(-1)).toMatchObject({ family: "flux2-klein-4b", quantize: 4 });
   __setGovernorTuningForTestsOnly({ tier: "p16", totalMemoryBytes: 16 * GB, freeMemoryBytes: 8 * GB });
   expect((await post({ prompt: "a fox", timeout_ms: 5000 })).status).toBe(503);
+});
+
+test("FLUX 3 Klein is a pinned optional text-capable mflux family with fixed-step generation and reference edits", async () => {
+  imageGen.useDeps(scripted());
+  __setInstalledFamiliesForTests(["flux2-klein-4b", STACK_IMAGE_KLEIN3_ID]);
+  expect(KLEIN3_REVISION).toBe("09561231f44e41381c461caf53d5452005a60ac9");
+  expect(KLEIN3_FILES.every((file) => /^[0-9a-f]{64}$/.test(file.sha256) && file.bytes > 0)).toBe(true);
+  expect(STACK_IMAGE_KLEIN3_MODELS.map((pin) => [pin.download!.hub_file, pin.download!.sha256, pin.download!.approx_bytes]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))).toEqual(KLEIN3_FILES.map((file) => [file.file, file.sha256, file.bytes]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  expect(STACK_IMAGE_KLEIN3_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0)).toBe(20_320_943_472);
+  expect(STACK_IMAGE_KLEIN3_MODELS.every((pin) => pin.license === "FLUX Kommunity License" && pin.revision === KLEIN3_REVISION)).toBe(true);
+  expect(KLEIN3_LICENCE_NOTICE.url).toContain(`${KLEIN3_REVISION}/LICENSE.md`);
+  const response = await post({ model: STACK_IMAGE_KLEIN3_ID, prompt: "a sign reading HELLO", steps: 7, timeout_ms: 5000 });
+  expect(response.status).toBe(200);
+  expect(requests[0]).toMatchObject({ family: STACK_IMAGE_KLEIN3_ID, quantize: null, steps: 16 });
+  const out = ((await response.json()) as { data: Array<Record<string, unknown>> }).data[0];
+  expect(out).toMatchObject({ model: STACK_IMAGE_KLEIN3_ID, steps: 16 });
+  const init = await post({ model: STACK_IMAGE_KLEIN3_ID, prompt: "x", init_image: SMALL_PNG_B64, timeout_ms: 5000 });
+  expect(init.status).toBe(422);
+  expect((await init.json() as { code: string }).code).toBe("unsupported_init_image");
+  const styled = await post({ model: STACK_IMAGE_KLEIN3_ID, prompt: "x", loras: [{ id: "no-style" }], timeout_ms: 5000 });
+  expect(styled.status).toBe(422);
+  expect((await styled.json() as { code: string }).code).toBe("unsupported_lora");
+  const form = new FormData(); form.set("operation", "edit"); form.set("model", STACK_IMAGE_KLEIN3_ID); form.set("image", new File([pngBytes(640, 480)], "in.png", { type: "image/png" })); form.set("instruction", "change it");
+  form.append("references", new File([pngBytes(320, 320)], "ref.png", { type: "image/png" }));
+  const edited = await app.request("/v1/images/edits", { method: "POST", body: form });
+  expect(edited.status).toBe(200);
+  expect(requests.at(-1)).toMatchObject({ op: "edit", family: STACK_IMAGE_KLEIN3_ID, edit_family: STACK_IMAGE_KLEIN3_ID, steps: 16 });
+  const state = (await (await app.request("/stack/v1/image")).json() as { image: { models: Array<Record<string, unknown>> } }).image;
+  expect(state.models.find((model) => model.id === STACK_IMAGE_KLEIN3_ID)).toMatchObject({ text_capable: true, edit: true, loras: false, steps_default: 16, steps_fixed: true, max_references: 9 });
 });
 
 test("ERNIE-Image-Turbo runs when named and remains create-only", async () => {
@@ -581,7 +611,7 @@ test("GET /stack/v1/image reports state, models, limits, edit and what to instal
   const body = await (await app.request("/stack/v1/image")).json() as { image: Record<string, any> };
   const image = body.image;
   expect(image).toMatchObject({ state: "needs-setup", available: true, tier: "p128", default_model: "flux2-klein-4b", loras_supported: true, idle_unload_s: 600, edit: { generative: true, masked: true, model: "flux2-klein-4b" } });
-  expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo", "qwen-image-2512-q8", "minimax-h3-image"]);
+  expect(image.models.map((m: { id: string }) => m.id)).toEqual(["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo", "qwen-image-2512-q8", "minimax-h3-image", "flux3-image-klein"]);
   expect(image.models[0]).toMatchObject({ installed: true, default: true, edit: true, steps_default: 4, peak_gb: 15, quantize: 8, available: true });
   expect(image.models[1]).toMatchObject({ steps_default: 9, edit: false, peak_gb: 34 });
   expect(image.models[2]).toMatchObject({ label: "ERNIE-Image-Turbo", steps_default: 8, edit: false, peak_gb: 21 });
@@ -619,7 +649,7 @@ test("the pins: every file has a revision, sha256, size, hub path and Apache-2.0
   expect(STACK_IMAGE_KLEIN_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0)).toBeLessThan(16_100_000_000);
   expect(STACK_IMAGE_ERNIE_MODELS).toHaveLength(12);
   expect(STACK_IMAGE_QWEN_MODELS).toHaveLength(25);
-  expect(STACK_IMAGE_ENGINE_MODELS).toHaveLength(STACK_IMAGE_KLEIN_MODELS.length + STACK_IMAGE_ZIMAGE_MODELS.length + STACK_IMAGE_ERNIE_MODELS.length + STACK_IMAGE_QWEN_MODELS.length);
+  expect(STACK_IMAGE_ENGINE_MODELS).toHaveLength(STACK_IMAGE_KLEIN_MODELS.length + STACK_IMAGE_KLEIN3_MODELS.length + STACK_IMAGE_ZIMAGE_MODELS.length + STACK_IMAGE_ERNIE_MODELS.length + STACK_IMAGE_QWEN_MODELS.length);
   const runtime = MANAGED_RUNTIMES.find((entry) => entry.name === "image-gen")!;
   expect(runtime.roles).toEqual(["image"]);
   expect(imageRequirementsFileFor("darwin", "arm64")).toBeTruthy();

@@ -46,7 +46,7 @@ const LoraEntry = z.object({
   strength: z.number().min(0).max(2).optional().openapi({ description: "Alias of `scale`." }),
 });
 export const ImageGenerationBodySchema = z.object({
-  model: z.string().optional().openapi({ description: "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`, `ernie-image-turbo`, `qwen-image-2512-q8`, `minimax-h3-image`). Choosing a LoRA selects the base model it was made for." }),
+  model: z.string().optional().openapi({ description: "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `flux3-image-klein`, `z-image-turbo`, `ernie-image-turbo`, `qwen-image-2512-q8`, `minimax-h3-image`). Choosing a LoRA selects the base model it was made for." }),
   prompt: z.string().trim().min(1).max(IMAGE_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(IMAGE_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled models run without guidance, so it has no effect on the picture." }),
   size: z.string().regex(/^\d{3,4}x\d{3,4}$/).optional().openapi({ description: `<width>x<height>, each 256 to 2048 and a multiple of 16. Default ${IMAGE_DEFAULT_SIZE}.`, example: IMAGE_DEFAULT_SIZE }),
@@ -241,6 +241,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   if ("error" in chosen) return fail(c, chosen.error.status, chosen.error.code, chosen.error.message);
   const family = chosen.family;
   const info = IMAGE_FAMILIES[family];
+  if (family === "flux3-image-klein" && requests.length > 0) return fail(c, 422, "unsupported_lora", `${info.label} does not support picture styles.`);
   const tier = getGovernorStatus().tier;
   if (!(info.tiers as string[]).includes(tier)) return fail(c, 503, "not_available_on_this_computer", `${info.label} needs a computer with more memory than this one. Use FLUX.2 Klein 4B instead.`);
   // A fixed-step model (MiniMax H3-Image) ignores a different `steps` and says so; it is not an error.
@@ -252,6 +253,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   let initImage: Uint8Array | null = null;
   let derived = false;
   if (body.init_image !== undefined && family === STACK_IMAGE_H3_ID) return fail(c, 422, "unsupported_init_image", `${info.label} does not start from a picture. Send the picture and what to change to /v1/images/edits instead.`);
+  if (body.init_image !== undefined && family === "flux3-image-klein") return fail(c, 422, "unsupported_init_image", `${info.label} does not start from a picture.`);
   if (body.init_image !== undefined) {
     initImage = decodeImage(body.init_image);
     if (!initImage || !looksLikePicture(initImage)) return fail(c, 422, "bad_image", "The starting picture could not be read. Send a PNG, JPEG or WebP as base64.");
@@ -280,7 +282,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
 }
 
 export interface EditForm {
-  /** The picture model: `flux2-klein-4b` (the default) or `minimax-h3-image`. */
+  /** The picture model: `flux2-klein-4b` (the default), `flux3-image-klein`, or `minimax-h3-image`. */
   model?: string;
   image: File; mask?: File; operation: "edit" | "edit_masked"; instruction?: string; prompt?: string; region?: string; feather?: number; seed?: number; steps?: number; timeout_ms?: number; image_source?: Source; audience?: "all-ages" | "adult"; /** IMGEDIT-01: up to two more pictures the edit may draw on (a person to add, an object to copy), fifteen for MiniMax H3-Image. Each is declared like the main picture. */ references?: Array<{ file: File; source?: Source }>;
 }

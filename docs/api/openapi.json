@@ -2156,7 +2156,7 @@
                 "properties": {
                   "model": {
                     "type": "string",
-                    "description": "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `z-image-turbo`, `ernie-image-turbo`, `qwen-image-2512-q8`, `minimax-h3-image`). Choosing a LoRA selects the base model it was made for."
+                    "description": "`image` (the default), or a picture model id from GET /stack/v1/image (`flux2-klein-4b`, `flux3-image-klein`, `z-image-turbo`, `ernie-image-turbo`, `qwen-image-2512-q8`, `minimax-h3-image`). Choosing a LoRA selects the base model it was made for."
                   },
                   "prompt": {
                     "type": "string",
@@ -25014,12 +25014,15 @@
                               "edit": {
                                 "type": "boolean"
                               },
+                              "text_capable": {
+                                "type": "boolean"
+                              },
                               "steps_default": {
                                 "type": "integer"
                               },
                               "steps_fixed": {
                                 "type": "boolean",
-                                "description": "True when the model always runs steps_default steps (MiniMax H3-Image): a different `steps` is ignored, with a note in the reply."
+                                "description": "True when the model always runs steps_default steps (MiniMax H3-Image and FLUX 3 Image Klein): a different `steps` is ignored, with a note in the reply."
                               },
                               "max_references": {
                                 "type": "integer",
@@ -25127,6 +25130,7 @@
                               "default",
                               "loras",
                               "edit",
+                              "text_capable",
                               "steps_default",
                               "peak_gb",
                               "warm_seconds",

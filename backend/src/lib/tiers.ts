@@ -1,6 +1,7 @@
 // Ids are literals, not imports from modelCatalog: the governor imports this file, and the catalog reaches the governor through settings (an import cycle). tests/tiers.test.ts checks each literal against the catalog constant.
 const STACK_IMAGE_ERNIE_ID = "ernie-image-turbo";
 const STACK_IMAGE_H3_ID = "minimax-h3-image";
+const STACK_IMAGE_KLEIN3_ID = "flux3-image-klein";
 const STACK_IMAGE_KLEIN_ID = "flux2-klein-4b";
 const STACK_IMAGE_ZIMAGE_ID = "z-image-turbo";
 const STACK_MUSIC_MODEL_ID = "ace-step-1-5-turbo";
@@ -40,6 +41,7 @@ export const TIER_CANDIDATES: TierCandidate[] = [
   // H3-IMAGE-STACK-01: MiniMax H3-Image goes first, so it is the recommended Standard and Boost picture model wherever it fits; the others stay as candidates. Resident (22 GB held, 19.7 GB measured) on p64 and p128; a streaming Standard candidate (2.5 GB held, 1.8 GB measured) on p16 and p32. Max stays on Qwen-Image: the 2048 and 4096 px Max numbers are an open bench (H3-MAX-01).
   { id: STACK_IMAGE_H3_ID, category: "pictures", family: "minimax-h3", label: "MiniMax H3-Image", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 22_000_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps: resident 11 to 15 s, 19.7 GB whole-process-tree peak (22 GB held); streaming from disk 27 to 33 s at 1.8 GB." }], tiers: ["standard", "boost"] },
   { id: STACK_IMAGE_H3_ID, category: "pictures", family: "minimax-h3", label: "MiniMax H3-Image (streaming)", profiles: ["p16", "p32"], peaks: [{ options: { ditMode: "stream" }, peakBytes: 2_500_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps: streaming from disk 27 to 33 s at 1.8 GB (2.5 GB held)." }], tiers: ["standard"] },
+  { id: STACK_IMAGE_KLEIN3_ID, category: "pictures", family: "flux3-klein", label: "FLUX 3 Image Klein (optional)", profiles: ["p64", "p128"], peaks: [{ options: { steps: 16 }, peakBytes: 37_400_000_000, status: "unverified", note: "34 GB peak measured with diffusers; mflux 0.23.0 peak not yet measured. Local word bench: 18 to 19 of 20." }], tiers: ["standard"] },
   { id: STACK_IMAGE_ERNIE_ID, category: "pictures", family: "ernie", label: "ERNIE Image Turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 18_800_000_000, status: "measured" }], tiers: ["standard"] },
   { id: STACK_IMAGE_KLEIN_ID, category: "pictures", family: "klein", label: "FLUX.2 Klein 4B", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 10_200_000_000, status: "measured" }], tiers: ["standard"] },
   { id: STACK_IMAGE_ZIMAGE_ID, category: "pictures", family: "z-image", label: "Z-Image Turbo", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 25_800_000_000, status: "measured" }], tiers: ["boost"] },

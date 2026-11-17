@@ -1,6 +1,6 @@
 import { hfUrl } from "@/lib/hf";
 import type { CatalogModelLike } from "@/lib/modelStore";
-import { H3_IMAGE_FILES, H3_IMAGE_PRIMARY, ERNIE_IMAGE_TURBO_FILES, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, KLEIN_4B_FILES, KLEIN_4B_PRIMARY, QWEN_IMAGE_FILES, QWEN_IMAGE_PRIMARY, QWEN_IMAGE_REPO, QWEN_IMAGE_REVISION, SEEDVR2_FILES, SEEDVR2_PRIMARY, SEEDVR2_REPO, SEEDVR2_REVISION, KLEIN_4B_REPO, KLEIN_4B_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
+import { H3_IMAGE_FILES, H3_IMAGE_PRIMARY, ERNIE_IMAGE_TURBO_FILES, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, KLEIN_4B_FILES, KLEIN_4B_PRIMARY, QWEN_IMAGE_FILES, QWEN_IMAGE_PRIMARY, QWEN_IMAGE_REPO, QWEN_IMAGE_REVISION, SEEDVR2_FILES, SEEDVR2_PRIMARY, SEEDVR2_REPO, SEEDVR2_REVISION, KLEIN_4B_REPO, KLEIN_4B_REVISION, KLEIN3_FILES, KLEIN3_PRIMARY, KLEIN3_REPO, KLEIN3_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
 
 // The first standalone Stack chat pin: an official Qwen GGUF, small enough
 // for p16 while retaining a useful local conversation experience. The
@@ -1509,17 +1509,19 @@ export const STACK_VIDEO_LTX25_MAX_MODELS: CatalogModelLike[] = [STACK_VIDEO_LTX
 // measured on the Studio (M5 Max, 128 GB), 1024 x 1024.
 export const IMAGE_ENGINE_NAME = "mflux";
 export const STACK_IMAGE_KLEIN_ID = "flux2-klein-4b";
+export const STACK_IMAGE_KLEIN3_ID = "flux3-image-klein";
 export const STACK_IMAGE_ZIMAGE_ID = "z-image-turbo";
 export const STACK_IMAGE_ERNIE_ID = "ernie-image-turbo";
 export const STACK_IMAGE_QWEN_ID = "qwen-image-2512-q8";
-function imageFamily(id: string, repo: string, revision: string, primary: string, files: ImagePinFile[], profile: string, footprint: number, quantization = "bf16, run 8-bit"): CatalogModelLike[] {
+function imageFamily(id: string, repo: string, revision: string, primary: string, files: ImagePinFile[], profile: string, footprint: number | null, quantization = "bf16, run 8-bit"): CatalogModelLike[] {
   const pin = (file: ImagePinFile): CatalogModelLike["download"] => ({ url: hfUrl(`${repo}/resolve/${revision}/${file.file}`), sha256: file.sha256, approx_bytes: file.bytes, hub_file: file.file });
   const main = files.find((file) => file.file === primary)!;
-  const head: CatalogModelLike = { id, role: "image", repo, license: "Apache-2.0", revision, engine: IMAGE_ENGINE_NAME, sizing: { profile, quantization }, download: pin(main), measured: { footprintBytes: footprint, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" } };
+  const head: CatalogModelLike = { id, role: "image", repo, license: "Apache-2.0", revision, engine: IMAGE_ENGINE_NAME, sizing: { profile, quantization }, download: pin(main), ...(footprint === null ? {} : { measured: { footprintBytes: footprint, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" } }) };
   const parts = files.filter((file) => file.file !== primary).map((file): CatalogModelLike => ({ id: `${id}-${file.file.replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`, role: "image", component: `${id}:${file.file}`, repo, license: "Apache-2.0", revision, engine: IMAGE_ENGINE_NAME, sizing: { profile, quantization: quantization.startsWith("bf16") ? "bf16" : quantization }, download: pin(file) }));
   return [head, ...parts];
 }
 export const STACK_IMAGE_KLEIN_MODELS = imageFamily(STACK_IMAGE_KLEIN_ID, KLEIN_4B_REPO, KLEIN_4B_REVISION, KLEIN_4B_PRIMARY, KLEIN_4B_FILES, "p32", 13_500_000_000);
+export const STACK_IMAGE_KLEIN3_MODELS = imageFamily(STACK_IMAGE_KLEIN3_ID, KLEIN3_REPO, KLEIN3_REVISION, KLEIN3_PRIMARY, KLEIN3_FILES, "p64", null, "bf16, distilled, 16 steps").map((pin) => ({ ...pin, license: "FLUX Kommunity License" }));
 export const STACK_IMAGE_ZIMAGE_MODELS = imageFamily(STACK_IMAGE_ZIMAGE_ID, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_FILES, "p128", 30_100_000_000);
 export const STACK_IMAGE_ERNIE_MODELS = imageFamily(STACK_IMAGE_ERNIE_ID, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_FILES, "p64", 15_000_000_000);
 export const STACK_IMAGE_QWEN_MODELS = imageFamily(STACK_IMAGE_QWEN_ID, QWEN_IMAGE_REPO, QWEN_IMAGE_REVISION, QWEN_IMAGE_PRIMARY, QWEN_IMAGE_FILES, "p128", 37_400_000_000, "8-bit, prebuilt");
@@ -1541,6 +1543,16 @@ export const H3_LICENCE_NOTICE = {
     "The licence limits where the model may be used (its Applicable Territory), and some regions and larger companies must apply to MiniMax separately. Read it before you accept.",
   ],
 };
+export const KLEIN3_LICENCE_NOTICE = {
+  id: "flux3-image-klein-kommunity-2026-11-16",
+  name: "FLUX Kommunity License v.1.0",
+  url: "https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/09561231f44e41381c461caf53d5452005a60ac9/LICENSE.md",
+  summary: [
+    "FLUX 3 Image Klein is downloaded from Black Forest Labs' published files for your household's use.",
+    "The FLUX Kommunity License sets terms for use and output generation. Read the licence and its accompanying NOTICE.md before accepting; acceptance is recorded before download.",
+    "NOTICE.md: https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/09561231f44e41381c461caf53d5452005a60ac9/NOTICE.md",
+  ],
+};
 export const STACK_IMAGE_H3_MODELS: CatalogModelLike[] = H3_IMAGE_FILES.map((file): CatalogModelLike => {
   const primary = file.file === H3_IMAGE_PRIMARY;
   return {
@@ -1550,7 +1562,7 @@ export const STACK_IMAGE_H3_MODELS: CatalogModelLike[] = H3_IMAGE_FILES.map((fil
     ...(primary ? { measured: { footprintBytes: 19_700_000_000, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" } } : {}),
   };
 });
-export const STACK_IMAGE_ENGINE_MODELS: CatalogModelLike[] = [...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS];
+export const STACK_IMAGE_ENGINE_MODELS: CatalogModelLike[] = [...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_KLEIN3_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS];
 // MAKE-CLEARER-2026-11-13: SeedVR2 3B restores a picture (the Best level of Make clearer). It is not a picture family (it makes no picture from words and
 // is not an LoRA base), so it is not in STACK_IMAGE_ENGINE_MODELS; the same mflux worker runs it, from this folder, offline. Footprint measured through mflux
 // 0.23.0 in low-RAM mode on a 512 px picture (macOS peak memory footprint, M5 Max, 128 GB): 9.84 GB; the default mode peaks at 36.7 GB.

@@ -6,6 +6,30 @@
 // loads are pinned (the single-file duplicate of the transformer and the
 // repository's pictures are not).
 export interface ImagePinFile { file: string; sha256: string; bytes: number; }
+// IMGGEN-KLEIN3-01: bf16 distilled FLUX 3 Image Klein, mflux 0.23.0. File
+// digests and sizes were recomputed from the locally held Hub snapshot at
+// revision 09561231f44e41381c461caf53d5452005a60ac9; only runtime inputs are pinned.
+export const KLEIN3_REPO = "black-forest-labs/flux-3-image-klein";
+export const KLEIN3_REVISION = "09561231f44e41381c461caf53d5452005a60ac9";
+export const KLEIN3_PRIMARY = "transformer/diffusion_pytorch_model-00001-of-00002.safetensors";
+export const KLEIN3_FILES: ImagePinFile[] = [
+  { file: "transformer/config.json", sha256: "e748b382508f3171d1f4039688b23d1f809aebe4507b3ed5a29bca01b4b58877", bytes: 436 },
+  { file: "transformer/diffusion_pytorch_model-00001-of-00002.safetensors", sha256: "4f01de41470090586d7a25aa4aec93987724eae45db45b68de2b3f566f438a8b", bytes: 9907529352 },
+  { file: "transformer/diffusion_pytorch_model-00002-of-00002.safetensors", sha256: "6f6217ab2c7ce5ef177ec202f79d4c2ddab78111c4645030c8828ec615d5f02c", bytes: 1189878064 },
+  { file: "transformer/diffusion_pytorch_model.safetensors.index.json", sha256: "cc3ba9b73dc3f10ff877dea398c1d48455a4b2164da5cbb7d92b4bb4b66040cc", bytes: 37951 },
+  { file: "text_encoder/config.json", sha256: "edac7703329133edfc53e46ac0081835144c99d7eebf28b71c732694d435224d", bytes: 1505 },
+  { file: "text_encoder/generation_config.json", sha256: "8469742d1fce0de951c8909b26a2c0c0d8490837ce476efb114da9e0cefc4d44", bytes: 269 },
+  { file: "text_encoder/model-00001-of-00002.safetensors", sha256: "30a01a0556622645a3cce87b655bbbbbc1f170c196099f1b666c93202c3339a9", bytes: 4967229296 },
+  { file: "text_encoder/model-00002-of-00002.safetensors", sha256: "046296a2a387efb43b0c997d5833c789604d168834f6e0d3064bf7bb13d002a6", bytes: 3908490048 },
+  { file: "text_encoder/model.safetensors.index.json", sha256: "58a7841d7bff2548dd91577d216274a83cf1b500bc6a534b809d6c1b1707cf2b", bytes: 64742 },
+  { file: "text_encoder/tokenizer.json", sha256: "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7", bytes: 7032403 },
+  { file: "text_encoder/tokenizer_config.json", sha256: "c2da771801886ad9ae98181793ffd3dfb7f1af30f6f7c6a4e15d7dbba52e2399", bytes: 10868 },
+  { file: "text_encoder/chat_template.json", sha256: "6f8a6a55027e3da5160105556cda5dd69f6423f1c32645f6730d32de7773d0c4", bytes: 5502 },
+  { file: "text_encoder/merges.txt", sha256: "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3", bytes: 1671839 },
+  { file: "text_encoder/vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2776833 },
+  { file: "vae/config.json", sha256: "66564b3cd3f3f3ce5ce3cd4df72f1de883b242c7f338e27d420fe5ddcb0a6ed9", bytes: 808 },
+  { file: "vae/diffusion_pytorch_model.safetensors", sha256: "d64f3a68e1cc4f9f4e29b6e0da38a0204fe9a49f2d4053f0ec1fa1ca02f9c4b5", bytes: 336213556 },
+];
 export const KLEIN_4B_REPO = "black-forest-labs/FLUX.2-klein-4B";
 export const KLEIN_4B_REVISION = "e7b7dc27f91deacad38e78976d1f2b499d76a294";
 export const KLEIN_4B_PRIMARY = "transformer/diffusion_pytorch_model.safetensors";

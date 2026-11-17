@@ -175,6 +175,10 @@ def build(request, mode):
             from mflux.models.flux2.variants import Flux2Klein
 
             model = Flux2Klein(model_config=ModelConfig.flux2_klein_4b(), **common)
+    elif family == "flux3-image-klein":
+        from mflux.models.flux3.variants import Flux3Klein, Flux3KleinEdit
+
+        model = (Flux3KleinEdit if mode == "edit" else Flux3Klein)(model_config=ModelConfig.flux3_image_klein(), **common)
     elif family == "ernie-image-turbo":
         if mode == "edit":
             raise ValueError("unsupported_edit")
