@@ -269,7 +269,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   }
   const size = parseVideoSize(body.size, quality);
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
-  const seconds = quality === "h3" || quality === "h3stream" ? Math.max(4, Math.min(5, body.seconds ?? 5)) : body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
+  const seconds = quality === "h3" || quality === "h3stream" ? Math.max(4, Math.min(10, body.seconds ?? 5)) : body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
   if (quality === "ltx25max") { const refusal = ltx25MaxRefusal(size.width, size.height, seconds * VIDEO_FPS + 1); if (refusal) return fail(c, 422, "bad_seconds", refusal); }
   if (quality === "ltx25") { const refusal = ltx25Refusal(size.width, size.height, seconds * VIDEO_FPS + 1); if (refusal) return fail(c, 422, "bad_seconds", refusal); }
   if (seconds > spec.maxSeconds) return fail(c, 422, "bad_seconds", `This clip is at most ${spec.maxSeconds} seconds on this computer.`);
