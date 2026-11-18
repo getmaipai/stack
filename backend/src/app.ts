@@ -16,6 +16,7 @@ import { enginesRoutes } from "@/routes/engines";
 import { modelsRoutes } from "@/routes/models";
 import { jobsRoutes } from "@/routes/jobs";
 import { jobsCatalogRoutes } from "@/routes/jobsCatalog";
+import { jobsMakeRoutes } from "@/routes/jobsMake";
 import { healthRoutes } from "@/routes/health";
 import { statusRoutes } from "@/routes/status";
 import { checkRoutes } from "@/routes/check";
@@ -162,6 +163,7 @@ app.route("/stack/v1/engines", enginesRoutes);
 app.route("/stack/v1/models", modelsRoutes);
 // MODELPACK-JOBS-01: the catalog is registered before the jobs router so "catalog" is never read as a job id.
 app.route("/stack/v1/jobs/catalog", jobsCatalogRoutes);
+app.route("/stack/v1/jobs/make", jobsMakeRoutes);
 app.route("/stack/v1/jobs", jobsRoutes);
 app.route("/stack/v1/health", healthRoutes);
 app.route("/stack/v1/status", statusRoutes);

@@ -9,6 +9,7 @@ import { packs, type LoadedPack } from "@/packs/loader";
 import { listParts, type PartsAudience } from "@/lib/partsList";
 import { PART_DEFS } from "@/lib/partDefs";
 import type { HardwareInfo } from "@/lib/hardware";
+import { WIRED_JOBS } from "@/lib/makeDispatch";
 
 type Level = "standard" | "boost" | "max";
 type PackJob = LoadedPack["pack"]["jobs"][number];
@@ -55,7 +56,7 @@ export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): P
   const jobs = JOB_ORDER.flatMap((name) => {
     const serving = servingFor(name, audience, list.parts);
     if (!serving.length && audience === "minor") return []; // a job a minor may not have is absent, never explained
-    const chosen = serving.find((s) => runnable(s.part)) ?? null;
+    const chosen = WIRED_JOBS.has(name) ? (serving.find((s) => runnable(s.part)) ?? null) : null; // a job not wired through the generic door is never "available"
     const shown = chosen ?? serving[0] ?? null;
     const limitsSource = shown?.job;
     const entry = {
@@ -67,7 +68,7 @@ export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): P
       restyles: [] as Array<{ name: string; label: string }>,
     };
     if (audience === "minor") return [entry];
-    const why = chosen ? null : serving.length
+    const why = chosen ? null : serving.length && !WIRED_JOBS.has(name) ? `This kind of job is not available through the generic door yet. An admin does not need to do anything.` : serving.length
       ? `No model that can ${JOB_PHRASE[name]} is turned on and ready. An admin can turn one on or add one in Settings, AI and models.`
       : `No model that can ${JOB_PHRASE[name]} is installed here. An admin can add one in Settings, AI and models.`;
     return [{ ...entry, why_not: why, alternatives: serving.filter((s) => s !== chosen).map((s) => ({ part: s.part.id, label: s.part.label })) }];
