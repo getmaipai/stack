@@ -4,7 +4,7 @@ import { StackMakeRequest, StackMakeResult, StackMakeRefusal } from "@maipai/spe
 import type { AppEnv } from "@/types";
 import { listParts } from "@/lib/partsList";
 import { planMake } from "@/lib/makePlan";
-import { CLIP_PICTURES_LINE, WIRED_JOBS, dispatchClip, dispatchPicture } from "@/lib/makeDispatch";
+import { WIRED_JOBS, dispatchClip, dispatchPicture, dispatchPictureEdit, type PictureBytes } from "@/lib/makeDispatch";
 
 const NotAvailable = z.object({ code: z.literal("not_available"), line: z.string().min(1) }).strict();
 const route = createRoute({
@@ -27,12 +27,24 @@ jobsMakeRoutes.openapi(route, async (c) => {
     return c.json({ code: "not_available", line: plan.unavailable }, 409) as never;
   }
   if (!WIRED_JOBS.has(request.job)) return c.json({ code: "not_available", line: "This kind of job is not available through this door yet." }, 409) as never;
-  if (request.job === "clip" && (request.start_picture || request.end_picture)) return c.json({ code: "not_available", line: CLIP_PICTURES_LINE }, 409) as never;
   const { app } = await import("@/app");
   const forward = async (path: string, body: unknown) => {
     const response = await app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     return { status: response.status, json: await response.json().catch(() => null) };
   };
-  const result = request.job === "clip" ? await dispatchClip(request, plan, forward) : await dispatchPicture(request as never, plan, forward);
+  const read: PictureBytes = async (reference) => {
+    if (reference.startsWith("data:")) {
+      const match = /^data:([^;,]+);base64,(.+)$/s.exec(reference);
+      return match ? { bytes: new Uint8Array(Buffer.from(match[2]!, "base64")), type: match[1]! } : null;
+    }
+    if (!reference.startsWith("/v1/") || reference.includes("..")) return null;
+    const response = await app.request(reference);
+    return response.status === 200 ? { bytes: new Uint8Array(await response.arrayBuffer()), type: response.headers.get("content-type") ?? "image/png" } : null;
+  };
+  const forwardForm = async (path: string, form: FormData) => {
+    const response = await app.request(path, { method: "POST", body: form });
+    return { status: response.status, json: await response.json().catch(() => null) };
+  };
+  const result = request.job === "clip" ? await dispatchClip(request, plan, forward, read) : request.job === "picture_edit" ? await dispatchPictureEdit(request, plan, read, forwardForm) : await dispatchPicture(request as never, plan, forward);
   return c.json(result.body as never, result.status as 200) as never;
 });

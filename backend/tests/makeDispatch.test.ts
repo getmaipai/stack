@@ -66,10 +66,10 @@ test("the route answers not_on_this_model for a named part that cannot do the jo
 });
 test("the catalog never calls an unwired job available", async () => {
   const catalog = await jobsCatalog("adult");
-  for (const job of catalog.jobs) if (job.job !== "picture") expect(job.available).toBe(false);
+  for (const job of catalog.jobs) if (!["picture", "picture_edit", "clip"].includes(job.job)) expect(job.available).toBe(false);
 });
 
-import { clipBody, dispatchClip, CLIP_PICTURES_LINE } from "@/lib/makeDispatch";
+import { clipBody, dispatchClip, dispatchPictureEdit, PICTURE_UNREADABLE_LINE, editFields } from "@/lib/makeDispatch";
 const clipReq = (over: Partial<Extract<StackMakeRequest, { job: "clip" }>> = {}): Extract<StackMakeRequest, { job: "clip" }> => ({ job: "clip", audience: "adult", description: "a dog barks", shape: "landscape", level: "standard", seconds: 5, seed: 3, ...over });
 const clipPlanned = (req = clipReq()) => { const p = planMake(req, [ready("ltx-2-5-q8-distilled-mlx"), ready("minimax-h3")]); if (!p.ok) throw new Error("not planned"); return p; };
 
@@ -82,12 +82,28 @@ test("a finished clip's result carries the job, the file, the poster, the sound 
   const result = await dispatchClip(clipReq(), clipPlanned(), async (path) => ({ status: 200, json: { job: "v1", data: [{ url: "/v1/videos/generations/v1/0.mp4", poster_url: "/v1/videos/generations/v1/0.jpg", seconds: 5, audio: true }] } }));
   expect(result.body).toMatchObject({ id: "v1", job: "clip", state: "done", files: ["/v1/videos/generations/v1/0.mp4"], poster: "/v1/videos/generations/v1/0.jpg", made_with: { part: "ltx-2-5-q8-distilled-mlx", seconds: 5, sound: true } });
 });
-test("a clip that starts on a picture is refused with a plain line, never silently dropped", async () => {
-  const response = await app.request("/stack/v1/jobs/make", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(clipReq({ start_picture: "m1" })) });
-  const body = await response.json() as { code: string; line: string };
-  expect(response.status).toBe(409);
-  expect(["not_available", "not_on_this_model"]).toContain(body.code);
-  if (body.code === "not_available" && body.line === CLIP_PICTURES_LINE) expect(body.line).toBe(CLIP_PICTURES_LINE);
+const png = { bytes: new Uint8Array([137, 80, 78, 71]), type: "image/png" };
+test("a clip that starts on a picture sends it to the runner as the first frame; an unreadable picture is refused plainly", async () => {
+  let sent: Record<string, unknown> = {};
+  await dispatchClip(clipReq({ start_picture: "/v1/images/generations/j/0.png", end_picture: "data:image/png;base64,AAAA" }), clipPlanned(), async (_p, body) => { sent = body as Record<string, unknown>; return { status: 200, json: { job: "v2", data: [] } }; }, async () => png);
+  expect(String(sent.image)).toStartWith("data:image/png;base64,");
+  expect(String(sent.end_image)).toStartWith("data:image/png;base64,");
+  const refused = await dispatchClip(clipReq({ start_picture: "nope" }), clipPlanned(), async () => ({ status: 200, json: {} }), async () => null);
+  expect(refused).toEqual({ status: 409, body: { code: "not_available", line: PICTURE_UNREADABLE_LINE } });
+});
+const editReq = (over: Partial<Extract<StackMakeRequest, { job: "picture_edit" }>> = {}): Extract<StackMakeRequest, { job: "picture_edit" }> => ({ job: "picture_edit", audience: "adult", picture: "/v1/images/generations/j/0.png", description: "make the sky pink", level: "standard", ...over });
+test("a picture edit sends the picture, the pack's instruction and its references to the edits route and returns the edited file", async () => {
+  const planned = planMake(editReq(), [ready("flux3-image-klein")]);
+  if (!planned.ok) throw new Error("not planned");
+  expect(editFields(editReq(), planned)).toMatchObject({ model: "flux3-image-klein", operation: "edit", instruction: "Change the given picture as described: make the sky pink. Keep everything else as it is." });
+  let form: FormData | null = null;
+  const done = await dispatchPictureEdit(editReq({ references: ["a", "b"] }), planned, async () => png, async (_p, f) => { form = f; return { status: 200, json: { job: "e1", data: [{ b64_json: "AAAA" }] } }; });
+  expect(form!.get("image")).toBeInstanceOf(File);
+  expect(form!.get("reference")).toBeInstanceOf(File);
+  expect(form!.get("reference2")).toBeInstanceOf(File);
+  expect(done.body).toMatchObject({ id: "e1", job: "picture_edit", state: "done", files: ["/v1/images/edits/e1"] });
+  const refused = await dispatchPictureEdit(editReq(), planned, async () => null, async () => ({ status: 200, json: {} }));
+  expect(refused.body).toEqual({ code: "not_available", line: PICTURE_UNREADABLE_LINE });
 });
 test("the catalog now lists clip as wired (available only when a part is ready)", async () => {
   const catalog = await jobsCatalog("adult");
