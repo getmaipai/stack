@@ -1,0 +1,29 @@
+{
+  "id": "htdemucs-pack",
+  "version": "1.0.0",
+  "part": "htdemucs",
+  "jobs": [
+    {
+      "job": "stems",
+      "limits": {},
+      "audiences": [
+        "adult",
+        "minor"
+      ],
+      "capabilities": {
+        "text": false,
+        "end_picture": false,
+        "sound": true,
+        "keeps_likeness": false
+      },
+      "recipe": "recipes/stems.md",
+      "peaks": [
+        {
+          "bytes": 1210000000,
+          "status": "measured",
+          "measured_on": "2026-10-30"
+        }
+      ]
+    }
+  ]
+}

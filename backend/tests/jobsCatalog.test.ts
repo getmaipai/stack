@@ -20,10 +20,10 @@ test("the route answers both audiences in the spec's shape", async () => {
   }
 });
 
-test("the adult catalog lists all eight jobs and a plain reason for any job nothing ready can do", async () => {
+test("the adult catalog lists all fourteen jobs and a plain reason for any job nothing ready can do", async () => {
   const catalog = await jobsCatalog("adult");
   expect(catalog.audience).toBe("adult");
-  expect(catalog.jobs.map((j) => j.job)).toEqual(["picture", "picture_edit", "clip", "clip_from_sheet", "restyle", "swap", "character_sheet", "contact_sheet"]);
+  expect(catalog.jobs.map((j) => j.job)).toEqual(["picture", "picture_edit", "clip", "clip_from_sheet", "restyle", "swap", "character_sheet", "contact_sheet", "song", "song_edit", "sound_effect", "stems", "vocal_swap", "lyric_timing"]);
   const swap = catalog.jobs.find((j) => j.job === "swap") as unknown as { available: boolean; why_not: string | null; alternatives: unknown[] };
   expect(swap.available).toBe(false);
   expect(swap.why_not).toContain("An admin can");

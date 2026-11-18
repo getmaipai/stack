@@ -18,12 +18,14 @@ type PackJob = LoadedPack["pack"]["jobs"][number];
 export const JOB_LABELS: Readonly<Record<StackJobName, string>> = {
   picture: "Make a picture", picture_edit: "Change a picture", clip: "Make a video clip", clip_from_sheet: "Make a clip from a character sheet",
   restyle: "Restyle a clip", swap: "Swap a face in a clip", character_sheet: "Make a character sheet", contact_sheet: "Make a contact sheet",
+  song: "Make a song", song_edit: "Change a song", sound_effect: "Make a sound effect", stems: "Split a song into parts", vocal_swap: "Swap a singing voice", lyric_timing: "Time the lyrics to a song",
 };
 const JOB_ORDER = Object.keys(JOB_LABELS) as StackJobName[];
 /** The lowercase phrase inside the "nothing can do this" sentence. */
 export const JOB_PHRASE: Readonly<Record<StackJobName, string>> = {
   picture: "make pictures", picture_edit: "change pictures", clip: "make video clips", clip_from_sheet: "make a clip from a sheet",
   restyle: "restyle a clip", swap: "swap a face in a clip", character_sheet: "make a character sheet", contact_sheet: "make a contact sheet",
+  song: "make songs", song_edit: "change songs", sound_effect: "make sound effects", stems: "split songs into parts", vocal_swap: "swap a singing voice", lyric_timing: "time lyrics to a song",
 };
 
 const levelsOf = (job: PackJob): Level[] => {

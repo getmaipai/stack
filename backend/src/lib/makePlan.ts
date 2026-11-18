@@ -35,14 +35,16 @@ export function planMake(request: StackMakeRequest, parts: readonly StackPartVie
   }
 
   const limits = chosen.job.limits;
-  const level = "level" in request ? request.level : "standard";
   const levelsServed = new Set<string>([...Object.keys(limits.max_seconds ?? {}), ...Object.values(limits.shapes ?? {}).flatMap((s) => Object.keys(s ?? {}))]);
+  // A request that names no level (a song may leave it out) gets Standard where the model serves it, else the first level it does serve.
+  const asked = "level" in request ? request.level : undefined;
+  const level = (asked ?? (levelsServed.size === 0 || levelsServed.has("standard") ? "standard" : [...levelsServed][0]!)) as "standard" | "boost" | "max";
   if (levelsServed.size && !levelsServed.has(level)) return { ok: false, refusal: { code: "level_not_served", line: `This model does not make ${level} quality. Choose ${[...levelsServed].join(" or ")}.` } };
   const shape = "shape" in request ? request.shape : null;
   if (shape && limits.shapes && !SHAPES.some((name) => name === shape && (limits.shapes as Record<string, Record<string, unknown> | undefined>)[name]?.[level])) return { ok: false, refusal: { code: "shape_not_served", line: `This model does not make ${shape} pictures at ${level} quality. Choose ${SHAPES.filter((n) => (limits.shapes as Record<string, Record<string, unknown> | undefined>)[n]?.[level]).join(" or ") || "another quality"}.` } };
   const seconds = "seconds" in request ? request.seconds : null;
   const maxSeconds = (limits.max_seconds as Record<string, number> | undefined)?.[level];
-  if (seconds !== null && maxSeconds !== undefined && seconds > maxSeconds) return { ok: false, refusal: { code: "too_long", line: `This model makes clips up to ${maxSeconds} seconds at ${level} quality. Choose a shorter clip.`, limit: maxSeconds } };
+  if (seconds !== null && maxSeconds !== undefined && seconds > maxSeconds) return { ok: false, refusal: { code: "too_long", line: `This model makes ${request.job === "song" || request.job === "song_edit" ? "songs" : "clips"} up to ${maxSeconds} seconds at ${level} quality. Choose a shorter one.`, limit: maxSeconds } };
   const references = "references" in request && request.references ? request.references.length : 0;
   if (limits.max_references !== undefined && references > limits.max_references) return { ok: false, refusal: { code: "too_many_references", line: `This model takes up to ${limits.max_references} reference pictures. Use fewer.`, limit: limits.max_references } };
   return { ok: true, serving: chosen, level, shape, seconds };

@@ -1,0 +1,62 @@
+{
+  "id": "ace-step-1-5-turbo-pack",
+  "version": "1.0.0",
+  "part": "ace-step-1-5-turbo",
+  "jobs": [
+    {
+      "job": "song",
+      "limits": {
+        "max_seconds": {
+          "standard": 120
+        },
+        "max_words": 4000
+      },
+      "audiences": [
+        "adult",
+        "minor"
+      ],
+      "capabilities": {
+        "text": true,
+        "end_picture": false,
+        "sound": true,
+        "keeps_likeness": false
+      },
+      "recipe": "recipes/song.md",
+      "peaks": [
+        {
+          "level": "standard",
+          "bytes": 16400000000,
+          "status": "measured",
+          "measured_on": "2026-10-30"
+        }
+      ]
+    },
+    {
+      "job": "song_edit",
+      "limits": {
+        "max_seconds": {
+          "standard": 120
+        }
+      },
+      "audiences": [
+        "adult",
+        "minor"
+      ],
+      "capabilities": {
+        "text": true,
+        "end_picture": false,
+        "sound": true,
+        "keeps_likeness": false
+      },
+      "recipe": "recipes/song-edit.md",
+      "peaks": [
+        {
+          "level": "standard",
+          "bytes": 16400000000,
+          "status": "measured",
+          "measured_on": "2026-10-30"
+        }
+      ]
+    }
+  ]
+}

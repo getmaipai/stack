@@ -59,3 +59,14 @@ test("a shape the model does not serve is refused", () => {
   const plan = planMake({ job: "clip", audience: "adult", part: "minimax-h3", description: "x", shape: "portrait", level: "standard", seconds: 5 }, parts());
   expect((plan as { refusal: { code: string } }).refusal.code).toBe("shape_not_served");
 });
+
+test("a song with no level is planned at the first level its model serves, and a long one is refused in songs", () => {
+  const request = { job: "song", audience: "adult", description: "a calm tune", seconds: 60 } as never;
+  const planned = planMake(request, [view("ace-step-1-5-turbo")!]);
+  expect(planned.ok && planned.level).toBe("standard");
+  const boostOnly = planMake(request, [view("ace-step-1-5-xl-turbo-bf16")!]);
+  expect(boostOnly.ok && boostOnly.level).toBe("boost");
+  const tooLong = planMake({ ...(request as object), seconds: 300 } as never, [view("ace-step-1-5-turbo")!]);
+  expect(tooLong.ok).toBe(false);
+  if (!tooLong.ok && "refusal" in tooLong) expect(tooLong.refusal).toMatchObject({ code: "too_long", limit: 120 });
+});
