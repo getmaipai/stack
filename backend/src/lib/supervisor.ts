@@ -1081,8 +1081,8 @@ function declaredLaunchContext(model: ModelRecord): number | null {
   return typeof launch?.contextLength === "number" && launch.contextLength > 0 ? launch.contextLength : null;
 }
 
-/** The chat-template variables a record's launch pins (STACK-MUSE-01:
- * Muse Glimmer's reasoning strength), string values only, or null. */
+/** The chat-template variables a record's launch pins (a model's
+ * reasoning strength), string values only, or null. */
 function declaredChatTemplateKwargs(model: ModelRecord): Record<string, string> | null {
   const launch = model.engineRequirements.launch as { chatTemplateKwargs?: unknown } | undefined;
   const kwargs = launch?.chatTemplateKwargs;

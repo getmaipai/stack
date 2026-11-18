@@ -14,7 +14,10 @@ import { CHAT_ENGINES, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { chatEngineFailure, clearChatEngineFailures, markChatEngineFailed, requestedChatEngine, resolveChatEngine, tierDefaultChatEngine } from "@/lib/chatEngines";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
-import { STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_CHAT_8B_MODEL as STACK_CHAT_GGUF_MODEL } from "@/lib/modelCatalog";
+
+/** A stand-in MLX chat record: the Stack pins no MLX chat model by default, so the oMLX path is exercised on whichever one an admin installed. */
+const MLX_FIXTURE = { id: "fixture-mlx-chat", launch: { chatTemplateKwargs: { reasoning_strength: "low" }, readsPictures: true }, sampling: { temperature: 1.0, top_p: 0.95, top_k: 64, source: "fixture" } };
 import { activeChatChoice, chatEngine, engineInstalledFor, launchPlan, resetSupervisorForTests, scriptedProcess, selectedModel, setMachineTier, setSupervisorFactoryForTests, startChatWithFallbackForTests, EngineUnavailableError } from "@/lib/supervisor";
 import { ensureChatEngineAssets } from "@/lib/chatEngineAssets";
 import { __resetJobsForTests, listJobs } from "@/lib/jobs";
@@ -35,15 +38,15 @@ function fakeEnvironment(): void {
   writeFileSync(join(omlxRoot(), ENV_READY_MARKER), "ok");
 }
 function modelDir(): string {
-  const dir = join(omlxRoot(), "..", "fixture-model", "Muse-Glimmer-30B-4bit");
+  const dir = join(omlxRoot(), "..", "fixture-model", "Fixture-MLX-4bit");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "config.json"), JSON.stringify({ model_type: "muse_glimmer", text_config: { max_position_embeddings: 131072 } }));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ model_type: "fixture_mlx", text_config: { max_position_embeddings: 131072 } }));
   return dir;
 }
 function installRecords(): string {
   const dir = modelDir();
-  upsertModel({ id: STACK_CHAT_MUSE_30B_MLX_MODEL.id, roles: ["chat"], ...verified, sizeBytes: 19_443_246_692, modelPath: dir, engineRequirements: { engine: "omlx", launch: STACK_CHAT_MUSE_30B_MLX_MODEL.launch, sampling: STACK_CHAT_MUSE_30B_MLX_MODEL.sampling } });
-  upsertModel({ id: STACK_CHAT_MUSE_30B_XL_MODEL.id, roles: ["chat"], ...verified, sizeBytes: 19_653_960_832, modelPath: "/tmp/never/muse.gguf", engineRequirements: { engine: "llama-server" } });
+  upsertModel({ id: MLX_FIXTURE.id, roles: ["chat"], ...verified, sizeBytes: 19_443_246_692, modelPath: dir, engineRequirements: { engine: "omlx", launch: MLX_FIXTURE.launch, sampling: MLX_FIXTURE.sampling } });
+  upsertModel({ id: STACK_CHAT_GGUF_MODEL.id, roles: ["chat"], ...verified, sizeBytes: 5_027_783_488, modelPath: "/tmp/never/chat.gguf", engineRequirements: { engine: "llama-server" } });
   return dir;
 }
 
@@ -111,10 +114,10 @@ test.skipIf(!APPLE_SILICON)("chat runs on oMLX only when the tier, the environme
   // No environment yet: llama-server, and its GGUF is the selected model.
   expect(activeChatChoice().engine).toBe("llama-server");
   expect(chatEngine()).toBe("llama-server");
-  expect(selectedModel("chat")?.id).toBe(STACK_CHAT_MUSE_30B_XL_MODEL.id);
+  expect(selectedModel("chat")?.id).toBe(STACK_CHAT_GGUF_MODEL.id);
   fakeEnvironment();
   expect(activeChatChoice()).toEqual({ engine: "omlx", requested: "omlx", reason: null });
-  expect(selectedModel("chat")?.id).toBe(STACK_CHAT_MUSE_30B_MLX_MODEL.id);
+  expect(selectedModel("chat")?.id).toBe(MLX_FIXTURE.id);
   expect(engineInstalledFor("chat")).toBe(true);
   // The judge with its own bound model, embeddings and vision stay on llama-server.
   expect(engineInstalledFor("embed")).toBe(false);
@@ -122,7 +125,7 @@ test.skipIf(!APPLE_SILICON)("chat runs on oMLX only when the tier, the environme
   updateSettings({ "stack.engines.chat.engine": "auto" });
   applyPendingSettings();
   expect(chatEngine()).toBe("llama-server");
-  expect(selectedModel("chat")?.id).toBe(STACK_CHAT_MUSE_30B_XL_MODEL.id);
+  expect(selectedModel("chat")?.id).toBe(STACK_CHAT_GGUF_MODEL.id);
   setMachineTier("p32");
   expect(chatEngine()).toBe("llama-server");
   chooseOmlx();
@@ -135,7 +138,7 @@ test.skipIf(!APPLE_SILICON)("chat runs on oMLX only when the tier, the environme
 
 test.skipIf(!APPLE_SILICON)("under auto (and llama-server) nothing of oMLX is built or downloaded, even on p128 with a chat model installed (ENGINE-MLX-02)", async () => {
   __resetJobsForTests();
-  upsertModel({ id: STACK_CHAT_MUSE_30B_XL_MODEL.id, roles: ["chat"], ...verified, sizeBytes: 19_653_960_832, modelPath: "/tmp/never/muse.gguf", engineRequirements: { engine: "llama-server" } });
+  upsertModel({ id: STACK_CHAT_GGUF_MODEL.id, roles: ["chat"], ...verified, sizeBytes: 5_027_783_488, modelPath: "/tmp/never/chat.gguf", engineRequirements: { engine: "llama-server" } });
   setMachineTier("p128");
   for (const value of ["auto", "llama-server"]) {
     updateSettings({ "stack.engines.chat.engine": value });
@@ -147,25 +150,6 @@ test.skipIf(!APPLE_SILICON)("under auto (and llama-server) nothing of oMLX is bu
 });
 
 // ---- the pins -------------------------------------------------------------
-
-test("the MLX record pins every file by size and sha256 at one revision, and carries the card's sampling and the pinned reasoning strength", () => {
-  const pin = STACK_CHAT_MUSE_30B_MLX_MODEL;
-  expect(pin).toMatchObject({ id: "muse-glimmer-30b-mlx-4bit", role: "chat", engine: "omlx", license: "Apache-2.0", repo: "mlx-community/Muse-Glimmer-30B-4bit" });
-  expect(pin.revision).toMatch(/^[0-9a-f]{40}$/);
-  const download = pin.download!;
-  expect(download.directory).toBe("Muse-Glimmer-30B-4bit");
-  const files = download.files!;
-  expect(files.map((file) => file.path).sort()).toEqual(["chat_template.jinja", "config.json", "generation_config.json", "model-00001-of-00004.safetensors", "model-00002-of-00004.safetensors", "model-00003-of-00004.safetensors", "model-00004-of-00004.safetensors", "model.safetensors.index.json", "processor_config.json", "tokenizer.json", "tokenizer_config.json"]);
-  for (const file of files) { expect(file.sha256).toMatch(/^[0-9a-f]{64}$/); expect(file.bytes).toBeGreaterThan(0); }
-  expect(files.reduce((sum, file) => sum + file.bytes, 0)).toBe(download.approx_bytes);
-  const first = files.find((file) => file.path === "model-00001-of-00004.safetensors")!;
-  expect(download.sha256).toBe(first.sha256);
-  expect(download.url).toBe(`https://huggingface.co/mlx-community/Muse-Glimmer-30B-4bit/resolve/${pin.revision}/model-00001-of-00004.safetensors`);
-  expect(pin.launch).toEqual({ chatTemplateKwargs: { reasoning_strength: "low" }, readsPictures: true });
-  expect(pin.sampling).toMatchObject({ temperature: 1.0, top_p: 0.95, top_k: 64 });
-  expect(pin.measured?.footprintBytes).toBeGreaterThan(20_000_000_000);
-  expect(STACK_MODELS).toContain(pin);
-});
 
 test("oMLX is a managed runtime with a hashed requirements file: every package pinned with hashes, the release wheel by checksum, no torch and no git dependency", () => {
   expect(MANAGED_RUNTIMES.find((runtime) => runtime.name === OMLX_NAME)).toMatchObject({ version: OMLX_VERSION, roles: ["chat"] });
@@ -207,7 +191,7 @@ test("the launch is oMLX on loopback behind a random key, offline, with its prom
   setMachineTier("p128");
   chooseOmlx();
   const model = selectedModel("chat")!;
-  expect(model.id).toBe(STACK_CHAT_MUSE_30B_MLX_MODEL.id);
+  expect(model.id).toBe(MLX_FIXTURE.id);
   const plan = await launchPlan("chat", model, 8797);
   expect(plan.engine).toBe("omlx");
   expect(plan.build).toBe(`omlx-${OMLX_VERSION}`);
@@ -229,15 +213,15 @@ test("the launch is oMLX on loopback behind a random key, offline, with its prom
   // The model folder holds exactly the pinned directory, linked under the name the engine reports.
   const folder = flag("--model-dir")!;
   expect(folder).toBe(omlxModelsDir());
-  expect(lstatSync(join(folder, "Muse-Glimmer-30B-4bit")).isSymbolicLink()).toBe(true);
-  expect(readFileSync(join(folder, "Muse-Glimmer-30B-4bit", "config.json"), "utf8")).toContain("muse_glimmer");
-  expect(dir).toContain("Muse-Glimmer-30B-4bit");
+  expect(lstatSync(join(folder, "Fixture-MLX-4bit")).isSymbolicLink()).toBe(true);
+  expect(readFileSync(join(folder, "Fixture-MLX-4bit", "config.json"), "utf8")).toContain("fixture_mlx");
+  expect(dir).toContain("Fixture-MLX-4bit");
   // Offline, no token, no analytics; the daemon's secrets key never travels.
   expect(plan.env).toMatchObject({ HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1", DO_NOT_TRACK: "1", HF_HUB_DISABLE_TELEMETRY: "1" });
   expect(plan.env?.HF_TOKEN).toBeUndefined();
   expect(plan.env?.STACK_SECRETS_KEY).toBeUndefined();
   expect(plan.env?.HOME).toContain("/home");
-  expect(plan.identity).toEqual({ build: `omlx-${OMLX_VERSION}`, model: "Muse-Glimmer-30B-4bit" });
+  expect(plan.identity).toEqual({ build: `omlx-${OMLX_VERSION}`, model: "Fixture-MLX-4bit" });
   expect(plan.client).toBeFunction();
   // Every launch has a key of its own.
   const again = await launchPlan("chat", model, 8798);
@@ -267,7 +251,7 @@ function client(handler: (url: string, init: RequestInit) => Response | Promise<
     calls.push({ url: String(url), body: typeof init.body === "string" ? JSON.parse(init.body) : {}, headers: (init.headers ?? {}) as Record<string, string> });
     return handler(String(url), init);
   }) as unknown as typeof fetch;
-  return { client: new OmlxEngineClient({ baseUrl: "http://127.0.0.1:9/", apiKey: "secret-key", modelId: "Muse-Glimmer-30B-4bit", templateKwargs: templateKwargs ?? undefined, fetchImpl }), calls };
+  return { client: new OmlxEngineClient({ baseUrl: "http://127.0.0.1:9/", apiKey: "secret-key", modelId: "Fixture-MLX-4bit", templateKwargs: templateKwargs ?? undefined, fetchImpl }), calls };
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const USAGE = { prompt_tokens: 66, completion_tokens: 60, prompt_tokens_details: { cached_tokens: 57 }, prompt_eval_duration: 0.23, generation_duration: 1.88, prompt_tokens_per_second: 290.9, generation_tokens_per_second: 31.95 };
@@ -276,7 +260,7 @@ test("the client sends the model's folder name, the pinned template variables un
   const { client: engine, calls } = client(() => json({ choices: [{ message: { content: "hi" } }], usage: USAGE }));
   await engine.request("/v1/chat/completions", { model: "chat", messages: [{ role: "user", content: "hi" }], cache_prompt: true, id_slot: 0, chat_template_kwargs: { enable_thinking: false, reasoning_strength: "high" }, temperature: 0.3 });
   expect(calls[0]!.url).toBe("http://127.0.0.1:9/v1/chat/completions");
-  expect(calls[0]!.body).toEqual({ model: "Muse-Glimmer-30B-4bit", messages: [{ role: "user", content: "hi" }], temperature: 0.3, chat_template_kwargs: { reasoning_strength: "high", enable_thinking: false } });
+  expect(calls[0]!.body).toEqual({ model: "Fixture-MLX-4bit", messages: [{ role: "user", content: "hi" }], temperature: 0.3, chat_template_kwargs: { reasoning_strength: "high", enable_thinking: false } });
   expect(calls[0]!.headers.authorization).toBe("Bearer secret-key");
   // With no kwargs on the request the pinned strength still goes.
   await engine.request("/v1/chat/completions", { model: "chat", messages: [] });
@@ -309,7 +293,7 @@ test("a streamed reply passes every line through and adds timings to the usage c
   const bytes = new TextEncoder().encode(lines);
   const { client: engine, calls } = client(() => new Response(new ReadableStream({ start(controller) { for (let index = 0; index < bytes.length; index += 7) controller.enqueue(bytes.slice(index, index + 7)); controller.close(); } }), { status: 200, headers: { "content-type": "text/event-stream" } }));
   const response = await engine.stream("/v1/chat/completions", { model: "chat", messages: [], cache_prompt: true });
-  expect(calls[0]!.body).toMatchObject({ stream: true, stream_options: { include_usage: true }, model: "Muse-Glimmer-30B-4bit" });
+  expect(calls[0]!.body).toMatchObject({ stream: true, stream_options: { include_usage: true }, model: "Fixture-MLX-4bit" });
   expect(calls[0]!.body.cache_prompt).toBeUndefined();
   const text = await response.text();
   const out = text.split("\n");
@@ -334,7 +318,7 @@ test("token counting asks the engine for one token and reads its own prompt size
   expect(counted.status).toBe(200);
   expect((counted.body as { tokens: number[] }).tokens.length).toBe(35);
   expect(calls[0]!.url).toBe("http://127.0.0.1:9/v1/chat/completions");
-  expect(calls[0]!.body).toMatchObject({ model: "Muse-Glimmer-30B-4bit", max_tokens: 1, temperature: 0, stream: false, tools: [{ type: "function", function: { name: "math" } }], chat_template_kwargs: { reasoning_strength: "high" }, messages: [{ role: "user", content: "hello" }] });
+  expect(calls[0]!.body).toMatchObject({ model: "Fixture-MLX-4bit", max_tokens: 1, temperature: 0, stream: false, tools: [{ type: "function", function: { name: "math" } }], chat_template_kwargs: { reasoning_strength: "high" }, messages: [{ role: "user", content: "hello" }] });
   // Plain text is counted as a raw prompt.
   const raw = await engine.request("/tokenize", { model: "chat", content: "plain words", add_special: true });
   expect((raw.body as { tokens: unknown[] }).tokens.length).toBe(35);

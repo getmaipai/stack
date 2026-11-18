@@ -31,7 +31,7 @@ test("pushed order and off values are stored and applied", async () => {
   expect((await listParts({ audience: "adult", category: "pictures" })).parts.map((row) => row.id).slice(0, 3)).toEqual(["z-image-turbo", "flux3-image-klein", "minimax-h3-image"]);
   expect((await app.request("/stack/v1/parts?audience=adult")).status).toBe(200);
   expect(readPartChoices().pictures?.order).toEqual(["z-image-turbo", "flux3-image-klein"]);
-  const skipped = await app.request("/stack/v1/parts/choices", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ pictures: { order: ["qwen3-1.7b-q8-0", "no-such-part"], off: [] } }) });
+  const skipped = await app.request("/stack/v1/parts/choices", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ pictures: { order: ["qwen3-8b-instruct-q4-k-m", "no-such-part"], off: [] } }) });
   expect(skipped.status).toBe(200);
 });
 
@@ -45,8 +45,8 @@ test("engines cannot be turned off and refusal preserves prior choices", async (
 
 test("runner engines are required by their model parts and engine operations are refused", async () => {
   const list = (await listParts({ audience: "adult" })).parts;
-  expect(list.find((row) => row.id === "llama-server")?.required_by).toContain("qwen3-1.7b-q8-0");
-  expect(stackParts().find((part) => part.id === "qwen3-1.7b-q8-0")?.requires).toEqual(["llama-server"]);
+  expect(list.find((row) => row.id === "llama-server")?.required_by).toContain("qwen3-8b-instruct-q4-k-m");
+  expect(stackParts().find((part) => part.id === "qwen3-8b-instruct-q4-k-m")?.requires).toEqual(["llama-server"]);
   expect(await (await app.request("/stack/v1/parts/llama-server", { method: "DELETE" })).json()).toMatchObject({ code: "engine_part", error: expect.stringContaining("llama.cpp") });
   expect(await (await app.request("/stack/v1/parts/llama-server/install", { method: "POST" })).json()).toMatchObject({ code: "engine_part" });
 });

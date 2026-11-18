@@ -1,7 +1,7 @@
 // ENGINE-MLX-01 smoke: the real engine on a real Mac, through the Stack's
 // own code. Builds the oMLX environment from the hashed requirements file,
-// pulls the pinned MLX model through the verified installer (every file's
-// sha256 checked), starts chat through the supervisor, and exercises the
+// uses the MLX chat model already installed on this Mac (the Stack pins
+// none by default, so one must be installed first), starts chat through the supervisor, and exercises the
 // public route: a completion with reasoning, a streamed one with timings,
 // a tool call, json_schema output, a picture, token counting, the failure
 // of the process, and a clean stop. Several GB of downloads and about 20 GB
@@ -17,9 +17,9 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, rmdirSync } from "node:fs";
 import { app } from "@/app";
 import { ensureOmlxEnvironment, omlxInstalled } from "@/chat/omlx";
-import { startModelInstall } from "@/lib/installJobs";
-import { getModel } from "@/lib/modelStore";
-import { STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL } from "@/lib/modelCatalog";
+import { listModels } from "@/lib/modelStore";
+import { STACK_CHAT_8B_MODEL } from "@/lib/modelCatalog";
+import { basename } from "node:path";
 import { chatEngine, getProcess, runningEngine, setMachineTier, stopAllRoles, identityCheck, getRoleStatus } from "@/lib/supervisor";
 import { upsertModel } from "@/lib/modelStore";
 import { deflateSync } from "node:zlib";
@@ -61,16 +61,12 @@ test.skipIf(!process.env.OMLX_SMOKE)("the oMLX chat engine, end to end on this M
   expect(omlxInstalled()).toBe(true);
   console.log(`[smoke] environment ready in ${Math.round((Date.now() - builtAt) / 1000)} s`);
 
-  // 2. The model, through the verified installer (every file's sha256).
-  const pulledAt = Date.now();
-  const { done } = startModelInstall(STACK_CHAT_MUSE_30B_MLX_MODEL as never, "chat");
-  await done;
-  const record = getModel(STACK_CHAT_MUSE_30B_MLX_MODEL.id)!;
-  expect(record.modelPath).toMatch(/Muse-Glimmer-30B-4bit$/);
-  expect(record.verifiedAt).toBeTruthy();
-  console.log(`[smoke] model verified in ${Math.round((Date.now() - pulledAt) / 1000)} s at ${record.modelPath}`);
+  // 2. The model: an MLX chat model an admin already installed and verified.
+  const record = listModels().find((model) => model.roles.includes("chat") && model.engineRequirements.engine === "omlx" && !!model.modelPath && !!model.verifiedAt);
+  if (!record) throw new Error("No verified MLX chat model is installed on this Mac; install one first.");
+  const modelName = basename(record.modelPath!);
   // The GGUF record the fallback would use (never loaded here).
-  upsertModel({ id: STACK_CHAT_MUSE_30B_XL_MODEL.id, roles: ["chat"], source: "catalog", provenance: {}, revision: "r", sha256: "d".repeat(64), licence: "Apache-2.0", verifiedAt: new Date().toISOString(), modelPath: "/tmp/never/muse.gguf", sizeBytes: 19_653_960_832, engineRequirements: { engine: "llama-server" } });
+  upsertModel({ id: STACK_CHAT_8B_MODEL.id, roles: ["chat"], source: "catalog", provenance: {}, revision: "r", sha256: "d".repeat(64), licence: "Apache-2.0", verifiedAt: new Date().toISOString(), modelPath: "/tmp/never/chat.gguf", sizeBytes: 5_027_783_488, engineRequirements: { engine: "llama-server" } });
 
   setMachineTier("p128");
   expect(chatEngine()).toBe("omlx");
@@ -82,17 +78,17 @@ test.skipIf(!process.env.OMLX_SMOKE)("the oMLX chat engine, end to end on this M
     console.log(`[smoke] chat ready in ${Math.round((Date.now() - startedAt) / 1000)} s, pid ${processRecord.pid}`);
     expect(processRecord.engine).toBe("omlx");
     expect(runningEngine("chat")).toBe("omlx");
-    expect(processRecord.identity).toMatchObject({ build: "omlx-0.7.0", model: "Muse-Glimmer-30B-4bit", healthy: true });
+    expect(processRecord.identity).toMatchObject({ build: "omlx-0.7.0", model: modelName, healthy: true });
     expect(processRecord.imageInput).toBe(true);
     expect(identityCheck("chat")).toMatchObject({ ok: true });
     expect(getRoleStatus("chat").postLoadCheck?.replyOk).toBe(true);
-    expect(processRecord.contextLength).toBe(131072);
+    expect(processRecord.contextLength).toBeGreaterThan(0);
 
     // 4. The public route: a completion carries the engine's headers, reasoning and timings.
     const plain = await chat({ messages: [{ role: "user", content: "Say hello in five words." }], max_tokens: 400 });
     expect(plain.response.status).toBe(200);
     expect(plain.response.headers.get("x-maipai-engine")).toContain("omlx-0.7.0");
-    expect(plain.response.headers.get("x-maipai-model")).toBe("Muse-Glimmer-30B-4bit");
+    expect(plain.response.headers.get("x-maipai-model")).toBe(modelName);
     const message = plain.json!.choices[0].message;
     expect((message.content ?? "").length).toBeGreaterThan(0);
     expect(typeof message.reasoning_content).toBe("string");

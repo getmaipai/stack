@@ -9,7 +9,7 @@ import { __resetSettingsForTests, updateSettings } from "@/settings";
 import { __resetUpdatesForTests, checkCatalog, recommendationsFor, updatesState, MODEL_INDEX_URL, ENGINE_INDEX_URL } from "@/updates/catalog";
 import { swapEngine } from "@/updates/engines";
 
-const modelIndex = { version: "1", models: [{ id: "qwen3-1.7b-q8-0", role: "chat", profile: "p16", quality: 2, revision: "newer-revision", download: { url: "https://huggingface.co/x/resolve/newer-revision/m.gguf", sha256: "b".repeat(64), approx_bytes: 10 } }] };
+const modelIndex = { version: "1", models: [{ id: "qwen3-8b-instruct-q4-k-m", role: "chat", profile: "p16", quality: 2, revision: "newer-revision", download: { url: "https://huggingface.co/x/resolve/newer-revision/m.gguf", sha256: "b".repeat(64), approx_bytes: 10 } }] };
 function respond(body: unknown, status = 200): Response { return new Response(status === 304 ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json", etag: '"e1"' } }); }
 
 beforeEach(() => { __resetUpdatesForTests(); __resetSettingsForTests(); __resetEventsForTests(); clearModelsForTests(); });
@@ -25,10 +25,10 @@ test("with update checks off, nothing is fetched and the state says so", async (
 
 test("installed, available, last checked: a newer model revision in the index is announced once; engines report unknown until the Catalog publishes their index", async () => {
   updateSettings({ "stack.updates.enabled": true });
-  upsertModel({ id: "qwen3-1.7b-q8-0", roles: ["chat"], source: "catalog", provenance: {}, revision: "old-revision", sha256: "a".repeat(64), licence: "Apache-2.0" });
+  upsertModel({ id: "qwen3-8b-instruct-q4-k-m", roles: ["chat"], source: "catalog", provenance: {}, revision: "old-revision", sha256: "a".repeat(64), licence: "Apache-2.0" });
   const fetcher = async (input: string | URL | Request) => String(input) === MODEL_INDEX_URL ? respond(modelIndex) : String(input) === ENGINE_INDEX_URL ? respond({ error: "not found" }, 404) : respond({}, 500);
   const state = await checkCatalog(fetcher);
-  expect(state.models.entries[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", installed: "old-revision", available: "newer-revision" });
+  expect(state.models.entries[0]).toMatchObject({ id: "qwen3-8b-instruct-q4-k-m", installed: "old-revision", available: "newer-revision" });
   expect(state.models.lastChecked).not.toBeNull();
   expect(state.engines[0]).toMatchObject({ availableKnown: false, available: null });
   expect(state.engines[0]!.lastChecked).not.toBeNull();

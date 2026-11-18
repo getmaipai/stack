@@ -1,5 +1,5 @@
 // VISION-03g: an upgrade runs no install plan, so a part an installed
-// model declares (Muse's picture projector) is pulled when the Stack
+// model declares (a picture projector) is pulled when the Stack
 // starts, with a job for the install strip and a Repairs item when it
 // cannot be fetched.
 import { afterEach, beforeEach, expect, test } from "bun:test";

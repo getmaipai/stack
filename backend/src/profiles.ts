@@ -78,18 +78,17 @@ export function setBudgetPercent(percent: number): void {
 }
 export function budgetPercent(): number { return currentBudgetPercent; }
 
-/** Household chat pin by tier (STACK-MUSE-01, the owner's rule of
- * 2026-10-16): Qwen3 8B on p16, which is every Mac of 24 GB or less;
- * Muse Glimmer 30B above that, the 17 GB Q4_K_M on p32 and the
- * KQuant-Dynamic Q4_K_XL from p64. The judge shares chat through p16;
+/** Household chat pin by tier: Qwen3 8B on every tier, the highest-priority
+ * chat model in the part table that is cleared for Standard (the owner removed
+ * the larger chat pins on 2026-11-17). The judge shares chat through p16;
  * from p32 it has its own 4B pin and process. The coding role has its own
  * model from p64 (CODE-STACK-01 S1): Qwen3.8-27B at UD-Q4_K_M, loaded only
  * while someone is coding; p16 and p32 have no coding. */
 export const PROFILE_MODEL_BINDINGS: Partial<Record<ProfileTier["id"], Partial<Record<RoleId, string>>>> = {
   p16: { chat: "qwen3-8b-instruct-q4-k-m", stt: "moonshine-tiny-en-int8" },
-  p32: { chat: "muse-glimmer-30b-q4-k-m", judge: "qwen3-4b-q4-k-m", stt: "moonshine-tiny-en-int8" },
-  p64: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m", stt: "parakeet-tdt-0.6b-v2-int8" },
-  p128: { chat: "muse-glimmer-30b-q4-k-xl", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m", stt: "parakeet-tdt-0.6b-v2-int8" },
+  p32: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m", stt: "moonshine-tiny-en-int8" },
+  p64: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m", stt: "parakeet-tdt-0.6b-v2-int8" },
+  p128: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m", stt: "parakeet-tdt-0.6b-v2-int8" },
 };
 
 /** The tier this machine's sizing memory (see `sizingMemory`) clears, and

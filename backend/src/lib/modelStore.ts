@@ -111,8 +111,7 @@ export interface CatalogModelLike {
    * role's short context; the most tokens one picture may take in a model
    * that reads pictures (llama-server's --image-max-tokens, VISION-02b);
    * the chat-template variables the record pins (llama-server's
-   * --chat-template-kwargs, STACK-MUSE-01: Muse Glimmer's reasoning
-   * strength). A request's own chat_template_kwargs win key by key. */
+   * --chat-template-kwargs: a model's reasoning strength). A request's own chat_template_kwargs win key by key. */
   launch?: { contextLength?: number; imageMaxTokens?: number; chatTemplateKwargs?: Record<string, string>; readsPictures?: boolean };
   /** Sampling defaults from the model's own card, with the source named;
    * a request's own values win. */
@@ -357,7 +356,7 @@ export function packageDirectoryName(archivePath: string): string {
  * picture input with the projector's id, its own launch settings, its
  * card's sampling) is copied onto an installed record of that exact file
  * (same id, revision and sha256). A record installed before the pin
- * declared them (Muse Glimmer was installed on 2026-10-17 before its
+ * declared them (a picture reader installed before its
  * projector was pinned) would otherwise stay text-only forever: the
  * install plan skips an installed model, so nothing else re-registers it.
  * Only the four declared fields are written, only when they differ, and

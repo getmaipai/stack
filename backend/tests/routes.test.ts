@@ -306,7 +306,7 @@ test("the budget route reports the active tier, its margin and a degraded readin
   expect(p128.reading_degraded).toBe(false);
   expect(p128.profile).toBe("p128");
   expect(p128.slots.length).toBeGreaterThan(0);
-  expect(p128.slots.find((slot) => slot.category === "chat" && slot.tier === "standard")).toMatchObject({ model: "muse-glimmer-30b-q4-k-xl", peak_bytes: 19_000_000_000, verified: true });
+  expect(p128.slots.find((slot) => slot.category === "chat" && slot.tier === "standard")).toMatchObject({ model: "qwen3-8b-instruct-q4-k-m", peak_bytes: 7_000_000_000, verified: false });
   __resetGovernorForTests();
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 16 * GB, freeMemoryBytes: 4 * GB, tier: "p16" });
   const reader = scriptedMemoryReader([

@@ -18,8 +18,6 @@ export type ChatEngineId = "llama-server" | "mlx-serve" | "omlx" | "splash";
 export const CHAT_ENGINE_SETTING = "stack.engines.chat.engine";
 export const CHAT_ENGINE_CHOICES = ["auto", "llama-server", "mlx-serve", "omlx", "splash"] as const;
 
-/** Tiers with room for the 19.4 GB MLX weights beside the 4B judge, embeddings, a voice and the tier's working margin (the voice engine's rule, p64 and p128). oMLX is offered there as an optional install; it is never the default. */
-export const OMLX_OPTIONAL_TIERS: GovernorTier[] = ["p64", "p128"];
 /** A chat engine start that fails this many times in a row falls back to llama-server for the run. */
 export const FALLBACK_AFTER_FAILURES = 2;
 

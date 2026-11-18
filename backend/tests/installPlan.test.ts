@@ -66,34 +66,28 @@ test("plan: every model is a complete pull body from a shipped pin", () => {
   expect(plan.models.find((model) => model.id === "pocket-tts-english")).toMatchObject({ hub_file: "languages/english/model.safetensors" });
   expect(plan.models.find((model) => model.id === "parakeet-tdt-0.6b-v2-int8")).toMatchObject({ archive: true });
 });
-test("plan: the starter is first, then chat, stt, tts, embed, judge", () => {
+test("plan: the chat model is first and the only starter, then stt, tts, embed, judge", () => {
   const plan = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }));
-  expect(plan.models[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", starter: true });
+  expect(plan.models[0]).toMatchObject({ id: "qwen3-8b-instruct-q4-k-m", starter: true });
   expect(plan.models.filter((model) => model.starter)).toHaveLength(1);
   // Klein is a required disk-plan row on p64 (AIMODELS-DATA-01), so the picture model rides the plan.
-  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "chat", "stt", "tts", "tts", "embed", "judge", "coding", "image"]);
-  // STACK-MUSE-01: above 24 GB the bound chat is Muse Glimmer 30B, so the
-  // 8B is not in this plan at all.
-  expect(plan.models[1]).toMatchObject({ id: "muse-glimmer-30b-q4-k-xl", starter: false });
-  expect(plan.models.map((model) => model.id)).not.toContain("qwen3-8b-instruct-q4-k-m");
+  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "stt", "tts", "tts", "embed", "judge", "coding", "image"]);
+  // No smaller starter ships ahead of the chat model.
+  expect(plan.models.map((model) => model.id)).not.toContain("qwen3-1.7b-q8-0");
 });
-test("plan: the chat pull follows the tier (STACK-MUSE-01): 8B through 24 GB, Muse Q4_K_M at 32 GB, Q4_K_XL from 64 GB", () => {
-  const chatOf = (gb: number) => buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models[1]?.id;
-  expect(chatOf(24)).toBe("qwen3-8b-instruct-q4-k-m");
-  expect(chatOf(32)).toBe("muse-glimmer-30b-q4-k-m");
-  expect(chatOf(64)).toBe("muse-glimmer-30b-q4-k-xl");
-  expect(chatOf(128)).toBe("muse-glimmer-30b-q4-k-xl");
-  const p32 = buildInstallPlan(hw({ unifiedMemoryGb: 32, totalRamGb: 32 }));
-  expect(p32.models.find((model) => model.id === "muse-glimmer-30b-q4-k-m")).toMatchObject({ approx_bytes: 16_756_683_904, role: "chat", starter: false });
+test("plan: the chat pull is the 8B on every tier, with no larger chat pin", () => {
+  for (const gb of [16, 24, 32, 64, 128]) {
+    const plan = buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb }));
+    expect(plan.models.filter((model) => model.role === "chat" && !model.component).map((model) => model.id)).toEqual(["qwen3-8b-instruct-q4-k-m"]);
+    expect(plan.models.find((model) => model.id === "qwen3-8b-instruct-q4-k-m")).toMatchObject({ approx_bytes: 5_027_783_488, starter: true });
+  }
 });
-test("plan: oMLX's MLX build of Muse is never in the first-run plan; llama-server is the default on every tier (ENGINE-MLX-02)", () => {
-  const mlxIn = (plan: ReturnType<typeof buildInstallPlan>) => plan.models.find((model) => model.id === "muse-glimmer-30b-mlx-4bit");
-  for (const gb of [16, 24, 32, 64, 128]) expect(mlxIn(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })))).toBeUndefined();
-  expect(buildInstallPlan(hw({ unifiedMemoryGb: 128, totalRamGb: 128 })).models.map((model) => model.id)).toContain("muse-glimmer-30b-q4-k-xl");
+test("plan: no MLX chat model is in the first-run plan; llama-server is the default on every tier (ENGINE-MLX-02)", () => {
+  for (const gb of [16, 24, 32, 64, 128]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.filter((model) => model.engine === "omlx" || model.engine === "mlx-serve")).toEqual([]);
 });
-test("plan: p16 has the larger chat bound, so the small pin is still the starter; embeddings ride along", () => {
+test("plan: p16 starts with the 8B chat; embeddings ride along", () => {
   const plan = buildInstallPlan(hw({}));
-  expect(plan.models.map((model) => model.id).slice(0, 2)).toEqual(["qwen3-1.7b-q8-0", "qwen3-8b-instruct-q4-k-m"]);
+  expect(plan.models.map((model) => model.id).slice(0, 1)).toEqual(["qwen3-8b-instruct-q4-k-m"]);
   expect(plan.models.some((model) => model.role === "embed")).toBe(true);
   expect(plan.models.some((model) => model.role === "judge")).toBe(false);
 });
@@ -133,9 +127,8 @@ test("plan: p64 and p128 include the coding model as a removable pull body; p16 
     expect(coding[0]).toMatchObject({ id: "qwen3.8-27b-ud-q4-k-m", removable: true, starter: false, installed: false, approx_bytes: 16_464_440_224, licence: "Apache-2.0", engine: "llama-server", revision: "4ca720788d1e01f1bff70c033e0d0028fd02e502", sha256: "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482" });
     // Only the coding model, its draft and (p128) the picture reader are flagged removable; everything else is required.
     expect(plan.models.filter((model) => model.removable).map((model) => model.id).filter((id) => id !== "qwen3-vl-4b-instruct-q4-k-m")).toEqual(["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft"]);
-    // Chat is still the starter pair and still first; coding changes neither.
-    expect(plan.models[0]).toMatchObject({ id: "qwen3-1.7b-q8-0", starter: true });
-    expect(plan.models[1]).toMatchObject({ id: "muse-glimmer-30b-q4-k-xl", starter: false });
+    // Chat is still the starter and still first; coding changes neither.
+    expect(plan.models[0]).toMatchObject({ id: "qwen3-8b-instruct-q4-k-m", starter: true });
   }
   for (const gb of [16, 24, 32]) {
     const plan = buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb }));
