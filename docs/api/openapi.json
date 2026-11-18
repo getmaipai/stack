@@ -14900,7 +14900,13 @@
                                   "restyle",
                                   "swap",
                                   "character_sheet",
-                                  "contact_sheet"
+                                  "contact_sheet",
+                                  "song",
+                                  "song_edit",
+                                  "sound_effect",
+                                  "stems",
+                                  "vocal_swap",
+                                  "lyric_timing"
                                 ]
                               },
                               "label": {
@@ -15246,6 +15252,27 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "stems": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "label"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "why_not": {
                                 "type": "string",
                                 "nullable": true,
@@ -15320,7 +15347,13 @@
                                   "restyle",
                                   "swap",
                                   "character_sheet",
-                                  "contact_sheet"
+                                  "contact_sheet",
+                                  "song",
+                                  "song_edit",
+                                  "sound_effect",
+                                  "stems",
+                                  "vocal_swap",
+                                  "lyric_timing"
                                 ]
                               },
                               "label": {
@@ -15646,6 +15679,27 @@
                                 "additionalProperties": false
                               },
                               "restyles": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "label"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "stems": {
                                 "type": "array",
                                 "items": {
                                   "type": "object",
@@ -16203,6 +16257,369 @@
                       "level"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "job": {
+                        "type": "string",
+                        "enum": [
+                          "song"
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "adult",
+                          "minor"
+                        ]
+                      },
+                      "part": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "lyrics": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "style_words": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "seconds": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true
+                      },
+                      "level": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "boost",
+                          "max"
+                        ]
+                      },
+                      "seed": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "job",
+                      "audience",
+                      "description",
+                      "seconds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "job": {
+                        "type": "string",
+                        "enum": [
+                          "song_edit"
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "adult",
+                          "minor"
+                        ]
+                      },
+                      "part": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "song": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "change": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "cover"
+                                ]
+                              },
+                              "strength": {
+                                "type": "number",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "maximum": 1
+                              },
+                              "style_words": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "repaint"
+                                ]
+                              },
+                              "from_seconds": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "to_seconds": {
+                                "type": "number",
+                                "minimum": 0,
+                                "exclusiveMinimum": true
+                              },
+                              "description": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "lyrics": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "from_seconds",
+                              "to_seconds"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "extend"
+                                ]
+                              },
+                              "add_seconds": {
+                                "type": "number",
+                                "minimum": 0,
+                                "exclusiveMinimum": true
+                              },
+                              "at": {
+                                "type": "string",
+                                "enum": [
+                                  "start",
+                                  "end"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "add_seconds"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "level": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "boost",
+                          "max"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "job",
+                      "audience",
+                      "song",
+                      "change"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "job": {
+                        "type": "string",
+                        "enum": [
+                          "sound_effect"
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "adult",
+                          "minor"
+                        ]
+                      },
+                      "part": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "seconds": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true
+                      }
+                    },
+                    "required": [
+                      "job",
+                      "audience",
+                      "description",
+                      "seconds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "job": {
+                        "type": "string",
+                        "enum": [
+                          "stems"
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "adult",
+                          "minor"
+                        ]
+                      },
+                      "part": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "song": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "stems": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "required": [
+                      "job",
+                      "audience",
+                      "song",
+                      "stems"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "job": {
+                        "type": "string",
+                        "enum": [
+                          "vocal_swap"
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "adult",
+                          "minor"
+                        ]
+                      },
+                      "part": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "vocal": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "references": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "minItems": 1
+                      },
+                      "description": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "job",
+                      "audience",
+                      "vocal",
+                      "references"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "job": {
+                        "type": "string",
+                        "enum": [
+                          "lyric_timing"
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "adult",
+                          "minor"
+                        ]
+                      },
+                      "part": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "song": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "lyrics": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "job",
+                      "audience",
+                      "song",
+                      "lyrics"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               }
@@ -16318,7 +16735,11 @@
                             "clip",
                             "clip_from_sheet",
                             "restyle",
-                            "swap"
+                            "swap",
+                            "song",
+                            "song_edit",
+                            "sound_effect",
+                            "vocal_swap"
                           ]
                         }
                       },
@@ -16573,6 +16994,276 @@
                         "made_with",
                         "job",
                         "tiles"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "waiting_for_you",
+                            "paused",
+                            "stalled",
+                            "done",
+                            "failed",
+                            "cancelled"
+                          ]
+                        },
+                        "percent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "poster": {
+                          "type": "string",
+                          "nullable": true,
+                          "minLength": 1
+                        },
+                        "made_with": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "part": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pack_version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "shape": {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                "landscape",
+                                "portrait",
+                                "square",
+                                null
+                              ]
+                            },
+                            "seconds": {
+                              "type": "number",
+                              "nullable": true,
+                              "minimum": 0
+                            },
+                            "sound": {
+                              "type": "boolean"
+                            },
+                            "notes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "part",
+                            "label",
+                            "pack_version",
+                            "shape",
+                            "seconds",
+                            "sound",
+                            "notes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "job": {
+                          "type": "string",
+                          "enum": [
+                            "stems"
+                          ]
+                        },
+                        "stems": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "file": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "file"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "state",
+                        "percent",
+                        "status",
+                        "files",
+                        "poster",
+                        "made_with",
+                        "job",
+                        "stems"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "waiting_for_you",
+                            "paused",
+                            "stalled",
+                            "done",
+                            "failed",
+                            "cancelled"
+                          ]
+                        },
+                        "percent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "poster": {
+                          "type": "string",
+                          "nullable": true,
+                          "minLength": 1
+                        },
+                        "made_with": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "part": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pack_version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "shape": {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                "landscape",
+                                "portrait",
+                                "square",
+                                null
+                              ]
+                            },
+                            "seconds": {
+                              "type": "number",
+                              "nullable": true,
+                              "minimum": 0
+                            },
+                            "sound": {
+                              "type": "boolean"
+                            },
+                            "notes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "part",
+                            "label",
+                            "pack_version",
+                            "shape",
+                            "seconds",
+                            "sound",
+                            "notes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "job": {
+                          "type": "string",
+                          "enum": [
+                            "lyric_timing"
+                          ]
+                        },
+                        "timings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start_seconds": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "text": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "start_seconds",
+                              "text"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "state",
+                        "percent",
+                        "status",
+                        "files",
+                        "poster",
+                        "made_with",
+                        "job",
+                        "timings"
                       ],
                       "additionalProperties": false
                     }
@@ -16689,7 +17380,11 @@
                             "clip",
                             "clip_from_sheet",
                             "restyle",
-                            "swap"
+                            "swap",
+                            "song",
+                            "song_edit",
+                            "sound_effect",
+                            "vocal_swap"
                           ]
                         }
                       },
@@ -16944,6 +17639,276 @@
                         "made_with",
                         "job",
                         "tiles"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "waiting_for_you",
+                            "paused",
+                            "stalled",
+                            "done",
+                            "failed",
+                            "cancelled"
+                          ]
+                        },
+                        "percent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "poster": {
+                          "type": "string",
+                          "nullable": true,
+                          "minLength": 1
+                        },
+                        "made_with": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "part": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pack_version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "shape": {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                "landscape",
+                                "portrait",
+                                "square",
+                                null
+                              ]
+                            },
+                            "seconds": {
+                              "type": "number",
+                              "nullable": true,
+                              "minimum": 0
+                            },
+                            "sound": {
+                              "type": "boolean"
+                            },
+                            "notes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "part",
+                            "label",
+                            "pack_version",
+                            "shape",
+                            "seconds",
+                            "sound",
+                            "notes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "job": {
+                          "type": "string",
+                          "enum": [
+                            "stems"
+                          ]
+                        },
+                        "stems": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "file": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "file"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "state",
+                        "percent",
+                        "status",
+                        "files",
+                        "poster",
+                        "made_with",
+                        "job",
+                        "stems"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "waiting_for_you",
+                            "paused",
+                            "stalled",
+                            "done",
+                            "failed",
+                            "cancelled"
+                          ]
+                        },
+                        "percent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "poster": {
+                          "type": "string",
+                          "nullable": true,
+                          "minLength": 1
+                        },
+                        "made_with": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "part": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pack_version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "shape": {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                "landscape",
+                                "portrait",
+                                "square",
+                                null
+                              ]
+                            },
+                            "seconds": {
+                              "type": "number",
+                              "nullable": true,
+                              "minimum": 0
+                            },
+                            "sound": {
+                              "type": "boolean"
+                            },
+                            "notes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "part",
+                            "label",
+                            "pack_version",
+                            "shape",
+                            "seconds",
+                            "sound",
+                            "notes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "job": {
+                          "type": "string",
+                          "enum": [
+                            "lyric_timing"
+                          ]
+                        },
+                        "timings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "start_seconds": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "text": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "start_seconds",
+                              "text"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "state",
+                        "percent",
+                        "status",
+                        "files",
+                        "poster",
+                        "made_with",
+                        "job",
+                        "timings"
                       ],
                       "additionalProperties": false
                     }
