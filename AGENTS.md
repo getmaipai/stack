@@ -133,3 +133,10 @@ data on `GET /stack/v1/privacy` and listed in
 [docs/integrations.md](docs/integrations.md); Home's privacy page
 renders them. Adding or changing an outbound endpoint updates the route,
 that table and its guarding test in the same commit.
+
+## Landing and archiving
+
+Work is not done until it is landed on main (`bash scripts/wt.sh land`). Never tell the owner a session can be archived, or that
+the work is finished, while any commit is unlanded: say "not landed" and name what blocks it. A branch pushed to origin is not
+landed. If the gate cannot pass in the session's environment (a Linux container fails the Mac-only tests), say so before the
+owner asks, and do not bypass the gate to land.
