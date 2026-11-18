@@ -72,7 +72,7 @@ test("Home can read only installed wakeword assets, with bytes rechecked before 
 });
 
 test("the wakeword bytes route refuses other model ids", async () => {
-  const response = await app.request("/stack/v1/models/qwen3-1.7b-mlx-4bit/file");
+  const response = await app.request("/stack/v1/models/qwen3-8b-instruct-q4-k-m/file");
   expect(response.status).toBe(404);
 });
 

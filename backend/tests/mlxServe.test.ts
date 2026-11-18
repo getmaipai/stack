@@ -22,7 +22,7 @@ import { __resetUpdatesForTests, ModelIndexEntrySchema } from "@/updates/catalog
 import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { pullSpec } from "@/routes/models";
-import { STACK_MLX_CHAT_MODEL } from "@/lib/modelCatalog";
+import { STACK_CODING_HEAVY_MODEL as STACK_MLX_CHAT_MODEL } from "@/lib/modelCatalog";
 
 beforeEach(() => { __resetHealthForTests(); __resetSettingsForTests(); clearModelsForTests(); });
 afterEach(() => { setSupervisorFactoryForTests(null); resetSupervisorForTests(); clearModelsForTests(); __resetSettingsForTests(); });
@@ -30,7 +30,7 @@ afterEach(() => { setSupervisorFactoryForTests(null); resetSupervisorForTests();
 const verified = { source: "catalog" as const, provenance: {}, revision: "r", sha256: "a".repeat(64), licence: "Apache-2.0", verifiedAt: new Date().toISOString() };
 function twoChatModels(): void {
   upsertModel({ id: "gguf-chat", roles: ["chat"], ...verified, modelPath: "/tmp/never/chat.gguf", engineRequirements: { engine: "llama-server" } });
-  upsertModel({ id: "mlx-chat", roles: ["chat"], ...verified, modelPath: "/tmp/never/Qwen3-1.7B-4bit", engineRequirements: { engine: "mlx-serve" } });
+  upsertModel({ id: "mlx-chat", roles: ["chat"], ...verified, modelPath: "/tmp/never/Fixture-MLX-4bit", engineRequirements: { engine: "mlx-serve" } });
 }
 
 test("the mlx-serve pin is the second chat engine, selected by name for an Apple silicon Mac and for nothing else", () => {
@@ -71,7 +71,7 @@ test.skipIf(!APPLE_SILICON)("the launch for mlx-serve is its own command on loop
     expect(plan.build).toBe("v26.9.4");
     expect(plan.kind).toBe("spawned");
     expect(plan.command[0]).toMatch(/\/engines\/mlx-serve\/v26\.9\.4\/mlx-serve$/);
-    expect(plan.command.slice(1)).toEqual(["--model", "/tmp/never/Qwen3-1.7B-4bit", "--serve", "--host", "127.0.0.1", "--port", "8797", "--ctx-size", "4096", "--max-concurrent", "1", "--prefix-cache-mem", "1024MB"]);
+    expect(plan.command.slice(1)).toEqual(["--model", "/tmp/never/Fixture-MLX-4bit", "--serve", "--host", "127.0.0.1", "--port", "8797", "--ctx-size", "4096", "--max-concurrent", "1", "--prefix-cache-mem", "1024MB"]);
     expect(plan.env?.HOME).toContain("/home");
   } finally {
     rmSync(join(engineDir(MLX_SERVE_PIN), ".."), { recursive: true, force: true });
@@ -151,7 +151,7 @@ test("a directory model installs file by file, each verified, into one directory
 
 test("a model id is a plain name, never one of the store's own directories, so a remove sweeps only the model's directory", async () => {
   for (const id of ["hub", "manifests", "..", "a/b", "", "hub/x"]) expect(() => refuseUnsafeModelId(id)).toThrow();
-  refuseUnsafeModelId("qwen3-1.7b-mlx-4bit");
+  refuseUnsafeModelId("ornith-1-5-122b-mlx-4bit");
   for (const id of ["hub", "manifests"]) {
     const response = await app.request("/stack/v1/models", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, role: "chat", url: "https://example.com/m.gguf", sha256: "a".repeat(64), licence: "Apache-2.0", revision: "r" }) });
     expect(response.status).toBe(400);
@@ -261,20 +261,20 @@ test("the governor sizes the two chat engines by their own multipliers and holds
 });
 
 test("a pull by id lands a directory model as the shipped pin says, even when the Catalog's entry for the id carries no file list", async () => {
-  const body = { id: STACK_MLX_CHAT_MODEL.id, role: "chat" as const, url: STACK_MLX_CHAT_MODEL.download!.url, sha256: STACK_MLX_CHAT_MODEL.download!.sha256, licence: "Apache-2.0", revision: STACK_MLX_CHAT_MODEL.revision! };
+  const body = { id: STACK_MLX_CHAT_MODEL.id, role: "coding" as const, url: STACK_MLX_CHAT_MODEL.download!.url, sha256: STACK_MLX_CHAT_MODEL.download!.sha256, licence: "Apache-2.0", revision: STACK_MLX_CHAT_MODEL.revision! };
   const spec = pullSpec(body);
-  expect(spec.download.directory).toBe("Qwen3-1.7B-4bit");
-  expect(spec.download.files?.length).toBe(9);
-  expect(spec.engine).toBe("mlx-serve");
+  expect(spec.download.directory).toBe("Ornith-1.5-122B-MLX-4bit");
+  expect(spec.download.files?.length).toBe(STACK_MLX_CHAT_MODEL.download!.files!.length);
+  expect(spec.engine).toBe(STACK_MLX_CHAT_MODEL.engine);
   // The shipped list is the shipped revision's: a pull of the id at another revision gets none of its hashes, and the route refuses it.
   expect(pullSpec({ ...body, revision: "other" }).download.files).toBeUndefined();
-  const refused = await app.request("/stack/v1/models", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, revision: "other" }) });
+  const refused = await app.request("/stack/v1/models", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, revision: "other", engine: "mlx-serve" }) });
   expect(refused.status).toBe(400);
   expect((await refused.json() as { error: string }).error).toMatch(/needs its pinned file list/);
   // Half of the directory shape is refused before any byte moves.
   await expect(installCatalogModel({ ...STACK_MLX_CHAT_MODEL, id: "mlx-half", download: { ...STACK_MLX_CHAT_MODEL.download!, directory: undefined } }, { destination: join(modelsDir, "mlx-half", "model.safetensors"), download: async () => { throw new Error("must not fetch"); } })).rejects.toThrow(/files without a directory/);
   // A Catalog entry for the id at another revision without the list gets no list: the shipped hashes are not that revision's.
-  const index = JSON.stringify({ version: "1", models: [{ id: STACK_MLX_CHAT_MODEL.id, role: "chat", profile: "p16", quality: 1, revision: "newer", download: { url: "https://huggingface.co/mlx-community/Qwen3-1.7B-4bit/resolve/newer/model.safetensors", sha256: "b".repeat(64), approx_bytes: 1 } }] });
+  const index = JSON.stringify({ version: "1", models: [{ id: STACK_MLX_CHAT_MODEL.id, role: "coding", profile: "p16", quality: 1, revision: "newer", download: { url: "https://huggingface.co/ezoushen/ornith-1.5-122b-mlx-4bit/resolve/newer/model.safetensors", sha256: "b".repeat(64), approx_bytes: 1 } }] });
   db.insert(meta).values({ key: "updates.modelIndex.body", value: index }).onConflictDoUpdate({ target: meta.key, set: { value: index } }).run();
   try {
     const newer = pullSpec({ ...body, revision: "newer" });

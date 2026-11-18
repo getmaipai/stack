@@ -5,7 +5,7 @@ import { getReducedChatState } from "@/lib/reducedChat";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 
 const lightId = "qwen3-4b-q4-k-m";
-const standardId = "muse-glimmer-30b-q4-k-xl";
+const standardId = "qwen3-8b-instruct-q4-k-m";
 function installModel(id: string, roles: Array<"chat" | "judge" | "router">): void {
   upsertModel({ id, roles, source: "catalog", provenance: { repo: "test/repo" }, revision: "rev", sha256: "a".repeat(64), licence: "Apache-2.0", verifiedAt: new Date().toISOString(), modelPath: `/models/${id}.gguf`, engineRequirements: { engine: "llama-server" } });
 }
@@ -93,7 +93,7 @@ test("the swap starts the light model on chat although the catalog lists it for 
   expect(starts).toContain(`chat:${lightId}`);
   expect(starts.filter((entry) => entry.startsWith("chat:")).length).toBe(1);
   expect((await leaveReducedChat()).ok).toBe(true);
-  expect(starts[starts.length - 1]).toMatch(/standard|muse|judge/);
+  expect(starts[starts.length - 1]).toMatch(/standard|judge/);
 });
 
 test("a failed enter restarts each role once to enter and once to roll back, and leaves chat and judge running", async () => {

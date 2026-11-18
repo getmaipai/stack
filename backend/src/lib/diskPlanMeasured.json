@@ -145,29 +145,9 @@
     }
   },
   "pins": {
-    "qwen3-1.7b-q8-0": {
-      "download_bytes": 1834426016,
-      "installed_bytes": 1834426016
-    },
     "qwen3-8b-instruct-q4-k-m": {
       "download_bytes": 5027783488,
       "installed_bytes": 5027783488
-    },
-    "muse-glimmer-30b-q4-k-xl": {
-      "download_bytes": 19653960832,
-      "installed_bytes": 19653960832
-    },
-    "muse-glimmer-30b-q4-k-m": {
-      "download_bytes": 16756683904,
-      "installed_bytes": 16756683904
-    },
-    "muse-glimmer-30b-mlx-4bit": {
-      "download_bytes": 19443246692,
-      "installed_bytes": 19443246692
-    },
-    "muse-glimmer-30b-mmproj-q4-k-m": {
-      "download_bytes": 1400328928,
-      "installed_bytes": 1400328928
     },
     "qwen3-6-35b-a3b-ud-q4-k-xl": {
       "download_bytes": 22360456160,
@@ -196,10 +176,6 @@
     "qwen3-4b-q4-k-m": {
       "download_bytes": 2497280256,
       "installed_bytes": 2497280256
-    },
-    "qwen3-1.7b-mlx-4bit": {
-      "download_bytes": 984013244,
-      "installed_bytes": 984013244
     },
     "moonshine-tiny-en-int8": {
       "download_bytes": 107600538,

@@ -2,30 +2,7 @@ import { hfUrl } from "@/lib/hf";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { H3_IMAGE_FILES, H3_IMAGE_PRIMARY, ERNIE_IMAGE_TURBO_FILES, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, KLEIN_4B_FILES, KLEIN_4B_PRIMARY, QWEN_IMAGE_FILES, QWEN_IMAGE_PRIMARY, QWEN_IMAGE_REPO, QWEN_IMAGE_REVISION, SEEDVR2_FILES, SEEDVR2_PRIMARY, SEEDVR2_REPO, SEEDVR2_REVISION, KLEIN_4B_REPO, KLEIN_4B_REVISION, KLEIN3_FILES, KLEIN3_PRIMARY, KLEIN3_REPO, KLEIN3_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
 
-// The first standalone Stack chat pin: an official Qwen GGUF, small enough
-// for p16 while retaining a useful local conversation experience. The
-// revision is the Hub commit the sha256 was verified against; downloads
-// resolve that commit, never a branch.
-export const STACK_CHAT_MODEL: CatalogModelLike = {
-  id: "qwen3-1.7b-q8-0",
-  role: "chat",
-  repo: "Qwen/Qwen3-1.7B-GGUF",
-  license: "Apache-2.0",
-  revision: "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
-  engine: "llama-server",
-  sizing: { profile: "p16", quantization: "Q8_0" },
-  download: {
-    url: hfUrl("Qwen/Qwen3-1.7B-GGUF/resolve/90862c4b9d2787eaed51d12237eafdfe7c5f6077/Qwen3-1.7B-Q8_0.gguf"),
-    sha256: "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
-    approx_bytes: 1_834_426_016,
-  },
-  // No measured figure: the 2026-09-20 rehearsal's 414,550,392 bytes was
-  // the macOS physical footprint alone, which leaves out the 1.8 GB of
-  // weights llama-server memory-maps, so it was withdrawn on 2026-10-06
-  // (STACK-PROCMEM-01) until a load is measured with the one definition.
-};
-
-// The household's p16 chat choice, copied from Home's verified pin.
+// The household's Standard chat model on every profile, copied from Home's verified pin.
 export const STACK_CHAT_8B_MODEL: CatalogModelLike = {
   id: "qwen3-8b-instruct-q4-k-m",
   role: "chat",
@@ -41,82 +18,9 @@ export const STACK_CHAT_8B_MODEL: CatalogModelLike = {
   },
 };
 
-// The household chat pin above 24 GB (STACK-MUSE-01, 2026-10-16): Meta's
-// own GGUF repository of Muse Glimmer 30B (dense 29.6B, Apache-2.0 on the
-// card), pinned to one revision; sha256 and sizes are the repository's
-// git-lfs oids, confirmed against a live HEAD on each resolve URL. p32
-// binds the 17 GB Q4_K_M (the Q4_K_XL beside the 4B judge would leave a
-// 32 GB Mac under the governor's 4 GiB margin); p64 and p128 bind the
-// KQuant-Dynamic Q4_K_XL, the build the owner named. p16 (a 24 GB Mac or
-// smaller) keeps Qwen3-8B. The template reasons on every turn at a
-// strength it reads from `reasoning_strength` (low, medium, high, xhigh;
-// there is no off, so `--reasoning off` does not reach it), and the launch
-// pins it low for chat latency; a request may raise it per turn. Sampling
-// from the card. llama-server parses the model's ATEM tool calls natively
-// from b10353 (the pinned b10797 does).
-const MUSE_30B_REPO = "meta-models/Muse-Glimmer-30B-GGUF";
-const MUSE_30B_REVISION = "70bf1b61ac09f91b24d39038091b41c582bc5d7a";
-// VISION-03a: the repository's own multimodal projector (one file for both
-// quantizations, 1.4 GB, Apache-2.0 repo) loads beside the model in the one
-// resident chat process, so Muse reads pictures itself and nothing extra
-// runs. One picture takes at most 2,560 tokens: measured on b10797, a
-// 1,440 by 900 screenshot is 1,704 prompt tokens and a 2,000 pixel photo
-// 2,551 to 2,567 (docs/design/vision-images-2026-10-17.md in Home).
-const MUSE_30B_LAUNCH = { chatTemplateKwargs: { reasoning_strength: "low" }, imageMaxTokens: 2560 };
-export const STACK_CHAT_MUSE_30B_PROJECTOR: CatalogModelLike = {
-  id: "muse-glimmer-30b-mmproj-q4-k-m",
-  role: "chat",
-  component: "projector",
-  repo: MUSE_30B_REPO,
-  license: "Apache-2.0",
-  revision: MUSE_30B_REVISION,
-  engine: "llama-server",
-  sizing: { profile: "p32", quantization: "Q4_K_M" },
-  download: {
-    url: hfUrl(`${MUSE_30B_REPO}/resolve/${MUSE_30B_REVISION}/mmproj-Muse-Glimmer-30B-Q4_K_M.gguf`),
-    sha256: "f48b452316f9b213758e8659444029b961a24a07f99a1abb2a9f88b06f7c00c6",
-    approx_bytes: 1_400_328_928,
-  },
-};
-const MUSE_30B_SAMPLING = { temperature: 1.0, top_p: 0.95, top_k: 64, source: "meta-models/Muse-Glimmer-30B-GGUF model card, recommended sampling" };
-export const STACK_CHAT_MUSE_30B_XL_MODEL: CatalogModelLike = {
-  id: "muse-glimmer-30b-q4-k-xl",
-  role: "chat",
-  repo: MUSE_30B_REPO,
-  license: "Apache-2.0",
-  revision: MUSE_30B_REVISION,
-  engine: "llama-server",
-  sizing: { profile: "p64", quantization: "Q4_K_XL" },
-  download: {
-    url: hfUrl(`${MUSE_30B_REPO}/resolve/${MUSE_30B_REVISION}/Muse-Glimmer-30B-KQuant-Dynamic-Q4_K_XL.gguf`),
-    sha256: "ac7023d6a4c704eb9af54ab53e476a66b7f5b6c0ef2fc4a8dde5253c291a6c38",
-    approx_bytes: 19_653_960_832,
-  },
-  imageInput: { projector: STACK_CHAT_MUSE_30B_PROJECTOR.id },
-  launch: MUSE_30B_LAUNCH,
-  sampling: MUSE_30B_SAMPLING,
-};
-export const STACK_CHAT_MUSE_30B_M_MODEL: CatalogModelLike = {
-  id: "muse-glimmer-30b-q4-k-m",
-  role: "chat",
-  repo: MUSE_30B_REPO,
-  license: "Apache-2.0",
-  revision: MUSE_30B_REVISION,
-  engine: "llama-server",
-  sizing: { profile: "p32", quantization: "Q4_K_M" },
-  download: {
-    url: hfUrl(`${MUSE_30B_REPO}/resolve/${MUSE_30B_REVISION}/Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf`),
-    sha256: "4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e",
-    approx_bytes: 16_756_683_904,
-  },
-  imageInput: { projector: STACK_CHAT_MUSE_30B_PROJECTOR.id },
-  launch: MUSE_30B_LAUNCH,
-  sampling: MUSE_30B_SAMPLING,
-};
-
 // MODEL-SWITCH-01 / CHAT-TPS-04 (2026-10-21): Qwen3.6-35B-A3B, an optional
 // chat model an admin installs and chooses in Home Settings, Models. It is
-// not bound to any tier: Muse stays the household default (STACK-MUSE-01).
+// not bound to any tier.
 // Mixture of experts, 35B stored and 3B active per token, 40 layers (10
 // full-attention layers beside 30 Gated DeltaNet layers), 2 KV heads,
 // 262,144 context, Apache-2.0 on the card. Unsloth's GGUF repository,
@@ -202,53 +106,6 @@ export const STACK_CHAT_QWEN38_UNCENSORED_MODEL: CatalogModelLike = {
   imageInput: { projector: STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR.id },
   launch: { imageMaxTokens: 2560 },
   sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3.8-27B model card, instruct/non-thinking sampling (the fine-tune's base model)" },
-};
-
-// ENGINE-MLX-01: the same Muse Glimmer 30B as an MLX 4-bit directory, for
-// the oMLX chat engine (docs/design/chat-engine-comparison-2026-10-17.md in
-// Home). mlx-community's conversion of meta-models/Muse-Glimmer-30B (the
-// vision tower is inside the weights, so there is no projector file),
-// affine 4-bit, group size 64, 19.44 GB. Every file is pinned by path,
-// size and sha256 at one repository revision; the sha256 of the four
-// weight shards are the repository's git-lfs oids, the rest were hashed
-// from the download. Measured on the Studio (M5 Max, 128 GB, 2026-10-17):
-// 19.4 GB resident idle, 19.9 GB after a 16,410-token prompt; the 22 GB
-// figure adds the 128k-token context's key and value cache (13 global
-// layers, 2 key-value heads, 128 wide, bf16: about 1.7 GB). The GGUF pins
-// stay installed beside it as the fallback. Sampling is the GGUF record's
-// (the card's); the reasoning strength is sent with each request.
-const MUSE_30B_MLX_REPO = "mlx-community/Muse-Glimmer-30B-4bit";
-const MUSE_30B_MLX_REVISION = "3e7677d7a40d348a3daba263a2b1c0aa41910710";
-export const STACK_CHAT_MUSE_30B_MLX_MODEL: CatalogModelLike = {
-  id: "muse-glimmer-30b-mlx-4bit",
-  role: "chat",
-  repo: MUSE_30B_MLX_REPO,
-  license: "Apache-2.0",
-  revision: MUSE_30B_MLX_REVISION,
-  engine: "omlx",
-  sizing: { profile: "p64", quantization: "MLX 4-bit (affine, group 64)" },
-  download: {
-    url: hfUrl(`${MUSE_30B_MLX_REPO}/resolve/${MUSE_30B_MLX_REVISION}/model-00001-of-00004.safetensors`),
-    sha256: "72c99dc670867308f70aab212331e4dd0e19d46bf409a134da1848b9dbe47c91",
-    approx_bytes: 19_443_246_692,
-    directory: "Muse-Glimmer-30B-4bit",
-    files: [
-      { path: "config.json", sha256: "c7f48468db2ef9c3de4cb912be24ecc9fbed36d83f3b8386a0b224ee7ba876ca", bytes: 6_796 },
-      { path: "generation_config.json", sha256: "b0e427c998641420eb4091cc85d4e15643fb57f89222834a14ec76430625b6fb", bytes: 148 },
-      { path: "chat_template.jinja", sha256: "114f55ebdc1804c1af371197b9fdf2d6bb925966c9dfe46b73782a71bc07965e", bytes: 7_167 },
-      { path: "model-00001-of-00004.safetensors", sha256: "72c99dc670867308f70aab212331e4dd0e19d46bf409a134da1848b9dbe47c91", bytes: 5_310_085_129 },
-      { path: "model-00002-of-00004.safetensors", sha256: "f2af4b82d578cee5eeeef3f0d3f139eae3adfc2fc2a27b52ec2ac5886e131cf4", bytes: 5_366_299_665 },
-      { path: "model-00003-of-00004.safetensors", sha256: "2892bb7971d20a7ecfd84a51404e0ae1f0863580562ccef58fdf444da25bc5a2", bytes: 5_343_216_475 },
-      { path: "model-00004-of-00004.safetensors", sha256: "6496c62ac6a229be31c784835c43077224e80750182c2693e29c08ddae455a31", bytes: 3_395_202_844 },
-      { path: "model.safetensors.index.json", sha256: "10e1f963a4dc827c303594d988c6d44711171eaa70eeb3e810c2ce321d4c0323", bytes: 218_191 },
-      { path: "processor_config.json", sha256: "cfa67148d85e40281b4a126253a1476a63b11137e21cb2422b7ccff46a11c1af", bytes: 395 },
-      { path: "tokenizer.json", sha256: "c9dbee66967b58f31a7c27f723c3760da3526ccd0427578e8905b0abb0031c4d", bytes: 28_129_897 },
-      { path: "tokenizer_config.json", sha256: "b2c352bba1d2ee25295aa84e7bdaa15a2b0305b79009926bcea72516ca200d42", bytes: 79_985 },
-    ],
-  },
-  launch: { chatTemplateKwargs: { reasoning_strength: "low" }, readsPictures: true },
-  sampling: MUSE_30B_SAMPLING,
-  measured: { footprintBytes: 22_000_000_000, contextLength: 131_072, hardware: "Apple M5 Max, 128 GB unified memory" },
 };
 
 // The household's background worker pin, exposed as Stack's distinct
@@ -1586,40 +1443,6 @@ export const STACK_EMBED_MODEL: CatalogModelLike = {
   },
 };
 
-// The MLX build of the same chat model, for mlx-serve (STACK-93): a
-// directory of nine files, each pinned by path, size and sha256 (the
-// small ones hashed from the download, the hub keeps no LFS digest for
-// them), so the Studio bench compares the two engines on one model.
-const MLX_REPO = "mlx-community/Qwen3-1.7B-4bit";
-const MLX_REVISION = "3b1b1768f8f8cf8351c712464f906e86c2b8269e";
-const mlxFile = (path: string) => hfUrl(`${MLX_REPO}/resolve/${MLX_REVISION}/${path}`);
-export const STACK_MLX_CHAT_MODEL: CatalogModelLike = {
-  id: "qwen3-1.7b-mlx-4bit",
-  role: "chat",
-  repo: MLX_REPO,
-  license: "Apache-2.0",
-  revision: MLX_REVISION,
-  engine: "mlx-serve",
-  sizing: { profile: "p16", quantization: "4-bit" },
-  download: {
-    url: mlxFile("model.safetensors"),
-    sha256: "0e86d9677e519323849eac1bc272caae88567a481ff188c431f70be543d9995f",
-    approx_bytes: 984_013_244,
-    directory: "Qwen3-1.7B-4bit",
-    files: [
-      { path: "model.safetensors", sha256: "0e86d9677e519323849eac1bc272caae88567a481ff188c431f70be543d9995f", bytes: 968_080_210 },
-      { path: "model.safetensors.index.json", sha256: "1e3058d4ba4b04e4de35b74467725cbef90ff022198404218e48f21adc9cfa15", bytes: 49_731 },
-      { path: "config.json", sha256: "507a6701220524eb8b283425bf0856a9ae4f21f4052e563896ddd668994b1dc7", bytes: 937 },
-      { path: "tokenizer.json", sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4", bytes: 11_422_654 },
-      { path: "tokenizer_config.json", sha256: "253153d0738ceb4c668d2eff957714dd2bea0b56de772a9fdccd96cbf517e6a0", bytes: 9_706 },
-      { path: "special_tokens_map.json", sha256: "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd", bytes: 613 },
-      { path: "added_tokens.json", sha256: "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680", bytes: 707 },
-      { path: "vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
-      { path: "merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
-    ],
-  },
-};
-
 // Wakeword assets are installed through the same model job and verified
 // store as every other pinned file. Home serves these bytes to paired
 // robots; the Stack does not run wakeword inference. The openWakeWord
@@ -1657,7 +1480,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_MODEL, STACK_CHAT_8B_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_CHAT_MUSE_30B_PROJECTOR, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MLX_CHAT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

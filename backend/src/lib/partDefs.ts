@@ -6,17 +6,12 @@ export interface PartDef {
 }
 
 export const PART_DEFS: readonly PartDef[] = [
-  { id: "qwen3-1.7b-q8-0", kind: "model", category: "chat", priority: 8, label: "Qwen3 1.7B", neutralLabel: "Chat helper", description: "A small, quick chat model.", adultOnly: false },
-  { id: "qwen3-8b-instruct-q4-k-m", kind: "model", category: "chat", priority: 3, label: "Qwen3 8B", neutralLabel: "Chat helper", description: "A mid-size chat model for computers with less memory.", adultOnly: false },
-  { id: "muse-glimmer-30b-q4-k-xl", kind: "model", category: "chat", priority: 1, label: "Muse Glimmer 30B Q4_K_XL", neutralLabel: "Chat helper", description: "The household chat model on larger computers that can also read pictures.", adultOnly: false },
-  { id: "muse-glimmer-30b-q4-k-m", kind: "model", category: "chat", priority: 2, label: "Muse Glimmer 30B Q4_K_M", neutralLabel: "Chat helper", description: "The same chat model in a smaller file for computers with less memory.", adultOnly: false },
-  { id: "muse-glimmer-30b-mlx-4bit", kind: "model", category: "chat", priority: 9, label: "Muse Glimmer 30B MLX 4-bit", neutralLabel: "Chat helper", description: "Runs the chat model with the MLX engine on Apple silicon.", adultOnly: false },
+  { id: "qwen3-8b-instruct-q4-k-m", kind: "model", category: "chat", priority: 3, label: "Qwen3 8B", neutralLabel: "Chat helper", description: "The household chat model.", adultOnly: false },
   { id: "qwen3-6-35b-a3b-ud-q4-k-xl", kind: "model", category: "chat", priority: 6, label: "Qwen3.6 35B A3B", neutralLabel: "Chat helper", description: "A large chat model with a compact active expert set.", adultOnly: false },
   { id: "qwen3-8-27b-huihui-abliterated-iq4-xs", kind: "model", category: "chat", priority: 10, label: "Qwen3.8 27B", neutralLabel: "Chat helper", description: "An optional chat model selected by an admin.", adultOnly: false },
   { id: "qwen3-4b-q4-k-m", kind: "model", category: "checks", priority: 1, label: "Qwen3 4B", neutralLabel: "Quick checks", description: "A small model for fast side tasks like titles and safety checks.", adultOnly: false },
   { id: "qwen3.8-27b-ud-q4-k-m", kind: "model", category: "coding", priority: 1, label: "Qwen3.8 27B", neutralLabel: "Coding helper", description: "The model that writes code for the coding tools you connect.", adultOnly: false },
   { id: "ornith-1-5-122b-mlx-4bit", kind: "model", category: "chat", priority: 7, label: "Ornith 1.5 122B MLX 4-bit", neutralLabel: "Chat helper", description: "A large chat model for computers with ample memory.", adultOnly: false },
-  { id: "qwen3-1.7b-mlx-4bit", kind: "model", category: "chat", priority: 11, label: "Qwen3 1.7B", neutralLabel: "Chat helper", description: "A small chat model in the format the second chat engine runs.", adultOnly: false },
   { id: "moonshine-tiny-en-int8", kind: "model", category: "voice", priority: 3, label: "Moonshine Tiny English", neutralLabel: "Voice helper", description: "Turns what you say into text.", adultOnly: false },
   { id: "parakeet-tdt-0.6b-v2-int8", kind: "model", category: "voice", priority: 4, label: "Parakeet TDT 0.6B v2", neutralLabel: "Voice helper", description: "A larger listening model that makes about three times fewer mistakes with names and background noise.", adultOnly: false },
   { id: "pocket-tts-english", kind: "model", category: "voice", priority: 2, label: "Pocket TTS", neutralLabel: "Voice helper", description: "The standard speaking voice.", adultOnly: false },

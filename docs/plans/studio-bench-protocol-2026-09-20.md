@@ -25,9 +25,9 @@ the day their adapter exists; until then the protocol records their
 absence rather than a number for them.
 
 **Model files.** Named by id, repository, revision and sha256 as the
-Stack's records carry them, never by a nickname. The first run uses the
-shipped pin, `Qwen/Qwen3-1.7B-GGUF` Q8_0 at commit
-`90862c4b9d2787eaed51d12237eafdfe7c5f6077`, sha256 `061b54da…590cb1a`,
+Stack's records carry them, never by a nickname. The first run used the
+then-shipped pin, `Qwen/Qwen3-1.7B-GGUF` Q8_0 at commit
+`90862c4b9d2787eaed51d12237eafdfe7c5f6077` (removed 2026-11-17; use the Qwen3 8B pin now),
 so the protocol is proven on a file every machine can download. The
 Studio's real candidates are Home's resident profiles
 (`home/docs/plans/hub-on-apple-silicon-2026-09-17.md`, section 3:

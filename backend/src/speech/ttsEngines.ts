@@ -54,8 +54,8 @@ export const TTS_ENGINE_CHOICES: TtsEngineId[] = (Object.keys(TTS_ENGINES) as Tt
 
 /** Tiers with room for a 4.8 GB voice beside the tier's chat, judge and
  * embed models (p64, p128). p32 keeps Pocket: its model budget is 24 GB
- * less the 8 GB working margin (governor tiers), and the 17 GB Muse 30B
- * pin alone leaves no room beside it for the judge, embeddings and a voice. The
+ * less the 8 GB working margin (governor tiers), and the chat model plus
+ * the judge and embeddings leave little room beside them for a voice. The
  * voice can still be chosen by hand there; the governor refuses a load
  * that does not fit and the voice falls back to Pocket. */
 export const TTS_DEFAULT_BY_TIER: Record<GovernorTier, TtsEngineId> = { p16: "pocket", p32: "pocket", p64: "chatterbox-turbo", p128: "chatterbox-turbo" };

@@ -81,8 +81,8 @@ follow_job "$JOB" "$T" 2
 echo "installed in $(since $T)"
 du -sh "$DATA/engines/mlx-serve" 2>/dev/null | sed 's|'"$DATA"'/||'
 
-step "3. install the pinned MLX model (nine files, 984 MB, each sha256 verified)"
-PIN="$(json GET /stack/v1/models/catalog | python3 -c "import json,sys;print(json.dumps([m for m in json.load(sys.stdin)['models'] if m.get('engine')=='mlx-serve'][0]))")"
+step "3. install a pinned MLX model (every file sha256 verified); MLX_MODEL_ID names the catalog pin (no MLX chat model is pinned by default since 2026-11-17)"
+PIN="$(json GET /stack/v1/models/catalog | MLX_MODEL_ID="${MLX_MODEL_ID:-}" python3 -c "import json,os,sys;p=[m for m in json.load(sys.stdin)['models'] if m['id']==os.environ['MLX_MODEL_ID']];sys.exit('set MLX_MODEL_ID to a catalog pin that has a file list') if not p else print(json.dumps(p[0]))")"
 BODY="$(echo "$PIN" | python3 -c "import json,sys;m=json.load(sys.stdin)
 b={'id':m['id'],'role':m['role'],'url':m['download']['url'],'sha256':m['download']['sha256'],'approx_bytes':m['download']['approx_bytes'],'licence':m['license'],'revision':m['revision']}
 b.update({k:m[k] for k in ('repo','engine') if m.get(k) is not None})
@@ -91,7 +91,7 @@ T=$(now)
 JOB="$(json POST /stack/v1/models "$BODY" | field "['job']")"
 follow_job "$JOB" "$T" 5
 json GET /stack/v1/models | python3 -c "import json,sys;[print('model', m['id'], m['state'], 'provenance', m['provenance'], 'path', m['modelPath'].split('/')[-1], 'bytes', m['sizeBytes']) for m in json.load(sys.stdin)['models']]"
-ls "$DATA"/models/*/Qwen3-1.7B-4bit | tr '\n' ' '; echo
+ls "$DATA"/models/*/ | tr '\n' ' '; echo
 
 step "4. the chat role before the switch: bound to llama-server, which is not installed here"
 json GET /stack/v1/roles | python3 -c "import json,sys;r=[x for x in json.load(sys.stdin)['roles'] if x['id']=='chat'][0];print('chat state', r['state']['state'], 'reason', r['state'].get('reason'))"

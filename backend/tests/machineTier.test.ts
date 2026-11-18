@@ -67,11 +67,11 @@ test("coding runs on its own process role, never chat's, and a bound coding mode
   clearModelsForTests();
   setMachineTier("p64");
   const verified = { source: "catalog" as const, provenance: {}, revision: "r1", sha256: "a".repeat(64), licence: "Apache-2.0", verifiedAt: "2026-10-18T00:00:00.000Z", modelPath: "/tmp/never-opened/model.gguf" };
-  upsertModel({ id: "muse-glimmer-30b-q4-k-xl", roles: ["chat"], ...verified });
+  upsertModel({ id: "qwen3-8b-instruct-q4-k-m", roles: ["chat"], ...verified });
   expect(processRoleFor("coding")).toBe("coding");
   expect(selectedModel("coding")).toBeNull();
   upsertModel({ id: "qwen3.8-27b-ud-q4-k-m", roles: ["coding"], ...verified });
   expect(selectedModel("coding")?.id).toBe("qwen3.8-27b-ud-q4-k-m");
-  expect(selectedModel("chat")?.id).toBe("muse-glimmer-30b-q4-k-xl");
+  expect(selectedModel("chat")?.id).toBe("qwen3-8b-instruct-q4-k-m");
   clearModelsForTests();
 });

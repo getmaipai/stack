@@ -15,7 +15,7 @@
 # Touches nothing outside the repo and those two directories.
 #
 #   bash scripts/bench/studio-bench.sh                   # the shipped pin, contexts 4096 and 16384
-#   MODELS="qwen3-1.7b-q8-0 other-pin-id" CONTEXTS="4096" bash scripts/bench/studio-bench.sh
+#   MODELS="qwen3-8b-instruct-q4-k-m other-pin-id" CONTEXTS="4096" bash scripts/bench/studio-bench.sh
 #   PORT=8790 REHEARSAL=0 bash scripts/bench/studio-bench.sh
 #   DRY_RUN=1 bash scripts/bench/studio-bench.sh          # print the plan, run nothing
 set -euo pipefail
@@ -27,7 +27,7 @@ BASE="$(daemon_base "$PORT")"
 DATA="$PWD/data-scratch"
 REPORTS="$PWD/data-bench"
 CONTEXTS="${CONTEXTS:-4096 16384}"
-MODELS="${MODELS:-qwen3-1.7b-q8-0}"
+MODELS="${MODELS:-qwen3-8b-instruct-q4-k-m}"
 REHEARSAL="${REHEARSAL:-1}"
 REQUESTS="${REQUESTS:-8}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"

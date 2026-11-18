@@ -31,7 +31,7 @@ test("the pin names one revision, the file's git-lfs hash and size, and its card
   expect(STACK_CHAT_QWEN36_35B_PROJECTOR).toMatchObject({ component: "projector", revision: STACK_CHAT_QWEN36_35B_MODEL.revision, download: { sha256: "8971ee4f331ff0a4c609374f32984b3d4e6dc086c0aa35f1d637fad1829e887f", approx_bytes: 899_283_680 } });
 });
 
-test("no tier installs it by default, so Muse stays the household chat model", () => {
+test("no tier installs it by default, so Qwen3 8B stays the household chat model", () => {
   for (const gb of [16, 32, 64, 128]) {
     const ids = buildInstallPlan(hw(gb)).models.map((model) => model.id);
     expect(ids).not.toContain(STACK_CHAT_QWEN36_35B_MODEL.id);
