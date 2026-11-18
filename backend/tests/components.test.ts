@@ -337,7 +337,7 @@ test("the coding model is a removable component on p128 and p64 (not required), 
     expect(coding.full_bytes).toBe(process.platform === "darwin" && process.arch === "arm64" ? 16_464_440_224 + 3_848_817_896 : 16_464_440_224);
     expect(coding.install_block).toBeNull();
     // The chat models are still required; the coding model is the only coding row.
-    expect(list.components.find((c) => c.id === "muse-glimmer-30b-q4-k-xl")!.requirement).toBe("required");
+    expect(list.components.find((c) => c.id === "qwen3-8b-instruct-q4-k-m")!.requirement).toBe("required");
   }
   const small = await listComponents(hw({ unifiedMemoryGb: 32, totalRamGb: 32 }));
   expect(small.components.find((c) => c.id === "qwen3.8-27b-ud-q4-k-m")!.requirement).toBe("unsupported");

@@ -18,7 +18,7 @@ import {
   upsertModel,
   ProvenanceIncompleteError,
 } from "@/lib/modelStore";
-import { STACK_CHAT_8B_MODEL, STACK_CHAT_MODEL, STACK_CHAT_MUSE_30B_M_MODEL, STACK_CHAT_MUSE_30B_XL_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL } from "@/lib/modelCatalog";
+import { STACK_CHAT_8B_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL } from "@/lib/modelCatalog";
 import { hfUrl } from "@/lib/hf";
 import { downloadUrl } from "@/lib/download";
 import { eq } from "drizzle-orm";
@@ -72,8 +72,8 @@ test("the household chat and judge pins match Home's hashes and file sizes", () 
   });
 });
 
-test("p16 judge shares the household 8B chat while p32 selects Muse Glimmer and its separate 4B judge", () => {
-  const install = (pin: typeof STACK_CHAT_MODEL | typeof STACK_CHAT_8B_MODEL | typeof STACK_CHAT_MUSE_30B_M_MODEL | typeof STACK_JUDGE_MODEL) => upsertModel({
+test("p16 judge shares the household 8B chat while p32 keeps the same chat and its separate 4B judge", () => {
+  const install = (pin: typeof STACK_CHAT_8B_MODEL | typeof STACK_JUDGE_MODEL) => upsertModel({
     id: pin.id,
     roles: [pin.role],
     source: "catalog",
@@ -86,21 +86,18 @@ test("p16 judge shares the household 8B chat while p32 selects Muse Glimmer and 
     verifiedAt: "2026-10-01T00:00:00.000Z",
     modelPath: join(fixtureDir, `${pin.id}.gguf`),
   });
-  const small = install(STACK_CHAT_MODEL);
   const chat = install(STACK_CHAT_8B_MODEL);
-  const muse = install(STACK_CHAT_MUSE_30B_M_MODEL);
   const judge = install(STACK_JUDGE_MODEL);
   setMachineTier("p16");
   expect(selectedModel("chat")?.id).toBe(chat.id);
   expect(selectedModel("judge")?.id).toBe(chat.id);
   expect(processRoleFor("judge")).toBe("chat");
   setMachineTier("p32");
-  // STACK-MUSE-01: above 24 GB the bound chat is Muse Glimmer 30B.
-  expect(selectedModel("chat")?.id).toBe(muse.id);
+  expect(selectedModel("chat")?.id).toBe(chat.id);
   expect(selectedModel("judge")?.id).toBe(judge.id);
   expect(processRoleFor("judge")).toBe("judge");
   setMachineTier(null);
-  expect(selectedModel("chat")?.id).toBe(small.id);
+  expect(selectedModel("chat")?.id).toBe(chat.id);
   expect(processRoleFor("judge")).toBe("chat");
 });
 
@@ -304,7 +301,7 @@ const mirrorServer = Bun.serve({
   port: 0,
   fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname === `/Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`) {
+    if (url.pathname === `/Qwen/Qwen3-8B-GGUF/resolve/${STACK_CHAT_8B_MODEL.revision}/Qwen3-8B-Q4_K_M.gguf`) {
       return new Response(CONTENT, { status: 200, headers: { "content-length": String(CONTENT.length) } });
     }
     return new Response("not found", { status: 404 });
@@ -315,15 +312,15 @@ afterAll(() => mirrorServer.stop(true));
 test("a pinned catalog model downloads from the configured Hugging Face mirror", async () => {
   const mirror = new URL(mirrorServer.url).href.replace(/\/$/, "");
   updateSettings({ "stack.updates.model_host": mirror });
-  const expectedUrl = hfUrl(`Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`);
-  expect(expectedUrl).toBe(`${mirror}/Qwen/Qwen3-1.7B-GGUF/resolve/${STACK_CHAT_MODEL.revision}/Qwen3-1.7B-Q8_0.gguf`);
+  const expectedUrl = hfUrl(`Qwen/Qwen3-8B-GGUF/resolve/${STACK_CHAT_8B_MODEL.revision}/Qwen3-8B-Q4_K_M.gguf`);
+  expect(expectedUrl).toBe(`${mirror}/Qwen/Qwen3-8B-GGUF/resolve/${STACK_CHAT_8B_MODEL.revision}/Qwen3-8B-Q4_K_M.gguf`);
   let requestedUrl = "";
   await installCatalogModel({
     id: "mirror-chat",
     role: "chat",
-    license: STACK_CHAT_MODEL.license,
-    revision: STACK_CHAT_MODEL.revision,
-    engine: STACK_CHAT_MODEL.engine,
+    license: STACK_CHAT_8B_MODEL.license,
+    revision: STACK_CHAT_8B_MODEL.revision,
+    engine: STACK_CHAT_8B_MODEL.engine,
     download: { url: expectedUrl, sha256: MIRROR_SHA256, approx_bytes: CONTENT.length },
   }, {
     destination: join(fixtureDir, "mirror.gguf"),
@@ -430,33 +427,3 @@ test("an install whose catalog gave no size records the real file size", async (
   expect(getModel("size-fill")!.sizeBytes).toBe(bytes.length);
 });
 
-test("the Muse Glimmer 30B chat pins match the repository's hashes and sizes and pin a low reasoning strength (STACK-MUSE-01)", () => {
-  expect(STACK_MODELS).toEqual(expect.arrayContaining([STACK_CHAT_MUSE_30B_XL_MODEL, STACK_CHAT_MUSE_30B_M_MODEL]));
-  const revision = "70bf1b61ac09f91b24d39038091b41c582bc5d7a";
-  expect(STACK_CHAT_MUSE_30B_XL_MODEL).toMatchObject({
-    id: "muse-glimmer-30b-q4-k-xl",
-    role: "chat",
-    repo: "meta-models/Muse-Glimmer-30B-GGUF",
-    revision,
-    sizing: { profile: "p64", quantization: "Q4_K_XL" },
-    download: {
-      url: `https://huggingface.co/meta-models/Muse-Glimmer-30B-GGUF/resolve/${revision}/Muse-Glimmer-30B-KQuant-Dynamic-Q4_K_XL.gguf`,
-      sha256: "ac7023d6a4c704eb9af54ab53e476a66b7f5b6c0ef2fc4a8dde5253c291a6c38",
-      approx_bytes: 19_653_960_832,
-    },
-    launch: { chatTemplateKwargs: { reasoning_strength: "low" } },
-    sampling: { temperature: 1.0, top_p: 0.95, top_k: 64 },
-  });
-  expect(STACK_CHAT_MUSE_30B_M_MODEL).toMatchObject({
-    id: "muse-glimmer-30b-q4-k-m",
-    role: "chat",
-    revision,
-    sizing: { profile: "p32", quantization: "Q4_K_M" },
-    download: {
-      url: `https://huggingface.co/meta-models/Muse-Glimmer-30B-GGUF/resolve/${revision}/Muse-Glimmer-30B-KQuant-17GB-Q4_K_M.gguf`,
-      sha256: "4cc57c0f51040a226e5a72cc47b7613f7772950e460a665f7083de89f183f60e",
-      approx_bytes: 16_756_683_904,
-    },
-    launch: { chatTemplateKwargs: { reasoning_strength: "low" } },
-  });
-});

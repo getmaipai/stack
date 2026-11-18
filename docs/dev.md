@@ -19,14 +19,12 @@ history in [plans/field-survey-2026-09-17.md](plans/field-survey-2026-09-17.md).
 Nothing in this file is household content: every person in an example
 is from the org's persona roster.
 
-The household chat pin is Qwen3 8B on p16 (a 16 or 24 GB machine). From
-p32 upward it is Muse Glimmer 30B (STACK-MUSE-01 below, owner's rule
-2026-10-16): the 17 GB Q4_K_M on p32, the KQuant-Dynamic Q4_K_XL on p64
-and p128. On p16 the judge uses the chat model and process because a
+The household chat pin is Qwen3 8B on every tier (the owner removed the
+larger Muse Glimmer pins on 2026-11-17; see "The household chat pin"
+below). On p16 the judge uses the chat model and process because a
 separate 4B judge would need about 3.76 GiB after chat, leaving less
 than the 4 GiB working margin under the governor's free-memory check.
-From p32 the judge has its own Qwen3 4B pin and process; profiles below
-p16 keep the shared 1.7B chat.
+From p32 the judge has its own Qwen3 4B pin and process.
 
 ## Why the Stack exists
 
@@ -211,7 +209,7 @@ best`, mapped to the tiered models the sizing profile installed.
 
 On p16 and larger profiles, chat uses the household's pinned Qwen3 8B
 and judge runs the pinned Qwen3 4B in its own llama-server process.
-Without a detected p16 profile, judge shares chat's Qwen3 1.7B process.
+Without a detected profile, judge shares chat's process.
 The profile bindings live in `backend/src/profiles.ts`; Studio bench
 results can later select different models for other machines.
 
@@ -309,12 +307,12 @@ pinned to the Hugging Face revision and checksum for the file Home
 already runs. Like speech, it is a regular catalog model: once installed
 and verified, the role selects its first compatible model automatically.
 
-**Qualification.** The Stack ships one chat pin and one engine pin,
+**Qualification.** The Stack ships one household chat pin and one engine pin,
 and `backend/tests/qualification.test.ts` holds both to their
-declarations offline. The chat pin is `Qwen/Qwen3-1.7B-GGUF`, Q8_0,
-Apache-2.0, at Hub commit `90862c4b9d2787eaed51d12237eafdfe7c5f6077`,
-sha256 `061b54da…590cb1a` verified against a live download of that
-commit, declared size `1,834,426,016` bytes as the Hub reports it. The
+declarations offline. The chat pin is `Qwen/Qwen3-8B-GGUF`, Q4_K_M,
+Apache-2.0, at Hub commit `7c41481f57cb95916b40956ab2f0b139b296d974`,
+sha256 `d98cdcbd…5745785`, declared size `5,027,783,488` bytes
+(the first pin here was the Qwen3 1.7B Q8_0, removed 2026-11-17). The
 engine pin is `llama-server` build `b10797` (macOS arm64 verified),
 each archive carrying its own asset digest. The test asserts the
 revision is an immutable commit, never `main`; digest, size and licence
@@ -1749,7 +1747,7 @@ fallback.
 
 - **One setting picks the engine.** `stack.voice.engine`: `auto` (default), `chatterbox-turbo`, `pocket`; applies at the voice
   engine's restart (`needs_restart`). `auto` is the tier default in `speech/ttsEngines.ts`: Chatterbox Turbo on p64 and p128, Pocket TTS on
-  p16 and p32 (p32's budget is spent by the 17 GB Muse 30B pin). Choosing it by hand on a smaller tier is allowed; the governor refuses a
+  p16 and p32 (p32's budget is spent by the chat model, the judge and embeddings). Choosing it by hand on a smaller tier is allowed; the governor refuses a
   load that does not fit and the voice falls back.
 - **Registry and resolution.** `ttsEngines.ts` holds the engines (id, catalog engine name, runtime, tags, planned footprint, repo) and
   `resolveTtsEngine`: the requested engine, unless it is not built (Orpheus), not installed, or failed to start this run, in which case
@@ -1933,7 +1931,7 @@ against llama-server (STACK-14); the adapter's contract is the same
 and its rows in the catalog would be the environment shape Pocket TTS
 uses.
 
-**The MLX weights pin**: `mlx-community/Qwen3-1.7B-4bit` at revision
+**The MLX weights pin** (removed 2026-11-17, no MLX chat model is pinned any more): `mlx-community/Qwen3-1.7B-4bit` at revision
 `3b1b1768…` (Apache 2.0), the MLX build of the same model the
 llama-server pin ships, so the Studio bench compares engines on one
 model. An MLX model is a directory of files, not one file: the store
@@ -2198,49 +2196,22 @@ The p16 flip needs the owner's choice first (Home's VISION-02e report:
 a 40,960 ceiling for the chat record, or a launch plan that never picks
 a context admission cannot admit).
 
-## The chat pin above 24 GB: Muse Glimmer 30B (STACK-MUSE-01, 2026-10-16)
+## The household chat pin: Qwen3 8B on every tier (2026-11-17)
 
-Owner's rule, 2026-10-16: the Qwen3 8B chat entries are for machines
-with 24 GB or less; every larger machine runs Muse Glimmer 30B
-(`meta-models/Muse-Glimmer-30B-GGUF`, Apache-2.0, dense 29.6B, 52
-layers, 2 KV heads, 131072 context, pinned at revision `70bf1b6`).
-Nothing is chosen in the wizard: the tier decides, through
-`PROFILE_MODEL_BINDINGS` in `profiles.ts`, and Home mirrors the same
-ids in its own catalog for thinking mode and turn budgets.
+History: from 2026-10-16 (STACK-MUSE-01) the Stack pinned Muse Glimmer 30B above 24 GB. The owner removed that family (the three
+chat parts, its picture projector and its MLX build) on 2026-11-17, together with the unused Qwen3 1.7B chat parts; the old pins are in
+git history. Every profile now binds `qwen3-8b-instruct-q4-k-m` (5.0 GB) as its recommended Standard chat model, through
+`PROFILE_MODEL_BINDINGS` in `profiles.ts` and the Standard chat slot in `tiers.ts`: it is the highest-priority chat part left in the
+part table that is cleared for Standard (the Qwen3.6 35B A3B is still `vetting`, the uncensored Qwen3.8 27B is an admin's optional
+choice and no default). Boost chat is the Qwen3.8 27B, as before. No part reads pictures through chat by default any more; the vision
+role (Qwen3-VL 4B) covers pictures.
 
-| Tier | Memory | Chat pin | File |
-|---|---|---|---|
-| p16 | 16 to 24 GB | `qwen3-8b-instruct-q4-k-m` | 5.0 GB |
-| p32 | 32 GB | `muse-glimmer-30b-q4-k-m` (KQuant 17GB) | 16.8 GB |
-| p64, p128 | 64 GB and up | `muse-glimmer-30b-q4-k-xl` (KQuant-Dynamic) | 19.7 GB |
+An install that still has the old files and records boots: the parts are gone from the part list, the plans and the catalog, the
+records stay in the store untouched, and a household's stored chat choice that names one still resolves to it. The Stack deletes
+nothing and rewrites no setting (`tests/removedChatModels.test.ts`).
 
-p32 takes the smaller file because Q4_K_XL (19.7 GB) plus the 4B judge
-(3.76 GiB) plus context would leave a 32 GB machine under the
-governor's 4 GiB free-memory margin; the 17 GB build keeps it above.
-A 24 GB machine stays on the 8B for the same reason: either Muse file
-plus its context is most of the memory, with nothing left for the
-judge, vision or the household.
-
-Reasoning: Muse's chat template reasons on every turn and takes a
-`reasoning_strength` kwarg (`low`, `medium`, `high`, `xhigh`; default
-`high`) with no off switch, so `--reasoning off` (which sets
-`enable_thinking=false`) does nothing for it. The catalog record now
-carries `launch.chatTemplateKwargs`, which the supervisor passes as
-`--chat-template-kwargs` (new in `engineArgs.ts`); Muse launches with
-`reasoning_strength: "low"`. llama-server merges a request's
-`chat_template_kwargs` over the launch defaults key by key
-(`server-common.cpp` in b10797), so Home's per-request
-`enable_thinking` leaves the launch's `reasoning_strength` in place.
-b10797 parses Muse's `<atem:function_calls>` tool calls natively and
-returns the `to=self` reasoning as `reasoning_content`
-(`common_chat_params_init_muse_glimmer` in `chat.cpp`), so the turn
-pipeline sees the same shapes it sees from Qwen3. Sampling is the model
-card's recommendation (temperature 1.0, top_p 0.95, top_k 64).
-
-Not measured yet: tokens per second, load time and the tool-calling
-bench on the Studio are STUDIO-EVAL-01's job in Home. Follow-ups once
-measured: `--reasoning-budget` as a hard cap on reasoning tokens, the
-repo's `mmproj` for vision, and its DFlash draft model.
+The mechanism the Muse work added stays and is generic: a catalog record's `launch.chatTemplateKwargs` is passed as
+`--chat-template-kwargs`, and a request's own `chat_template_kwargs` win key by key (`server-common.cpp` in b10797).
 
 ## Keep-warm: no cold start for the first chat (STACK-WARM-01, 2026-10-17)
 
@@ -2271,8 +2242,8 @@ by being resident and unloaded only by the idle rule.
 
 **Verdict (ENGINE-MLX-02, owner ruling 2026-10-17): llama-server is the default chat engine on every tier; oMLX is opt-in.**
 `auto` resolves to llama-server even when oMLX and its model are installed; `stack.engines.chat.engine` = `omlx` is the only way to
-run it, and only then does the Stack build its environment and pull the 19.4 GB model (the first-run plan and the default disk
-totals no longer carry them; the Models and storage page offers "Faster chat engine (oMLX)" as an optional row on p64 and p128).
+run it, and only then does the Stack build its environment and pull its environment, and chat moves onto oMLX once an admin has installed an MLX chat model (the first-run plan and the default disk
+totals carry neither; no MLX chat model is pinned by default since the Muse MLX build was removed on 2026-11-17, so the disk plan has no oMLX row).
 Why: the quality benches against Home's tool turns. Tool-name defect 15 of 70 right on oMLX against 65 of 70 on llama-server before the
 namespace fix, 58 of 70 after it; fewer tool calls on math and unit conversion; 1 of 60 replies leaked raw tool markup into the visible
 text; search 26 of 30 against 28 of 30. Speed does not outweigh that. The text below is the oMLX design, still true for the opt-in.
@@ -2293,9 +2264,8 @@ the numbers, the alternative that lost (Rapid-MLX) and what was not verified: Ho
 - **Install.** The environment is `data/engines/omlx/0.7.0/venv`, built by the same uv builder as Pocket TTS and Chatterbox from one
   hashed file (`chat/omlx.darwin-arm64.requirements.txt`: 112 PyPI packages and the oMLX release wheel by sha256). Not in it, on
   purpose: torch (xgrammar declares it; oMLX ships a stub and never runs its torch paths) and oMLX's five git-pinned dependencies,
-  which cannot carry hashes. The model is `muse-glimmer-30b-mlx-4bit`, an 11-file directory pinned by path, size and sha256 at
-  `mlx-community/Muse-Glimmer-30B-4bit` revision `3e7677d7`. The install plan no longer adds it (ENGINE-MLX-02); with the setting on `omlx`,
-  `ensureChatEngineAssets` (daemon start) builds the environment and pulls the model in the background, then moves an idle
+  which cannot carry hashes. The model is whichever MLX chat directory an admin installed (the Muse MLX pin that was here is removed). With the setting on `omlx`,
+  `ensureChatEngineAssets` (daemon start) builds the environment in the background and, once an MLX chat model is installed and verified, moves an idle
   llama-server chat onto oMLX (`restartForNewChatEngine`), retrying every 30 s while chat is busy. Chat answers on llama-server the whole time.
 - **Launch.** `omlx serve` on loopback, a random API key per launch (the engine also serves an admin dashboard on its port), `--no-hf-cache`,
   offline and tokenless environment, a model folder holding one symlink to the pinned directory, and a prompt cache under
@@ -2825,7 +2795,7 @@ grows here.
 
 ## An optional chat model: Qwen3.6-35B-A3B (MODEL-SWITCH-01, 2026-10-21)
 
-Muse stays the chat pin on every tier above 24 GB (STACK-MUSE-01). Beside it
+The Qwen3 8B stays the chat pin on every tier. Beside it
 the Stack pins one optional chat model that no tier installs and Home offers
 in Settings, AI models: `unsloth/Qwen3.6-35B-A3B-GGUF` at revision
 `a483e9e` (Apache-2.0; mixture of experts, 35B stored and 3B active, 40

@@ -126,8 +126,8 @@ unchanged.
 | Header | Value |
 |---|---|
 | `x-maipai-engine` | the engine host and build that answered (`local b10797-832fd6f17`, or `local omlx-0.7.0` when chat runs on oMLX), or `none` |
-| `x-maipai-model` | the model file that answered (`Qwen3-1.7B-Q8_0.gguf`), or `none` |
-| `x-maipai-revision` | the model's pinned revision (`90862c4b…`) when the process knows its model record, the engine build otherwise, or `none` |
+| `x-maipai-model` | the model file that answered (`Qwen3-8B-Q4_K_M.gguf`), or `none` |
+| `x-maipai-revision` | the model's pinned revision (`7c41481f…`) when the process knows its model record, the engine build otherwise, or `none` |
 
 **Failure shapes**, never a 404 for a known role:
 
@@ -390,7 +390,7 @@ it, and reads `/healthz` for the new version.
 
 ## Instant chat: the judge role (INSTANT-02, 2026-10-17)
 
-A chat model that reasons on every turn (Muse Glimmer 30B, STACK-MUSE-01) has no Instant mode, so Home sends an Instant turn to
+A chat model that reasons on every turn has no Instant mode, so Home sends an Instant turn to
 the `judge` role instead: `POST /v1/chat/completions` with `"model": "judge"` and `"chat_template_kwargs": {"enable_thinking":
 false}`. No new role, route or memory: from p32 up the judge is the resident Qwen3 4B Q4_K_M and answers on the same route,
 with its own identity headers (`x-maipai-model: Qwen3-4B-Q4_K_M.gguf`). Home decides whether a separate fast model exists by
@@ -400,7 +400,7 @@ queue behind background judge work.
 
 Measured 2026-10-17 on the Studio (live Stack, port 8770, Qwen3 4B judge, three trials each): time to first text for "hello" is
 0.03 to 0.04 s alone and 0.04 to 0.13 s during a 600-token background generation. During a cold 8,000-token prefill on another
-slot it was 1.5 s once and 0.05 to 0.15 s after that (prefix cached). Muse at the same moment took 2 to 6 s for short answers.
+slot it was 1.5 s once and 0.05 to 0.15 s after that (prefix cached).
 Context: the judge launches with a 40960 window, so Home falls back to chat when an Instant turn's history would not fit.
 
 ## MaiPai Bot

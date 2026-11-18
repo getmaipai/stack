@@ -8,6 +8,10 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
+### Removed
+
+- The Muse Glimmer 30B chat family and the Qwen3 1.7B chat models (owner decision 2026-11-17). Parts removed: `muse-glimmer-30b-q4-k-xl`, `muse-glimmer-30b-q4-k-m`, `muse-glimmer-30b-mlx-4bit`, the Muse picture projector `muse-glimmer-30b-mmproj-q4-k-m`, `qwen3-1.7b-q8-0` and `qwen3-1.7b-mlx-4bit` (nothing selected the MLX one). Ported first: every profile (p16, p32, p64, p128) now binds the Qwen3 8B as its recommended Standard chat model, the highest-priority chat part left that is cleared for Standard (Boost chat stays the Qwen3.8 27B; the abliterated Qwen3.8 27B is not a default); the first-run plan has no separate small starter chat (the chat model is the starter); the oMLX opt-in builds its environment and runs whichever MLX chat model an admin installed, since no MLX chat model is pinned, so the optional oMLX disk-plan row and its download are gone; the disk plan, measured data, tier slots, part table, catalog, tests and docs follow. An install that still has the old files or records boots: the parts leave the lists and plans, the records and any stored choice are left as they are, and nothing is deleted.
+
 ### Added
 
 - MODELPACK-STACK-01 (first slice): model packs. A pack folder `backend/src/packs/<part-id>/` (`model-pack.json` plus `recipes/<job>.md`) holds one model's limits, peaks, capabilities and recipes as data, validated against `@maipai/spec` `StackModelPack` (pin spec-v0.1.423) when the Stack starts; a pack that does not validate, names an unknown part or lacks a recipe stops the Stack with the folder and the fix. First packs: the two picture models. A parity test ties each pack to today's picture family table, and a shrinking-baseline test (rule E8) fails when a model name appears in a new place outside a pack.

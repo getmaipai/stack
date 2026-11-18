@@ -11,10 +11,9 @@ import measured from "@/lib/diskPlanMeasured.json";
 import { partDef, partLabel } from "@/lib/partDefs";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
-  CHATTERBOX_ENGINE, STACK_CHAT_MUSE_30B_MLX_MODEL, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
+  CHATTERBOX_ENGINE, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
   STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_SFX_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_H3_MODELS, STACK_VIDEO_MASK_MODELS,
 } from "@/lib/modelCatalog";
-import { OMLX_OPTIONAL_TIERS } from "@/lib/chatEngines";
 import { plannedPinsFor } from "@/lib/installPlan";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { IMAGE_FAMILIES } from "@/images/models";
@@ -160,18 +159,15 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   const imageTools = new Set(STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component !== "tool-look").map((pin) => pin.id));
   const plannedWhere = (test: (pin: CatalogModelLike) => boolean) => planned.map((entry) => entry.pin).filter(test);
   const chat = plannedWhere((pin) => pin.role === "chat" && !projectors.has(pin.id));
-  const bigChat = chat.find((pin) => !/qwen3-1\.7b/.test(pin.id)) ?? chat[0];
+  const bigChat = chat[0];
   const rows: DiskRow[] = [];
   rows.push({
     id: "home", label: "Home itself", note: "Home, the AI program that runs the models, and the space the install needs to build them.", kind: "home", need: "required", selectable: false,
     download_bytes: table.engines.home!.download_bytes, installed_bytes: table.engines.home!.installed_bytes, peak_temp_bytes: table.engines.home!.peak_temp_bytes, model_ids: [], engines: [], installed: false, basis: table.engines.home!.basis,
   });
   if (chat.length) {
-    const starter = chat.length > 1 ? " A small starter chat AI comes first so you can talk while the big one downloads." : "";
-    rows.push(modelRow({ id: "chat", label: `Chat AI (${chatName(bigChat!)})`, note: `The AI you talk to.${starter}`, need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
+    rows.push(modelRow({ id: "chat", label: `Chat AI (${chatName(bigChat!)})`, note: "The AI you talk to.", need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
   }
-  // oMLX is an optional install on the tiers that have room (ENGINE-MLX-02: llama-server is the default everywhere).
-  if (OMLX_OPTIONAL_TIERS.includes(tier.id)) rows.push(modelRow({ id: "chat-mlx", label: partLabel("muse-glimmer-30b-mlx-4bit"), note: partDef("muse-glimmer-30b-mlx-4bit")!.description, need: "optional", engines: ["engine:chat-mlx", "engine:python"] }, [STACK_CHAT_MUSE_30B_MLX_MODEL]));
   const reads = plannedWhere((pin) => projectors.has(pin.id) && pin.role !== "vision");
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: partLabel("qwen3-vl-8b-instruct-q4-k-m"), note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));
   // The picture reader and its projector checks finished clips and pictures for safety when chat cannot read pictures (AIMODELS-VISION-01).

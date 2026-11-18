@@ -29,9 +29,8 @@ export interface LlamaServerArgsOptions {
    * context is bounded by a declared number, never guessed. */
   imageMaxTokens?: number;
   /** Template variables the record's launch pins (`--chat-template-kwargs`):
-   * Muse Glimmer's `reasoning_strength` (STACK-MUSE-01), which `--reasoning
-   * off` cannot reach because that template has no `enable_thinking`
-   * switch. A request's own `chat_template_kwargs` still win key by key. */
+   * a model's `reasoning_strength`, which `--reasoning off` cannot reach
+   * when its template has no `enable_thinking` switch. A request's own `chat_template_kwargs` still win key by key. */
   chatTemplateKwargs?: Record<string, string>;
 }
 

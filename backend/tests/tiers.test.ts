@@ -25,14 +25,14 @@ describe("tier resolver", () => {
 
   test("resolves the requested profile ladders", () => {
     expect(resolveLadder("chat", "p16", 12 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["qwen3-8b-instruct-q4-k-m", null, null]);
-    expect(resolveLadder("chat", "p32", 30 * GB)[0]?.resolved?.model).toBe("muse-glimmer-30b-q4-k-m");
+    expect(resolveLadder("chat", "p32", 30 * GB)[0]?.resolved?.model).toBe("qwen3-8b-instruct-q4-k-m");
     // Standard pictures on a 32 GB computer: MiniMax H3-Image streaming (2.5 GB) is recommended; FLUX.2 Klein stays a candidate and can be picked.
     expect(resolveLadder("pictures", "p32", 20 * GB)[0]?.resolved).toMatchObject({ model: "minimax-h3-image", peakBytes: 2_500_000_000, options: { ditMode: "stream" } });
     expect(resolveTier({ category: "pictures", tier: "standard", profile: "p32", roomBytes: 20 * GB, slot: { model: "flux2-klein-4b" } })?.model).toBe("flux2-klein-4b");
     const chat64 = resolveLadder("chat", "p64", 40 * GB);
-    expect(chat64[1]?.resolved?.model).toBe("muse-glimmer-30b-q4-k-xl");
-    expect(chat64[1]?.resolved?.options).toEqual({ thinking: true, reasoningBudget: 4096 });
-    expect(chat64[1]?.resolved?.switchCost).toBe("option");
+    expect(chat64[0]?.resolved?.model).toBe("qwen3-8b-instruct-q4-k-m");
+    expect(chat64[1]?.resolved?.model).toBe("qwen3.8-27b-ud-q4-k-m");
+    expect(chat64[1]?.resolved?.options).toEqual({ thinking: true });
     expect(chat64[1]?.hidden).toBe(false);
     const pic64 = resolveLadder("pictures", "p64", 40 * GB);
     expect(pic64[0]?.resolved?.model).toBe("minimax-h3-image");
@@ -75,7 +75,7 @@ describe("tier resolver", () => {
   });
 
   test("collapses equal pins and leaves option switches visible", () => {
-    const same = resolveLadder("chat", "p64", 40 * GB, { standard: { model: "muse-glimmer-30b-q4-k-xl", options: { thinking: false } }, boost: { model: "muse-glimmer-30b-q4-k-xl", options: { thinking: false } } });
+    const same = resolveLadder("pictures", "p64", 40 * GB, { standard: { model: "minimax-h3-image" }, boost: { model: "minimax-h3-image" } });
     expect(same[1]?.hiddenReason).toBe("same_as_below");
     const different = resolveLadder("chat", "p64", 40 * GB);
     expect(different[1]?.hiddenReason).toBeNull();

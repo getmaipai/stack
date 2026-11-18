@@ -25,12 +25,12 @@ test("the install job names its purpose: faster chat engine, picture reading, or
 
 test("an active install job for chat shows as pending_install and leaves the role's own state alone", async () => {
   const before = (await chatRow()).state.state;
-  const job = createJob({ kind: "model.install", role: "chat", totalBytes: 100, status: "downloading", input: { model: "muse-glimmer-30b-mlx-4bit", purpose: "faster chat engine" } });
+  const job = createJob({ kind: "model.install", role: "chat", totalBytes: 100, status: "downloading", input: { model: "qwen3-6-35b-a3b-ud-q4-k-xl", purpose: "faster chat engine" } });
   updateJob(job.id, { percent: 40, completedBytes: 40 });
   const during = await chatRow();
   expect(during.state.state).toBe(before);
   expect(["installing", "downloading", "notInstalled"].includes(during.state.state) && before === "ready").toBe(false);
-  expect(during.pending_install).toEqual({ job: job.id, model: "muse-glimmer-30b-mlx-4bit", purpose: "faster chat engine", percent: 40 });
+  expect(during.pending_install).toEqual({ job: job.id, model: "qwen3-6-35b-a3b-ud-q4-k-xl", purpose: "faster chat engine", percent: 40 });
 });
 
 test("a finished or failed job, or one for another role, is not pending", async () => {

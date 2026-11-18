@@ -151,7 +151,7 @@ are never copied. Nothing migrates Home until STACK-16.
   times its own multiplier beside `llama-server`; the chat role bound
   to either by `stack.engines.chat.engine`; an MLX model as a
   directory pin of nine verified files
-  (`mlx-community/Qwen3-1.7B-4bit`). Proven live on the laptop
+  (`mlx-community/Qwen3-1.7B-4bit`, removed 2026-11-17). Proven live on the laptop
   (`scripts/prove-mlx.sh`: admitted at 1.38 GB, measured 1.24 GB,
   first completion 1.88 s with the load, 50 ms warm). Tests:
   `backend/tests/mlxServe.test.ts`. The Studio bench (STACK-14) puts
@@ -369,7 +369,7 @@ are never copied. Nothing migrates Home until STACK-16.
 
 ## Store and provenance
 
-- [x] **STACK-MUSE-01 (M): Muse Glimmer 30B is the chat pin above 24 GB.**
+- [x] **STACK-MUSE-01 (M): Muse Glimmer 30B is the chat pin above 24 GB.** *(Removed 2026-11-17 by the owner's decision, see CHANGELOG; every profile now binds Qwen3 8B. The entry below is history.)*
   Owner's rule 2026-10-16: Qwen3 8B stays the p16 chat (16 and 24 GB);
   p32 binds `muse-glimmer-30b-q4-k-m` (17 GB) and p64/p128 bind
   `muse-glimmer-30b-q4-k-xl` (19.7 GB), both pinned to one revision of
@@ -378,7 +378,7 @@ are never copied. Nothing migrates Home until STACK-16.
   Muse runs at `reasoning_strength: low`. Tests: `profiles`,
   `engineArgs`, `modelStore`, `installPlan`. Measurement is Home's
   STUDIO-EVAL-01. Reasoning: dev.md "The chat pin above 24 GB".
-- [x] **VISION-03a (S): Muse Glimmer 30B reads pictures through its own projector.**
+- [x] **VISION-03a (S): Muse Glimmer 30B reads pictures through its own projector.** *(Removed 2026-11-17 with the Muse pins; the projector mechanism stays for any model that declares one.)*
   Home's design note `docs/design/vision-images-2026-10-17.md`. The
   repository's `mmproj-Muse-Glimmer-30B-Q4_K_M.gguf` (1.4 GB, same
   revision, sha256 `f48b4523...`) is pinned as `muse-glimmer-30b-mmproj-q4-k-m`

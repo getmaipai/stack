@@ -32,12 +32,10 @@ export interface TierCandidate {
 
 // Peaks marked "measured" come from docs/design/tier-evaluations-2026-10-30.md in getmaipai/home (Mac Studio, Apple M5 Max, 128 GB). Max video is LTX-2.5 Video Max on p128 (LTX25-MAX-01); Max music has no candidate on purpose: a Max slot is catalogued only with a measured, heard gain over the slot below.
 export const TIER_CANDIDATES: TierCandidate[] = [
-  { id: "muse-glimmer-30b-q4-k-xl", category: "chat", family: "muse", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 19_000_000_000, status: "measured", note: "Tier eval 2026-10-30, 18.6 GB resident, 19.0 GB peak." }, { options: { thinking: true, reasoningBudget: 4096 }, peakBytes: 22_500_000_000, status: "unverified" }], tiers: ["standard", "boost"] },
-  { id: "muse-glimmer-30b-q4-k-m", category: "chat", family: "muse", profiles: ["p32"], peaks: [{ options: {}, peakBytes: 17_000_000_000, status: "unverified" }], tiers: ["standard"] },
-  { id: "qwen3-8b-instruct-q4-k-m", category: "chat", family: "qwen3", profiles: ["p16"], peaks: [{ options: {}, peakBytes: 7_000_000_000, status: "unverified", note: "Tier eval 2026-10-30 measured 8.06 GB after eight turns, above this figure: at 0.6 of a 12 GB room Standard would not fit, so the figure stays until the p16 room is decided." }], tiers: ["standard"] },
+  { id: "qwen3-8b-instruct-q4-k-m", category: "chat", family: "qwen3", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 7_000_000_000, status: "unverified", note: "Tier eval 2026-10-30 measured 8.06 GB after eight turns, above this figure: at 0.6 of a 12 GB room Standard would not fit, so the figure stays until the p16 room is decided." }], tiers: ["standard"] },
   { id: "qwen3-4b-q4-k-m", category: "chat", family: "qwen3", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 5_700_000_000, status: "measured", note: "Tier eval 2026-10-30, the judge profile flags, 5.70 GB after eight turns." }], tiers: ["reduced"] },
   { id: "qwen3.8-27b-ud-q4-k-m", category: "chat", family: "qwen3.8", profiles: ["p64", "p128"], peaks: [{ options: { thinking: true }, peakBytes: 22_200_000_000, status: "unverified", note: "22.2 GB peak measured with thinking off and no MTP draft; the thinking figure and the MTP run are still open." }], tiers: ["boost"] },
-  { id: "qwen3-6-35b-a3b-ud-q4-k-xl", category: "chat", family: "qwen3.6", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 23_600_000_000, status: "measured", note: "Tier eval 2026-10-30: 70 tok/s, 9 of 9 searches." }], tiers: [], vetting: "MODEL-VET-01: replacement candidate for Muse at Standard; CHAT-AB-01, KS-BENCH-01 and a licence read come first." },
+  { id: "qwen3-6-35b-a3b-ud-q4-k-xl", category: "chat", family: "qwen3.6", profiles: ["p64", "p128"], peaks: [{ options: { thinking: false }, peakBytes: 23_600_000_000, status: "measured", note: "Tier eval 2026-10-30: 70 tok/s, 9 of 9 searches." }], tiers: [], vetting: "MODEL-VET-01: a larger Standard candidate; CHAT-AB-01, KS-BENCH-01 and a licence read come first." },
   { id: "ornith-1-5-122b-mlx-4bit", category: "chat", family: "ornith", profiles: ["p128"], peaks: [{ options: {}, peakBytes: 68_700_000_000, status: "measured", note: "Measured design note peak." }], tiers: ["max"] },
   // H3-IMAGE-STACK-01: The H3 picture model goes first, so it is the recommended Standard and Boost picture model wherever it fits; the others stay as candidates. Resident (22 GB held, 19.7 GB measured) on p64 and p128; a streaming Standard candidate (2.5 GB held, 1.8 GB measured) on p16 and p32. Max stays on Qwen-Image: the 2048 and 4096 px Max numbers are an open bench (H3-MAX-01).
   { id: STACK_IMAGE_H3_ID, category: "pictures", family: "minimax-h3", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 22_000_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps: resident 11 to 15 s, 19.7 GB whole-process-tree peak (22 GB held); streaming from disk 27 to 33 s at 1.8 GB." }], tiers: ["standard", "boost"] },
@@ -103,10 +101,7 @@ export function resolveTier(input: ResolveInput): Resolved | null {
     const peak = candidate?.peaks.find((item) => !slot.options || equalOptions(item.options, slot.options));
     return candidate && peak && peak.peakBytes <= cap ? toResolved(candidate, tier, peak, below) : null;
   }
-  const ordered = tier === "boost" && category === "chat"
-    ? [...available].sort((a, b) => Number(b.id === "muse-glimmer-30b-q4-k-xl") - Number(a.id === "muse-glimmer-30b-q4-k-xl"))
-    : available;
-  for (const candidate of ordered) {
+  for (const candidate of available) {
     const peak = candidate.peaks.find((item) => item.peakBytes <= cap && (tier !== "boost" || category !== "chat" || item.options.thinking === true));
     if (peak) return toResolved(candidate, tier, peak, below);
   }

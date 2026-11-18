@@ -156,7 +156,7 @@ test("a role set to the processor launches with no layers on the accelerator, an
   expect(ngl(llamaServerArgs({ ...options, gpuLayers: 0 }))).toBe("0");
 });
 
-test("a record's pinned template variables reach the spawn as one --chat-template-kwargs object (STACK-MUSE-01)", () => {
+test("a record's pinned template variables reach the spawn as one --chat-template-kwargs object", () => {
   const options = { modelPath, port: 8771, config: declaredDefaults, contextLength: 4096, kvCacheType: "q8_0" as const };
   const base = llamaServerArgs(options);
   const args = llamaServerArgs({ ...options, chatTemplateKwargs: { reasoning_strength: "low" } });

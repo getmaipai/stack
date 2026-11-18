@@ -4,30 +4,30 @@
   "headroom_warn_bytes": 5368709120,
   "gib_bytes": 1073741824,
   "installer": {
-    "p16.required_free_bytes": 50970898149,
-    "p16.minimum_required_free_bytes": 13976383571,
-    "p16.everything_required_free_bytes": 69790820392,
-    "p16.needed_bytes": 43251549248,
+    "p16.required_free_bytes": 48769586930,
+    "p16.minimum_required_free_bytes": 11775072352,
+    "p16.everything_required_free_bytes": 67589509173,
+    "p16.needed_bytes": 41417123232,
     "p16.home_required_free_bytes": 3176323277,
-    "p16.ai_required_free_bytes": 47794574872,
-    "p32.required_free_bytes": 69722709669,
-    "p32.minimum_required_free_bytes": 31047800378,
-    "p32.everything_required_free_bytes": 93626806949,
-    "p32.needed_bytes": 58878058848,
+    "p16.ai_required_free_bytes": 45593263653,
+    "p32.required_free_bytes": 51766323237,
+    "p32.minimum_required_free_bytes": 14771808659,
+    "p32.everything_required_free_bytes": 75670420517,
+    "p32.needed_bytes": 43914403488,
     "p32.home_required_free_bytes": 3176323277,
-    "p32.ai_required_free_bytes": 66546386392,
-    "p64.required_free_bytes": 215841234678,
-    "p64.minimum_required_free_bytes": 56939912009,
-    "p64.everything_required_free_bytes": 316535829849,
-    "p64.needed_bytes": 180993416952,
+    "p32.ai_required_free_bytes": 48589999960,
+    "p64.required_free_bytes": 194408115933,
+    "p64.minimum_required_free_bytes": 37187187977,
+    "p64.everything_required_free_bytes": 269373082864,
+    "p64.needed_bytes": 163132484664,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 212664911401,
-    "p128.required_free_bytes": 250507553227,
-    "p128.minimum_required_free_bytes": 56939912009,
-    "p128.everything_required_free_bytes": 601912645603,
-    "p128.needed_bytes": 210008479520,
+    "p64.ai_required_free_bytes": 191231792656,
+    "p128.required_free_bytes": 229074434482,
+    "p128.minimum_required_free_bytes": 37187187977,
+    "p128.everything_required_free_bytes": 554749898618,
+    "p128.needed_bytes": 192147547232,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 247331229950
+    "p128.ai_required_free_bytes": 225898111205
   },
   "tiers": {
     "p16": {
@@ -54,15 +54,14 @@
         {
           "id": "chat",
           "label": "Chat AI (Qwen3 8B)",
-          "note": "The AI you talk to. A small starter chat AI comes first so you can talk while the big one downloads.",
+          "note": "The AI you talk to.",
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 6862209504,
-          "installed_bytes": 6862209504,
+          "download_bytes": 5027783488,
+          "installed_bytes": 5027783488,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "qwen3-1.7b-q8-0",
             "qwen3-8b-instruct-q4-k-m"
           ],
           "engines": [],
@@ -480,25 +479,25 @@
         }
       ],
       "default": {
-        "download_bytes": 35670410279,
-        "installed_bytes": 38596744502,
+        "download_bytes": 33835984263,
+        "installed_bytes": 36762318486,
         "peak_temp_bytes": 4654804746,
-        "needed_bytes": 43251549248,
-        "required_free_bytes": 50970898149
+        "needed_bytes": 41417123232,
+        "required_free_bytes": 48769586930
       },
       "minimum": {
-        "download_bytes": 8495179560,
-        "installed_bytes": 10090944090,
+        "download_bytes": 6660753544,
+        "installed_bytes": 8256518074,
         "peak_temp_bytes": 1867250663,
-        "needed_bytes": 11958194753,
-        "required_free_bytes": 13976383571
+        "needed_bytes": 10123768737,
+        "required_free_bytes": 11775072352
       },
       "everything": {
-        "download_bytes": 45260216138,
-        "installed_bytes": 50421679705,
+        "download_bytes": 43425790122,
+        "installed_bytes": 48587253689,
         "peak_temp_bytes": 9284804746,
-        "needed_bytes": 59706484451,
-        "required_free_bytes": 69790820392
+        "needed_bytes": 57872058435,
+        "required_free_bytes": 67589509173
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -537,34 +536,16 @@
         },
         {
           "id": "chat",
-          "label": "Chat AI (Muse Glimmer 30B Q4_K_M)",
-          "note": "The AI you talk to. A small starter chat AI comes first so you can talk while the big one downloads.",
+          "label": "Chat AI (Qwen3 8B)",
+          "note": "The AI you talk to.",
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 18591109920,
-          "installed_bytes": 18591109920,
+          "download_bytes": 5027783488,
+          "installed_bytes": 5027783488,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "qwen3-1.7b-q8-0",
-            "muse-glimmer-30b-q4-k-m"
-          ],
-          "engines": [],
-          "installed": false,
-          "basis": "pins"
-        },
-        {
-          "id": "reads-pictures",
-          "label": "Qwen3-VL 8B",
-          "note": "Lets the chat AI look at a picture you send it.",
-          "kind": "model",
-          "need": "recommended",
-          "selectable": true,
-          "download_bytes": 1400328928,
-          "installed_bytes": 1400328928,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "muse-glimmer-30b-mmproj-q4-k-m"
+            "qwen3-8b-instruct-q4-k-m"
           ],
           "engines": [],
           "installed": false,
@@ -1033,31 +1014,30 @@
         }
       ],
       "default": {
-        "download_bytes": 51296919879,
-        "installed_bytes": 54223254102,
+        "download_bytes": 36333264519,
+        "installed_bytes": 39259598742,
         "peak_temp_bytes": 4654804746,
-        "needed_bytes": 58878058848,
-        "required_free_bytes": 69722709669
+        "needed_bytes": 43914403488,
+        "required_free_bytes": 51766323237
       },
       "minimum": {
-        "download_bytes": 22721360232,
-        "installed_bytes": 24317124762,
+        "download_bytes": 9158033800,
+        "installed_bytes": 10753798330,
         "peak_temp_bytes": 1867250663,
-        "needed_bytes": 26184375425,
-        "required_free_bytes": 31047800378
+        "needed_bytes": 12621048993,
+        "required_free_bytes": 14771808659
       },
       "everything": {
-        "download_bytes": 64544624345,
-        "installed_bytes": 70146831613,
+        "download_bytes": 49580968985,
+        "installed_bytes": 55183176253,
         "peak_temp_bytes": 9450609013,
-        "needed_bytes": 79597440626,
-        "required_free_bytes": 93626806949
+        "needed_bytes": 64633785266,
+        "required_free_bytes": 75670420517
       },
       "measured_on": "2026-10-17",
       "default_selected": [
         "home",
         "chat",
-        "reads-pictures",
         "judge",
         "embed",
         "stt",
@@ -1092,54 +1072,16 @@
         },
         {
           "id": "chat",
-          "label": "Chat AI (Muse Glimmer 30B Q4_K_XL)",
-          "note": "The AI you talk to. A small starter chat AI comes first so you can talk while the big one downloads.",
+          "label": "Chat AI (Qwen3 8B)",
+          "note": "The AI you talk to.",
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 21488386848,
-          "installed_bytes": 21488386848,
+          "download_bytes": 5027783488,
+          "installed_bytes": 5027783488,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "qwen3-1.7b-q8-0",
-            "muse-glimmer-30b-q4-k-xl"
-          ],
-          "engines": [],
-          "installed": false,
-          "basis": "pins"
-        },
-        {
-          "id": "chat-mlx",
-          "label": "Muse Glimmer 30B MLX 4-bit",
-          "note": "Runs the chat model with the MLX engine on Apple silicon.",
-          "kind": "model",
-          "need": "optional",
-          "selectable": true,
-          "download_bytes": 19443246692,
-          "installed_bytes": 19443246692,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "muse-glimmer-30b-mlx-4bit"
-          ],
-          "engines": [
-            "engine:chat-mlx",
-            "engine:python"
-          ],
-          "installed": false,
-          "basis": "pins"
-        },
-        {
-          "id": "reads-pictures",
-          "label": "Qwen3-VL 8B",
-          "note": "Lets the chat AI look at a picture you send it.",
-          "kind": "model",
-          "need": "recommended",
-          "selectable": true,
-          "download_bytes": 1400328928,
-          "installed_bytes": 1400328928,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "muse-glimmer-30b-mmproj-q4-k-m"
+            "qwen3-8b-instruct-q4-k-m"
           ],
           "engines": [],
           "installed": false,
@@ -1745,21 +1687,6 @@
           "basis": "measured"
         },
         {
-          "id": "engine:chat-mlx",
-          "label": "Faster chat engine tools (oMLX)",
-          "note": "What the faster chat engine runs on. llama.cpp stays as the fallback.",
-          "kind": "engine",
-          "need": "required",
-          "selectable": false,
-          "download_bytes": 873749873,
-          "installed_bytes": 1269985280,
-          "peak_temp_bytes": 873749873,
-          "model_ids": [],
-          "engines": [],
-          "installed": false,
-          "basis": "measured"
-        },
-        {
           "id": "engine:voice",
           "label": "Voice engine tools",
           "note": "What the voice runs on.",
@@ -1956,31 +1883,30 @@
         }
       ],
       "default": {
-        "download_bytes": 170569071854,
-        "installed_bytes": 174239088629,
+        "download_bytes": 152708139566,
+        "installed_bytes": 156378156341,
         "peak_temp_bytes": 6754328323,
-        "needed_bytes": 180993416952,
-        "required_free_bytes": 215841234678
+        "needed_bytes": 163132484664,
+        "required_free_bytes": 194408115933
       },
       "minimum": {
-        "download_bytes": 42891978489,
-        "installed_bytes": 44908419548,
+        "download_bytes": 26431375129,
+        "installed_bytes": 28447816188,
         "peak_temp_bytes": 3049808551,
-        "needed_bytes": 47958228099,
-        "required_free_bytes": 56939912009
+        "needed_bytes": 31497624739,
+        "required_free_bytes": 37187187977
       },
       "everything": {
-        "download_bytes": 245617830928,
-        "installed_bytes": 252759956155,
-        "peak_temp_bytes": 13223882463,
-        "needed_bytes": 265983838618,
-        "required_free_bytes": 316535829849
+        "download_bytes": 207439902075,
+        "installed_bytes": 214185791895,
+        "peak_temp_bytes": 12350132590,
+        "needed_bytes": 226535924485,
+        "required_free_bytes": 269373082864
       },
       "measured_on": "2026-10-17",
       "default_selected": [
         "home",
         "chat",
-        "reads-pictures",
         "judge",
         "coding",
         "embed",
@@ -2021,54 +1947,16 @@
         },
         {
           "id": "chat",
-          "label": "Chat AI (Muse Glimmer 30B Q4_K_XL)",
-          "note": "The AI you talk to. A small starter chat AI comes first so you can talk while the big one downloads.",
+          "label": "Chat AI (Qwen3 8B)",
+          "note": "The AI you talk to.",
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 21488386848,
-          "installed_bytes": 21488386848,
+          "download_bytes": 5027783488,
+          "installed_bytes": 5027783488,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "qwen3-1.7b-q8-0",
-            "muse-glimmer-30b-q4-k-xl"
-          ],
-          "engines": [],
-          "installed": false,
-          "basis": "pins"
-        },
-        {
-          "id": "chat-mlx",
-          "label": "Muse Glimmer 30B MLX 4-bit",
-          "note": "Runs the chat model with the MLX engine on Apple silicon.",
-          "kind": "model",
-          "need": "optional",
-          "selectable": true,
-          "download_bytes": 19443246692,
-          "installed_bytes": 19443246692,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "muse-glimmer-30b-mlx-4bit"
-          ],
-          "engines": [
-            "engine:chat-mlx",
-            "engine:python"
-          ],
-          "installed": false,
-          "basis": "pins"
-        },
-        {
-          "id": "reads-pictures",
-          "label": "Qwen3-VL 8B",
-          "note": "Lets the chat AI look at a picture you send it.",
-          "kind": "model",
-          "need": "recommended",
-          "selectable": true,
-          "download_bytes": 1400328928,
-          "installed_bytes": 1400328928,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "muse-glimmer-30b-mmproj-q4-k-m"
+            "qwen3-8b-instruct-q4-k-m"
           ],
           "engines": [],
           "installed": false,
@@ -2915,21 +2803,6 @@
           "basis": "measured"
         },
         {
-          "id": "engine:chat-mlx",
-          "label": "Faster chat engine tools (oMLX)",
-          "note": "What the faster chat engine runs on. llama.cpp stays as the fallback.",
-          "kind": "engine",
-          "need": "required",
-          "selectable": false,
-          "download_bytes": 873749873,
-          "installed_bytes": 1269985280,
-          "peak_temp_bytes": 873749873,
-          "model_ids": [],
-          "engines": [],
-          "installed": false,
-          "basis": "measured"
-        },
-        {
           "id": "engine:voice",
           "label": "Voice engine tools",
           "note": "What the voice runs on.",
@@ -3186,31 +3059,30 @@
         }
       ],
       "default": {
-        "download_bytes": 198480811286,
-        "installed_bytes": 202495368534,
+        "download_bytes": 180619878998,
+        "installed_bytes": 184634436246,
         "peak_temp_bytes": 7513110986,
-        "needed_bytes": 210008479520,
-        "required_free_bytes": 250507553227
+        "needed_bytes": 192147547232,
+        "required_free_bytes": 229074434482
       },
       "minimum": {
-        "download_bytes": 42891978489,
-        "installed_bytes": 44908419548,
+        "download_bytes": 26431375129,
+        "installed_bytes": 28447816188,
         "peak_temp_bytes": 3049808551,
-        "needed_bytes": 47958228099,
-        "required_free_bytes": 56939912009
+        "needed_bytes": 31497624739,
+        "required_free_bytes": 37187187977
       },
       "everything": {
-        "download_bytes": 480547592255,
-        "installed_bytes": 489478612610,
-        "peak_temp_bytes": 14538310471,
-        "needed_bytes": 504016923081,
-        "required_free_bytes": 601912645603
+        "download_bytes": 442369663402,
+        "installed_bytes": 450904448350,
+        "peak_temp_bytes": 13664560598,
+        "needed_bytes": 464569008948,
+        "required_free_bytes": 554749898618
       },
       "measured_on": "2026-10-17",
       "default_selected": [
         "home",
         "chat",
-        "reads-pictures",
         "vision",
         "judge",
         "coding",
