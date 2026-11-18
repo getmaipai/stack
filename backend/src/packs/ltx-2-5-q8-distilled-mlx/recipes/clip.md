@@ -1,4 +1,3 @@
-# clip recipe
 {description}
-
-Speech goes in quotes inside the description, with who says it. Sound is made with the picture. Describe the camera in plain words (for example "handheld camera footage, the frame sways slightly").
+---measured---
+Speech goes in quotes inside the description, with who says it. Sound is made with the picture. Camera in plain words, for example "handheld camera footage, the frame sways slightly" (settled by eye, 2026-11-17, for the MiniMax H3 video model).

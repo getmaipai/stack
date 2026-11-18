@@ -68,3 +68,29 @@ test("the catalog never calls an unwired job available", async () => {
   const catalog = await jobsCatalog("adult");
   for (const job of catalog.jobs) if (job.job !== "picture") expect(job.available).toBe(false);
 });
+
+import { clipBody, dispatchClip, CLIP_PICTURES_LINE } from "@/lib/makeDispatch";
+const clipReq = (over: Partial<Extract<StackMakeRequest, { job: "clip" }>> = {}): Extract<StackMakeRequest, { job: "clip" }> => ({ job: "clip", audience: "adult", description: "a dog barks", shape: "landscape", level: "standard", seconds: 5, seed: 3, ...over });
+const clipPlanned = (req = clipReq()) => { const p = planMake(req, [ready("ltx-2-5-q8-distilled-mlx"), ready("minimax-h3")]); if (!p.ok) throw new Error("not planned"); return p; };
+
+test("a clip's old-route body comes from the pack: part id, the pack's pixel size, seconds, seed, the recipe's prompt (never its notes)", () => {
+  const body = clipBody(clipReq(), clipPlanned());
+  expect(body).toMatchObject({ model: "ltx-2-5-q8-distilled-mlx", size: "512x256", seconds: 5, seed: 3, audience: "adult", prompt: "a dog barks" });
+  expect(String(body.prompt)).not.toContain("handheld");
+});
+test("a finished clip's result carries the job, the file, the poster, the sound and what it was made with", async () => {
+  const result = await dispatchClip(clipReq(), clipPlanned(), async (path) => ({ status: 200, json: { job: "v1", data: [{ url: "/v1/videos/generations/v1/0.mp4", poster_url: "/v1/videos/generations/v1/0.jpg", seconds: 5, audio: true }] } }));
+  expect(result.body).toMatchObject({ id: "v1", job: "clip", state: "done", files: ["/v1/videos/generations/v1/0.mp4"], poster: "/v1/videos/generations/v1/0.jpg", made_with: { part: "ltx-2-5-q8-distilled-mlx", seconds: 5, sound: true } });
+});
+test("a clip that starts on a picture is refused with a plain line, never silently dropped", async () => {
+  const response = await app.request("/stack/v1/jobs/make", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(clipReq({ start_picture: "m1" })) });
+  const body = await response.json() as { code: string; line: string };
+  expect(response.status).toBe(409);
+  expect(["not_available", "not_on_this_model"]).toContain(body.code);
+  if (body.code === "not_available" && body.line === CLIP_PICTURES_LINE) expect(body.line).toBe(CLIP_PICTURES_LINE);
+});
+test("the catalog now lists clip as wired (available only when a part is ready)", async () => {
+  const catalog = await jobsCatalog("adult");
+  const clip = catalog.jobs.find((j) => j.job === "clip")!;
+  expect(clip.available).toBe(false); // nothing is installed in the test environment
+});
