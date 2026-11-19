@@ -37,10 +37,84 @@
           "measured_on": "2026-11-15, 4-bit streaming build, 864x480, 5 s, 178 to 193 s"
         }
       ]
+    },
+    {
+      "job": "swap",
+      "limits": {
+        "max_seconds": {
+          "standard": 30,
+          "boost": 30
+        },
+        "max_references": 9,
+        "shapes": {
+          "landscape": {
+            "standard": {
+              "width": 384,
+              "height": 288
+            },
+            "boost": {
+              "width": 512,
+              "height": 384
+            }
+          },
+          "portrait": {
+            "standard": {
+              "width": 288,
+              "height": 384
+            },
+            "boost": {
+              "width": 384,
+              "height": 512
+            }
+          }
+        }
+      },
+      "audiences": [
+        "adult"
+      ],
+      "capabilities": {
+        "text": false,
+        "end_picture": false,
+        "sound": false,
+        "keeps_likeness": true
+      },
+      "recipe": "recipes/swap.md",
+      "adapter": "guide-video-swap",
+      "peaks": [
+        {
+          "shape": "landscape",
+          "level": "standard",
+          "bytes": 66000000000,
+          "status": "measured",
+          "measured_on": "2026-11-17, 384x288, one 56-frame segment, 66 GB"
+        },
+        {
+          "shape": "landscape",
+          "level": "boost",
+          "bytes": 90000000000,
+          "status": "measured",
+          "measured_on": "2026-11-17, 512x384, one 56-frame segment, 85 to 90 GB (the top of the range is declared)"
+        },
+        {
+          "shape": "portrait",
+          "level": "standard",
+          "bytes": 66000000000,
+          "status": "unverified",
+          "measured_on": "288x384 has the pixel count of the measured 384x288; not measured on its own"
+        },
+        {
+          "shape": "portrait",
+          "level": "boost",
+          "bytes": 90000000000,
+          "status": "unverified",
+          "measured_on": "384x512 has the pixel count of the measured 512x384; not measured on its own"
+        }
+      ]
     }
   ],
   "notes": [
     "Settled recipe (2026-11-17): 24 steps, handheld-camera wording, then a 1.5x lanczos upscale with a light sharpen.",
-    "Audio: high-pass at 70 Hz, a noise gate, a gentle compressor, then loudness to -15. The clip opens with about 1.2 seconds of very quiet room noise, so the gate must come before any loudness step."
+    "Audio: high-pass at 70 Hz, a noise gate, a gentle compressor, then loudness to -15. The clip opens with about 1.2 seconds of very quiet room noise, so the gate must come before any loudness step.",
+    "Swap (2026-11-17): the model makes only a donor clip, 56 frames at 24 fps per call (about 2.33 s), guided by the original footage; the composite step keeps every original pixel outside the head. The numbers the swap reads are listed in recipes/swap.md after the measured line."
   ]
 }

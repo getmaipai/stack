@@ -4,6 +4,7 @@ import { StackMakeRequest, StackMakeResult, StackMakeRefusal } from "@maipai/spe
 import type { AppEnv } from "@/types";
 import { listParts } from "@/lib/partsList";
 import { dispatchSong, dispatchSongEdit, dispatchStems } from "@/lib/makeDispatchAudio";
+import { dispatchSwap } from "@/lib/makeDispatchSwap";
 import { dispatchCharacterSheet, dispatchContactSheet } from "@/lib/makeDispatchSheets";
 import { planMake } from "@/lib/makePlan";
 import { WIRED_JOBS, dispatchClip, dispatchPicture, dispatchPictureEdit, type PictureBytes } from "@/lib/makeDispatch";

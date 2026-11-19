@@ -5,7 +5,7 @@ import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/st
 import type { MakePlan } from "@/lib/makePlan";
 import { fillRecipe } from "@/lib/recipe";
 
-export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit", "clip", "song", "song_edit", "stems", "character_sheet", "contact_sheet"]);
+export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit", "clip", "swap", "song", "song_edit", "stems", "character_sheet", "contact_sheet"]);
 
 type Forward = (path: string, body: unknown) => Promise<{ status: number; json: unknown }>;
 type Planned = Extract<MakePlan, { ok: true }>;

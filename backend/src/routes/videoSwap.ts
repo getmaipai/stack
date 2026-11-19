@@ -10,6 +10,9 @@ import { h3SwapReady, H3_SWAP_JOB_KIND, H3_SWAP_MAX_SECONDS, stashH3Swap, unstas
 import { deleteResult, isJobId, posterPath, readResult, videoPath } from "@/video/results";
 import { existsSync } from "node:fs";
 import { fileResponse } from "@/routes/videoGenerations";
+import { discardStagedSwap, SWAP_MAKE_JOB_KIND } from "@/lib/makeDispatchSwap";
+
+const isSwapKind = (kind: string): boolean => kind === H3_SWAP_JOB_KIND || kind === SWAP_MAKE_JOB_KIND;
 
 const ErrorBody = z.object({ error: z.string(), code: z.string().optional(), job: z.string().optional() });
 const Reply = z.object({ created: z.number().optional(), job: z.string(), state: z.string().optional(), data: z.array(z.unknown()).optional() });
@@ -49,13 +52,13 @@ videoSwapRoutes.openapi(post, async (c) => {
 });
 
 const statusRoute = createRoute({ method: "get", path: "/swap/{job}", tags: ["Video"], summary: "Get H3 swap job progress", request: { params: z.object({ job: z.string() }) }, responses: { 200: { content: { "application/json": { schema: z.record(z.string(), z.unknown()) } }, description: "Job progress" }, 404: { content: { "application/json": { schema: ErrorBody } }, description: "Unknown job" } } });
-videoSwapRoutes.openapi(statusRoute, (c) => { const id = c.req.valid("param").job; const job = getJob(id); if (!job || job.kind !== H3_SWAP_JOB_KIND) return c.json({ error: "No such swap job." }, 404); return c.json({ job: id, state: job.state, progress: job.percent, status: job.status, error: job.reason ?? null, result: readResult(id) ? { video: `/v1/videos/swap/${id}/video.mp4`, poster: `/v1/videos/swap/${id}/poster.jpg` } : null }, 200); });
+videoSwapRoutes.openapi(statusRoute, (c) => { const id = c.req.valid("param").job; const job = getJob(id); if (!job || !isSwapKind(job.kind)) return c.json({ error: "No such swap job." }, 404); return c.json({ job: id, state: job.state, progress: job.percent, status: job.status, error: job.reason ?? null, result: readResult(id) ? { video: `/v1/videos/swap/${id}/video.mp4`, poster: `/v1/videos/swap/${id}/poster.jpg` } : null }, 200); });
 const videoRoute = createRoute({ method: "get", path: "/swap/{job}/video.mp4", tags: ["Video"], summary: "Fetch the finished H3 swap", request: { params: z.object({ job: z.string() }) }, responses: { 200: { description: "MP4" }, 206: { description: "MP4 range" }, 404: { content: { "application/json": { schema: ErrorBody } }, description: "No result" } } });
 videoSwapRoutes.openapi(videoRoute, (c) => { const id = c.req.valid("param").job; if (!isJobId(id) || !existsSync(videoPath(id))) return c.json({ error: "That swap clip is gone." }, 404); return fileResponse(c, videoPath(id), "video/mp4", c.req.header("range")) as never; });
 const posterRoute = createRoute({ method: "get", path: "/swap/{job}/poster.jpg", tags: ["Video"], summary: "Fetch the H3 swap poster", request: { params: z.object({ job: z.string() }) }, responses: { 200: { description: "JPEG" }, 404: { content: { "application/json": { schema: ErrorBody } }, description: "No poster" } } });
 videoSwapRoutes.openapi(posterRoute, (c) => { const id = c.req.valid("param").job; if (!isJobId(id) || !existsSync(posterPath(id))) return c.json({ error: "That poster is gone." }, 404); return fileResponse(c, posterPath(id), "image/jpeg", undefined) as never; });
 const deleteRoute = createRoute({ method: "delete", path: "/swap/{job}", tags: ["Video"], summary: "Cancel or delete an H3 swap", request: { params: z.object({ job: z.string() }) }, responses: { 200: { content: { "application/json": { schema: Reply } }, description: "Cancelled or deleted" }, 404: { content: { "application/json": { schema: ErrorBody } }, description: "Unknown swap" } } });
-videoSwapRoutes.openapi(deleteRoute, (c) => { const id = c.req.valid("param").job; const job = getJob(id); if (job?.kind === H3_SWAP_JOB_KIND && ["queued", "running", "stalled"].includes(job.state)) { cancelJob(id); const token = String((job.input as { token?: string } | null)?.token ?? ""); unstashH3Swap(token); return c.json({ job: id, state: "cancelled" }, 200); } if (deleteResult(id)) return c.json({ job: id, state: "deleted" }, 200); return c.json({ error: "No such swap job." }, 404); });
+videoSwapRoutes.openapi(deleteRoute, (c) => { const id = c.req.valid("param").job; const job = getJob(id); if (job && isSwapKind(job.kind) && ["queued", "running", "stalled"].includes(job.state)) { cancelJob(id); const token = String((job.input as { token?: string } | null)?.token ?? ""); if (job.kind === H3_SWAP_JOB_KIND) unstashH3Swap(token); else discardStagedSwap(token); return c.json({ job: id, state: "cancelled" }, 200); } if (deleteResult(id)) return c.json({ job: id, state: "deleted" }, 200); return c.json({ error: "No such swap job." }, 404); });
 
 async function saveSource(file: File): Promise<string> {
   const dir = join(dataDir, "tmp", "video-swap", "uploads"); mkdirSync(dir, { recursive: true, mode: 0o700 });

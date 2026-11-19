@@ -24,10 +24,18 @@ test("the adult catalog lists all fourteen jobs and a plain reason for any job n
   const catalog = await jobsCatalog("adult");
   expect(catalog.audience).toBe("adult");
   expect(catalog.jobs.map((j) => j.job)).toEqual(["picture", "picture_edit", "clip", "clip_from_sheet", "restyle", "swap", "character_sheet", "contact_sheet", "song", "song_edit", "sound_effect", "stems", "vocal_swap", "lyric_timing"]);
-  const swap = catalog.jobs.find((j) => j.job === "swap") as unknown as { available: boolean; why_not: string | null; alternatives: unknown[] };
-  expect(swap.available).toBe(false);
-  expect(swap.why_not).toContain("An admin can");
-  expect(swap.alternatives).toEqual([]);
+  const restyle = catalog.jobs.find((j) => j.job === "restyle") as unknown as { available: boolean; why_not: string | null; alternatives: unknown[] };
+  expect(restyle.available).toBe(false);
+  expect(restyle.why_not).toContain("An admin can");
+  expect(restyle.alternatives).toEqual([]);
+});
+
+test("the swap job is wired: a pack serves it, the catalog names the part and its limits, and an adult-only model is not offered to a minor (SWAP-01)", async () => {
+  const swap = (await jobsCatalog("adult")).jobs.find((j) => j.job === "swap") as unknown as { available: boolean; why_not: string | null; alternatives: Array<{ part: string }>; limits: { levels: string[]; max_references?: number } };
+  expect(swap.limits.levels).toEqual(["standard", "boost"]);
+  expect(swap.limits.max_references).toBe(9);
+  if (!swap.available) expect(swap.why_not).toContain("An admin can");
+  expect(swap.alternatives.length + (swap.available ? 1 : 0)).toBe(1);
 });
 
 test("the minor catalog lists only jobs a part in the minor's list serves, and says no why and no alternative", async () => {

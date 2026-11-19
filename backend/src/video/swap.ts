@@ -13,6 +13,7 @@ import { VideoError } from "./videoGen";
 export const H3_SWAP_JOB_KIND = "h3-swap";
 export const H3_SWAP_MAX_SECONDS = 10;
 export const H3_SWAP_SEGMENT_FRAMES = 56;
+const MODEL_ID = "video-minimax-h3-ref2va-mlx";
 // Each model call handles 56 frames at 24 fps (about 2.333 seconds).
 // A ten second window therefore needs at most ceil(10 / 2.333) = 5 segments.
 const FPS = 24;
@@ -43,8 +44,8 @@ function prompt(description: string, references: number): string {
   const pictures = Array.from({ length: references }, (_, i) => `<Picture ${i + 1}>`).join(", ");
   return PROMPT.replaceAll("<Picture 1>, <Picture 2> and <Picture 3>", pictures).replace("from <Picture 1>", `from ${pictures}`).replace("{description}", description);
 }
-export function h3SwapCommand(input: { binary: string; lora: string; models: string; width: number; height: number; frames: number; guide: string; output: string; references: string[]; description: string }): { argv: string[]; env: Record<string, string> } {
-  return { argv: [input.binary, "video", "generate", prompt(input.description, input.references.length), "--model", "video-minimax-h3-ref2va-mlx", "--width", String(input.width), "--height", String(input.height), "--num-frames", String(input.frames), "--seed", "42", ...input.references.flatMap((path) => ["--reference", `image:${path}`]), "--h3-guide-video", input.guide, "--h3-lora", `${input.lora}:1.0`, "--h3-weight-mode", "quantized", "--output", input.output], env: { MERERUN_MODELS_DIR: input.models } };
+export function h3SwapCommand(input: { binary: string; lora: string; models: string; width: number; height: number; frames: number; guide: string; output: string; references: string[]; description: string; /** The pack recipe, filled; the built-in text when absent. */ prompt?: string; seed?: number; adapterStrength?: number }): { argv: string[]; env: Record<string, string> } {
+  return { argv: [input.binary, "video", "generate", input.prompt ?? prompt(input.description, input.references.length), "--model", MODEL_ID, "--width", String(input.width), "--height", String(input.height), "--num-frames", String(input.frames), "--seed", String(input.seed ?? 42), ...input.references.flatMap((path) => ["--reference", `image:${path}`]), "--h3-guide-video", input.guide, "--h3-lora", `${input.lora}:${input.adapterStrength === undefined ? "1.0" : Number.isInteger(input.adapterStrength) ? input.adapterStrength.toFixed(1) : input.adapterStrength}`, "--h3-weight-mode", "quantized", "--output", input.output], env: { MERERUN_MODELS_DIR: input.models } };
 }
 function cancelled(signal: AbortSignal): void { if (signal.aborted) throw new VideoError("cancelled", "Cancelled.", 499); }
 async function run(args: string[], signal: AbortSignal, env?: Record<string, string>) {
@@ -122,8 +123,8 @@ export function registerH3SwapJobs(): void {
       if (step.code !== 0 || !existsSync(final)) throw new VideoError("failed", "The finished clip could not be written.", 500);
       const poster = join(root, "poster.jpg"); step = await run([ffmpeg, "-y", "-i", final, "-frames:v", "1", "-q:v", "2", poster], signal);
       if (step.code !== 0 || !existsSync(poster)) throw new VideoError("failed", "The poster could not be made.", 500);
-      commitResult({ job: job.id, created: Math.floor(Date.now() / 1000), width: width * 2, height: height * 2, frames: Math.ceil(input.seconds * FPS), fps: FPS, seconds: input.seconds, seed: 42, model: "video-minimax-h3-ref2va-mlx", quality: "h3", audio: true, mode: "retake", lora_ids: [], ms: Date.now() - started, bytes: 0, poster_bytes: 0, mlx_peak_gb: PEAK[input.size] / GB }, root);
-      update({ status: "done", percent: 100 }); return { job: job.id, segments: count, seconds: input.seconds, model: "video-minimax-h3-ref2va-mlx" };
+      commitResult({ job: job.id, created: Math.floor(Date.now() / 1000), width: width * 2, height: height * 2, frames: Math.ceil(input.seconds * FPS), fps: FPS, seconds: input.seconds, seed: 42, model: MODEL_ID, quality: "h3", audio: true, mode: "retake", lora_ids: [], ms: Date.now() - started, bytes: 0, poster_bytes: 0, mlx_peak_gb: PEAK[input.size] / GB }, root);
+      update({ status: "done", percent: 100 }); return { job: job.id, segments: count, seconds: input.seconds, model: MODEL_ID };
     } catch (error) { rmSync(root, { recursive: true, force: true }); throw error; }
     finally { lease.detach(); try { unlinkSync(staged.source); } catch { /* already removed */ } }
   }, { generator: { role: "video", memory: (job) => h3SwapMemory((job.input ?? {}) as Record<string, unknown>) } });
@@ -132,3 +133,28 @@ export function registerH3SwapJobs(): void {
 const pending = new Map<string, SwapInput>();
 export function stashH3Swap(token: string, input: SwapInput): void { pending.set(token, input); }
 export function unstashH3Swap(token: string): void { pending.delete(token); }
+
+// SWAP-01: the donor step as an adapter a pack names (`adapter` on its swap job), so the generic make door never knows which model draws the donor.
+// One call draws one segment guided by the original footage; the composite step (compositeSwap.ts) decides what of it reaches the final clip.
+export const GUIDE_VIDEO_SWAP_ADAPTER = "guide-video-swap";
+export interface DonorRequest { guide: string; output: string; references: string[]; prompt: string; seed: number; adapterStrength: number; width: number; height: number; frames: number; signal: AbortSignal; onStatus?: (status: string) => void }
+export interface DonorAdapter { ready(): boolean; generate(request: DonorRequest): Promise<void> }
+export const guideVideoSwapAdapter: DonorAdapter = {
+  ready: () => h3SwapReady(),
+  async generate(request) {
+    const paths = h3SwapPaths();
+    const command = h3SwapCommand({ ...paths, width: request.width, height: request.height, frames: request.frames, guide: request.guide, output: request.output, references: request.references, description: "", prompt: request.prompt, seed: request.seed, adapterStrength: request.adapterStrength });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await run(command.argv, request.signal, command.env);
+      if (result.code === 0 && existsSync(request.output)) return;
+      if (result.code !== 133 || attempt === 2) throw new VideoError("failed", "The new head could not be drawn for one part of the clip. Try again with a shorter clip or a smaller size.", 500);
+      request.onStatus?.("Waiting to retry one part of the clip"); await deps.sleep(30_000, request.signal);
+    }
+  },
+};
+export const DONOR_ADAPTERS: Readonly<Record<string, DonorAdapter>> = { [GUIDE_VIDEO_SWAP_ADAPTER]: guideVideoSwapAdapter };
+
+/** Files a finished composite swap in the video result store, where the old swap route and the generic job routes serve it from. */
+export function commitCompositeSwap(info: { job: string; width: number; height: number; fps: number; frames: number; seconds: number; seed: number; ms: number; peakBytes: number }, work: string): void {
+  commitResult({ job: info.job, created: Math.floor(Date.now() / 1000), width: info.width, height: info.height, frames: info.frames, fps: info.fps, seconds: info.seconds, seed: info.seed, model: MODEL_ID, quality: "h3", audio: true, mode: "retake", lora_ids: [], ms: info.ms, bytes: 0, poster_bytes: 0, mlx_peak_gb: info.peakBytes / GB }, work);
+}
