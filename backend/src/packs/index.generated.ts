@@ -8,8 +8,10 @@ import pack2 from "./ace-step-1-5-xl-turbo-bf16/model-pack.json" with { type: "j
 import recipe2_0 from "./ace-step-1-5-xl-turbo-bf16/recipes/song-edit.md" with { type: "text" };
 import recipe2_1 from "./ace-step-1-5-xl-turbo-bf16/recipes/song.md" with { type: "text" };
 import pack3 from "./flux3-image-klein/model-pack.json" with { type: "json" };
-import recipe3_0 from "./flux3-image-klein/recipes/picture.md" with { type: "text" };
-import recipe3_1 from "./flux3-image-klein/recipes/picture_edit.md" with { type: "text" };
+import recipe3_0 from "./flux3-image-klein/recipes/character-sheet.md" with { type: "text" };
+import recipe3_1 from "./flux3-image-klein/recipes/contact-sheet.md" with { type: "text" };
+import recipe3_2 from "./flux3-image-klein/recipes/picture.md" with { type: "text" };
+import recipe3_3 from "./flux3-image-klein/recipes/picture_edit.md" with { type: "text" };
 import pack4 from "./htdemucs/model-pack.json" with { type: "json" };
 import recipe4_0 from "./htdemucs/recipes/stems.md" with { type: "text" };
 import pack5 from "./ltx-2-5-bf16-distilled-mlx-max/model-pack.json" with { type: "json" };
@@ -20,17 +22,19 @@ import recipe6_0 from "./ltx-2-5-q8-distilled-mlx/recipes/clip.md" with { type: 
 import pack7 from "./minimax-h3/model-pack.json" with { type: "json" };
 import recipe7_0 from "./minimax-h3/recipes/clip.md" with { type: "text" };
 import pack8 from "./minimax-h3-image/model-pack.json" with { type: "json" };
-import recipe8_0 from "./minimax-h3-image/recipes/picture.md" with { type: "text" };
-import recipe8_1 from "./minimax-h3-image/recipes/picture_edit.md" with { type: "text" };
+import recipe8_0 from "./minimax-h3-image/recipes/character-sheet.md" with { type: "text" };
+import recipe8_1 from "./minimax-h3-image/recipes/contact-sheet.md" with { type: "text" };
+import recipe8_2 from "./minimax-h3-image/recipes/picture.md" with { type: "text" };
+import recipe8_3 from "./minimax-h3-image/recipes/picture_edit.md" with { type: "text" };
 
 export const PACK_SOURCES: ReadonlyArray<{ dir: string; pack: unknown; recipes: Readonly<Record<string, string>> }> = [
   { dir: "ace-step-1-5-turbo", pack: pack0, recipes: { "recipes/song-edit.md": recipe0_0, "recipes/song.md": recipe0_1 } },
   { dir: "ace-step-1-5-xl-sft-bf16", pack: pack1, recipes: { "recipes/song.md": recipe1_0 } },
   { dir: "ace-step-1-5-xl-turbo-bf16", pack: pack2, recipes: { "recipes/song-edit.md": recipe2_0, "recipes/song.md": recipe2_1 } },
-  { dir: "flux3-image-klein", pack: pack3, recipes: { "recipes/picture.md": recipe3_0, "recipes/picture_edit.md": recipe3_1 } },
+  { dir: "flux3-image-klein", pack: pack3, recipes: { "recipes/character-sheet.md": recipe3_0, "recipes/contact-sheet.md": recipe3_1, "recipes/picture.md": recipe3_2, "recipes/picture_edit.md": recipe3_3 } },
   { dir: "htdemucs", pack: pack4, recipes: { "recipes/stems.md": recipe4_0 } },
   { dir: "ltx-2-5-bf16-distilled-mlx-max", pack: pack5, recipes: { "recipes/clip.md": recipe5_0, "recipes/clip_from_sheet.md": recipe5_1 } },
   { dir: "ltx-2-5-q8-distilled-mlx", pack: pack6, recipes: { "recipes/clip.md": recipe6_0 } },
   { dir: "minimax-h3", pack: pack7, recipes: { "recipes/clip.md": recipe7_0 } },
-  { dir: "minimax-h3-image", pack: pack8, recipes: { "recipes/picture.md": recipe8_0, "recipes/picture_edit.md": recipe8_1 } },
+  { dir: "minimax-h3-image", pack: pack8, recipes: { "recipes/character-sheet.md": recipe8_0, "recipes/contact-sheet.md": recipe8_1, "recipes/picture.md": recipe8_2, "recipes/picture_edit.md": recipe8_3 } },
 ];

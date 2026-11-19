@@ -15754,7 +15754,7 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Make one thing with a generic job (MODELPACK-JOBS-01): picture and clip",
+        "summary": "Make one thing with a generic job (MODELPACK-JOBS-01): picture, clip, song, stems and sheets",
         "description": "A second door to the existing runners. The request names a job and its inputs and may name a `part` only by an id this Stack gave it. The Stack picks the part (the named one if it serves the job and is ready, else the first ready one in the audience's order), checks the inputs against the model's pack, fills the pack's recipe, and hands the work to the same runner the old route uses, so the same seed makes the same files. Refusals are `StackMakeRefusal`: `not_on_this_model` (the line says what can do it; a minor's names no model), `too_many_references`, `too_long`, `shape_not_served`, `level_not_served`. `not_available` means no part that can do it is turned on and ready, or the job is not wired through this door yet (`GET /stack/v1/jobs/catalog` says which).",
         "requestBody": {
           "required": true,

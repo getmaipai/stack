@@ -4,12 +4,13 @@ import { StackMakeRequest, StackMakeResult, StackMakeRefusal } from "@maipai/spe
 import type { AppEnv } from "@/types";
 import { listParts } from "@/lib/partsList";
 import { dispatchSong, dispatchSongEdit, dispatchStems } from "@/lib/makeDispatchAudio";
+import { dispatchCharacterSheet, dispatchContactSheet } from "@/lib/makeDispatchSheets";
 import { planMake } from "@/lib/makePlan";
 import { WIRED_JOBS, dispatchClip, dispatchPicture, dispatchPictureEdit, type PictureBytes } from "@/lib/makeDispatch";
 
 const NotAvailable = z.object({ code: z.literal("not_available"), line: z.string().min(1) }).strict();
 const route = createRoute({
-  method: "post", path: "/", tags: ["Jobs"], summary: "Make one thing with a generic job (MODELPACK-JOBS-01): picture and clip",
+  method: "post", path: "/", tags: ["Jobs"], summary: "Make one thing with a generic job (MODELPACK-JOBS-01): picture, clip, song, stems and sheets",
   description: "A second door to the existing runners. The request names a job and its inputs and may name a `part` only by an id this Stack gave it. The Stack picks the part (the named one if it serves the job and is ready, else the first ready one in the audience's order), checks the inputs against the model's pack, fills the pack's recipe, and hands the work to the same runner the old route uses, so the same seed makes the same files. Refusals are `StackMakeRefusal`: `not_on_this_model` (the line says what can do it; a minor's names no model), `too_many_references`, `too_long`, `shape_not_served`, `level_not_served`. `not_available` means no part that can do it is turned on and ready, or the job is not wired through this door yet (`GET /stack/v1/jobs/catalog` says which).",
   request: { body: { required: true, content: { "application/json": { schema: StackMakeRequest } } } },
   responses: {
@@ -46,6 +47,6 @@ jobsMakeRoutes.openapi(route, async (c) => {
     const response = await app.request(path, { method: "POST", body: form });
     return { status: response.status, json: await response.json().catch(() => null) };
   };
-  const result = request.job === "song" ? await dispatchSong(request, plan, forward) : request.job === "song_edit" ? await dispatchSongEdit(request, plan, read, forward) : request.job === "stems" ? await dispatchStems(request, plan, read, forward) : request.job === "clip" ? await dispatchClip(request, plan, forward, read) : request.job === "picture_edit" ? await dispatchPictureEdit(request, plan, read, forwardForm) : await dispatchPicture(request as never, plan, forward);
+  const result = request.job === "song" ? await dispatchSong(request, plan, forward) : request.job === "song_edit" ? await dispatchSongEdit(request, plan, read, forward) : request.job === "stems" ? await dispatchStems(request, plan, read, forward) : request.job === "clip" ? await dispatchClip(request, plan, forward, read) : request.job === "picture_edit" ? await dispatchPictureEdit(request, plan, read, forwardForm) : request.job === "character_sheet" ? await dispatchCharacterSheet(request, plan, read, forwardForm) : request.job === "contact_sheet" ? await dispatchContactSheet(request, plan, read, forwardForm) : await dispatchPicture(request as never, plan, forward);
   return c.json(result.body as never, result.status as 200) as never;
 });
