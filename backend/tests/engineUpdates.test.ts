@@ -7,7 +7,7 @@ import { engineTagRoot } from "@/lib/store/layout";
 import { __resetSettingsForTests, updateSettings } from "@/settings";
 import { swapEngine } from "@/updates/engines";
 
-const release = (tag: string) => new Response(JSON.stringify({ tag_name: tag }), { status: 200, headers: { "content-type": "application/json" } });
+const release = (tag: string) => new Response(JSON.stringify([{ tag_name: "v1.0.0" }, { tag_name: tag }]), { status: 200, headers: { "content-type": "application/json" } });
 const installBuild = async (tag: string) => {
   mkdirSync(engineTagRoot("llama-server", tag), { recursive: true });
   writeFileSync(join(engineTagRoot("llama-server", tag), ".engine-ready"), "now");
@@ -22,7 +22,7 @@ afterEach(() => { __resetEngineUpdatesForTests(); rmSync(engineTagRoot("llama-se
 test("a newer release creates one record with the day it was first noticed, and a second check keeps that day", async () => {
   const urls: string[] = [];
   await checkEngineUpdates({ fetcher: async (url) => { urls.push(String(url)); return release("b5"); }, now: t0 });
-  expect(urls).toEqual(["https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"]);
+  expect(urls).toEqual(["https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=30"]);
   expect(engineUpdateFor("llama-server")).toEqual({ newest: "b5", since: t0.toISOString() });
   await checkEngineUpdates({ fetcher: async () => release("b5"), now: later(ENGINE_UPDATE_CHECK_INTERVAL_MS + 1) });
   expect(engineUpdateFor("llama-server")).toEqual({ newest: "b5", since: t0.toISOString() });

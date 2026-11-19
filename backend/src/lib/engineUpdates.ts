@@ -14,7 +14,7 @@ import { currentEngine } from "@/updates/engines";
 
 /** One place for every program with a known upstream, keyed by engine id. `tagPattern` picks the builds the Stack's pins use, so a release named any other way is ignored. */
 export const ENGINE_UPSTREAMS: Record<string, { latestReleaseUrl: string; tagPattern: RegExp }> = {
-  "llama-server": { latestReleaseUrl: "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest", tagPattern: /^b(\d+)$/ },
+  "llama-server": { latestReleaseUrl: "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=30", tagPattern: /^b(\d+)$/ },
 };
 
 export const ENGINE_UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
@@ -62,8 +62,12 @@ async function newestTag(engine: string, fetcher: UpdateFetcher): Promise<string
   const upstream = ENGINE_UPSTREAMS[engine]!;
   const response = await fetcher(upstream.latestReleaseUrl, { headers: { accept: "application/vnd.github+json", "user-agent": conditionalHeaders(null)["user-agent"] ?? "maipai-stack" }, signal: AbortSignal.timeout(ENGINE_UPDATE_FETCH_TIMEOUT_MS) });
   if (!response.ok) return null;
-  const body = await response.json() as { tag_name?: unknown };
-  return typeof body.tag_name === "string" && upstream.tagPattern.test(body.tag_name) ? body.tag_name : null;
+  // The "latest" release endpoint can point at a stray tag outside the build scheme (llama.cpp's answers v1.0.0 while every build is bNNNN), so read the recent list and take the highest build that matches.
+  const body = await response.json() as unknown;
+  const tags = (Array.isArray(body) ? body : [body]).map((item) => (item as { tag_name?: unknown } | null)?.tag_name).filter((tag): tag is string => typeof tag === "string" && upstream.tagPattern.test(tag));
+  let best: string | null = null;
+  for (const tag of tags) if (best === null || buildNumber(engine, tag)! > buildNumber(engine, best)!) best = tag;
+  return best;
 }
 
 export interface EngineUpdateCheckOptions { fetcher?: UpdateFetcher; now?: Date; /** Skip the 12-hour throttle: an explicit check. */ force?: boolean; }
