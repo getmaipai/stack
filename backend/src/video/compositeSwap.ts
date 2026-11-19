@@ -35,6 +35,8 @@ export interface CompositeSwapInput {
   captionBox?: [number, number, number, number];
   /** 0.4 for slow shots, 0.7 for fast head motion. */
   flowAlpha?: number; maskSmoothFrames?: number;
+  /** The source's own frame rate (24 when absent); the donor is resampled to it and the composite is written at it. */
+  fps?: number;
   ffmpeg?: string; ffprobe?: string; signal?: AbortSignal;
 }
 export interface CompositeSwapReport {
@@ -44,8 +46,12 @@ export interface CompositeSwapReport {
   residual_original_head_frames: Array<[number, number]>;
   /** Pixels more than 12 px from the mask that differ from the original (must be 0), and original skin recoloured on purpose, counted apart. */
   outside_mask_pixels_changed: number; recoloured_leftover_skin_pixels: number;
+  /** The caption box that was erased (clamped inside the frame), and the share of its text edges that survived the erase (0 clean, 1 untouched; null when there was no text). */
+  caption_box?: [number, number, number, number] | null; caption_residue?: number | null;
+  /** After the encode, read back from the finished file: the worst share of far-from-head pixels that changed in any frame, and the frames above the allowed share. */
+  encoded_outside_changed_share?: number | null; encoded_outside_bad_frames?: number[];
 }
-export type CompositeSwapResult = { ok: true; report: CompositeSwapReport } | { ok: false; line: string };
+export type CompositeSwapResult = { ok: true; report: CompositeSwapReport } | { ok: false; line: string; code?: string };
 export type CompositeSwapRunner = (command: string[], env: Record<string, string>, signal?: AbortSignal) => Promise<{ code: number; stdout: string; stderr: string }>;
 
 const ENVIRONMENT_MISSING = "The swap composite step is not installed yet. Install it from the AI and models page, then try the swap again.";
@@ -58,26 +64,67 @@ let runner: CompositeSwapRunner = async (command, env, signal) => {
 };
 export function __setCompositeSwapRunnerForTests(next: CompositeSwapRunner | null): void { runner = next ?? runner; }
 
+/** The worker's environment: the Stack's own ffmpeg and ffprobe go in under the names the whole Stack uses (STACK_MEDIA_FFMPEG, STACK_MEDIA_FFPROBE), so the worker never depends on what a service manager's PATH holds. A path the caller resolved wins over one already in the environment. */
+export function compositeSwapEnv(tools: { ffmpeg?: string; ffprobe?: string } = {}): Record<string, string> {
+  const ffmpeg = tools.ffmpeg ?? process.env.STACK_MEDIA_FFMPEG ?? "ffmpeg";
+  const ffprobe = tools.ffprobe ?? process.env.STACK_MEDIA_FFPROBE ?? "ffprobe";
+  return managedEnv({ PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1", STACK_MEDIA_FFMPEG: ffmpeg, STACK_MEDIA_FFPROBE: ffprobe, COMPOSITE_SWAP_FFMPEG: ffmpeg, COMPOSITE_SWAP_FFPROBE: ffprobe });
+}
+
 export function compositeSwapArgs(input: CompositeSwapInput, workerPath: string): string[] {
   const args = [compositeSwapPython(), workerPath, "--source", input.source, "--donor", input.donor, "--out", input.out, "--start", String(input.start ?? 0), "--seconds", String(input.seconds ?? 2.3333)];
   if (input.captionBox) args.push("--caption-box", input.captionBox.join(","));
   if (input.reportPath) args.push("--report", input.reportPath);
   if (input.flowAlpha !== undefined) args.push("--flow-alpha", String(input.flowAlpha));
   if (input.maskSmoothFrames !== undefined) args.push("--mask-smooth-frames", String(input.maskSmoothFrames));
+  if (input.fps !== undefined) args.push("--fps", String(input.fps));
   return args;
 }
 
-/** Runs the composite worker. A missing environment, a cancelled run and any failure each come back as one plain line (what went wrong, what to do). */
-export async function compositeSwap(input: CompositeSwapInput): Promise<CompositeSwapResult> {
-  if (process.env.COMPOSITE_SWAP_PYTHON ? !existsSync(process.env.COMPOSITE_SWAP_PYTHON) : !compositeSwapEnvironmentReady()) return { ok: false, line: ENVIRONMENT_MISSING };
-  const workerPath = await materializeCompositeSwapWorker();
-  const env = managedEnv({ PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1", COMPOSITE_SWAP_FFMPEG: input.ffmpeg ?? "ffmpeg", COMPOSITE_SWAP_FFPROBE: input.ffprobe ?? "ffprobe" });
+function environmentMissing(): boolean { return process.env.COMPOSITE_SWAP_PYTHON ? !existsSync(process.env.COMPOSITE_SWAP_PYTHON) : !compositeSwapEnvironmentReady(); }
+
+/** Runs the worker once and returns its last stdout line as JSON, or one plain line. A missing environment, a cancelled run and any failure each come back as one line (what went wrong, what to do). */
+async function runWorker<T extends object>(args: string[], tools: { ffmpeg?: string; ffprobe?: string }, signal: AbortSignal | undefined, isResult: (value: Record<string, unknown>) => boolean): Promise<{ ok: true; value: T } | { ok: false; line: string; code?: string }> {
+  if (environmentMissing()) return { ok: false, line: ENVIRONMENT_MISSING, code: "environment_missing" };
   let result;
-  try { result = await runner(compositeSwapArgs(input, workerPath), env, input.signal); } catch { return { ok: false, line: GENERIC_FAILURE }; }
-  if (input.signal?.aborted) return { ok: false, line: "The swap was cancelled before the composite step finished." };
+  try { result = await runner(args, compositeSwapEnv(tools), signal); } catch { return { ok: false, line: GENERIC_FAILURE }; }
+  if (signal?.aborted) return { ok: false, line: "The swap was cancelled before the composite step finished.", code: "cancelled" };
   const last = result.stdout.trim().split("\n").filter(Boolean).pop() ?? "";
-  let parsed: unknown; try { parsed = JSON.parse(last); } catch { parsed = null; }
-  if (result.code !== 0) { const error = (parsed as { error?: unknown } | null)?.error; return { ok: false, line: typeof error === "string" && error ? error : GENERIC_FAILURE }; }
-  if (!parsed || typeof (parsed as { frames?: unknown }).frames !== "number") return { ok: false, line: GENERIC_FAILURE };
-  return { ok: true, report: parsed as CompositeSwapReport };
+  let parsed: Record<string, unknown> | null; try { parsed = JSON.parse(last) as Record<string, unknown>; } catch { parsed = null; }
+  if (result.code !== 0) { const error = parsed?.error; return { ok: false, line: typeof error === "string" && error ? error : GENERIC_FAILURE, ...(typeof parsed?.code === "string" ? { code: parsed.code } : {}) }; }
+  if (!parsed || !isResult(parsed)) return { ok: false, line: GENERIC_FAILURE };
+  return { ok: true, value: parsed as T };
+}
+
+export async function compositeSwap(input: CompositeSwapInput): Promise<CompositeSwapResult> {
+  if (environmentMissing()) return { ok: false, line: ENVIRONMENT_MISSING, code: "environment_missing" };
+  const workerPath = await materializeCompositeSwapWorker();
+  const done = await runWorker<CompositeSwapReport>(compositeSwapArgs(input, workerPath), input, input.signal, (v) => typeof v.frames === "number");
+  return done.ok ? { ok: true, report: done.value } : done;
+}
+
+export interface ClipAnalysis {
+  /** x,y,w,h of burned-in text at source size, or null when none was found. */
+  caption_box: [number, number, number, number] | null; size: [number, number];
+  /** The most faces seen in one sampled frame, and the share of sampled frames with more than one. */
+  people_max: number; many_people_share: number;
+  /** Per requested segment: whether the head reaches the left, top or right edge of the frame. */
+  segments: Array<{ edge_contact: boolean }>;
+}
+/** Looks at the source before any model runs: caption, people, framing. `segments` are [start, seconds] pairs in the source's own time. */
+export async function analyzeClip(input: { source: string; start: number; seconds: number; segments: Array<[number, number]>; ffmpeg?: string; ffprobe?: string; signal?: AbortSignal }): Promise<{ ok: true; analysis: ClipAnalysis } | { ok: false; line: string; code?: string }> {
+  if (environmentMissing()) return { ok: false, line: ENVIRONMENT_MISSING, code: "environment_missing" };
+  const workerPath = await materializeCompositeSwapWorker();
+  const args = [compositeSwapPython(), workerPath, "--mode", "analyze", "--source", input.source, "--start", String(input.start), "--seconds", String(input.seconds), "--segments", input.segments.map(([a, b]) => `${a}:${b}`).join(",")];
+  const done = await runWorker<ClipAnalysis>(args, input, input.signal, (v) => Array.isArray(v.segments) && typeof v.people_max === "number");
+  return done.ok ? { ok: true, analysis: done.value } : done;
+}
+
+/** One square crop of one face per reference picture, written under `outDir`. The worker refuses a picture with no face, one with several people and more than nine pictures, each with a plain line and a code (`no_face`, `many_people`, `too_many_references`, `unreadable`). */
+export async function referenceCrops(input: { references: string[]; outDir: string; ffmpeg?: string; ffprobe?: string; signal?: AbortSignal }): Promise<{ ok: true; crops: string[] } | { ok: false; line: string; code?: string }> {
+  if (environmentMissing()) return { ok: false, line: ENVIRONMENT_MISSING, code: "environment_missing" };
+  const workerPath = await materializeCompositeSwapWorker();
+  const args = [compositeSwapPython(), workerPath, "--mode", "crops", "--references", input.references.join(","), "--out-dir", input.outDir];
+  const done = await runWorker<{ crops: string[] }>(args, input, input.signal, (v) => Array.isArray(v.crops));
+  return done.ok ? { ok: true, crops: done.value.crops } : done;
 }

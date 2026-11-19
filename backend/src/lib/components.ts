@@ -53,6 +53,7 @@ import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot } from "@
 import { ensureMlxAudioEnvironment, mlxAudioInstalled, mlxAudioRoot } from "@/speech/mlxAudio";
 import { RECORDED_SPEECH_NAME, ensureRecordedSpeechEnvironment, recordedSpeech, recordedSpeechEnvironmentReady, recordedSpeechRoot } from "@/recordedSpeech/recordedSpeech";
 import { ensureMaskEnvironment, maskEnvironmentReady, maskGenRoot, maskRequirementsFileFor, MASK_GEN_NAME } from "@/video/mask";
+import { compositeSwapEnvironmentReady, compositeSwapRoot, ensureCompositeSwapEnvironment, COMPOSITE_SWAP_NAME } from "@/video/compositeSwap";
 
 export const COMPONENT_JOB_KIND = "component.install";
 export const COMPONENT_FAILED_CODE = (id: string): string => `component-install-failed.${id}`;
@@ -149,6 +150,8 @@ const envLtx25Max: EnvDef = {
   },
 };
 const envMask: EnvDef = { name: MASK_GEN_NAME, approxBytes: ENV_BYTES.mask, root: maskGenRoot, ready: maskEnvironmentReady, link: engineCurrentPath(MASK_GEN_NAME), build: (onPhase, signal) => ensureMaskEnvironment(onPhase, signal) };
+/** The swap's head-only composite (numpy and OpenCV). Built on the first swap, never at install: about 0.1 GB, and only a swap needs it. */
+const envCompositeSwap: EnvDef = { name: COMPOSITE_SWAP_NAME, approxBytes: engineDownloadBytes(COMPOSITE_SWAP_NAME) ?? 0.15 * GB, root: compositeSwapRoot, ready: compositeSwapEnvironmentReady, lazy: true, build: (onPhase, signal) => ensureCompositeSwapEnvironment(onPhase, signal) };
 const envMusic: EnvDef = {
   name: MUSIC_GEN_NAME, approxBytes: ENV_BYTES.music, root: musicGenRoot, ready: musicGenEnvironmentReady, link: engineCurrentPath(MUSIC_GEN_NAME), stop: () => musicGen.stop(),
   build: async (onPhase, signal) => {
@@ -328,7 +331,7 @@ export function componentDefs(): UnitDef[] {
       return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
     },
   });
-  units.push({ id: STACK_VIDEO_H3_MODEL_ID, label: partLabel(STACK_VIDEO_H3_MODEL_ID), summary: partDef(STACK_VIDEO_H3_MODEL_ID)!.description, group: "video", role: "video", pins: [STACK_VIDEO_H3_MODEL], envs: [], tiers: ["p16", "p32", "p64", "p128"], licenceNotice: H3_VIDEO_LICENSE_NOTICE, usedBy: () => ["Videos with sound in chat and the Video app"], busy: () => activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null });
+  units.push({ id: STACK_VIDEO_H3_MODEL_ID, label: partLabel(STACK_VIDEO_H3_MODEL_ID), summary: partDef(STACK_VIDEO_H3_MODEL_ID)!.description, group: "video", role: "video", pins: [STACK_VIDEO_H3_MODEL], envs: [envCompositeSwap], tiers: ["p16", "p32", "p64", "p128"], licenceNotice: H3_VIDEO_LICENSE_NOTICE, usedBy: () => ["Videos with sound in chat and the Video app"], busy: () => activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null });
   units.push({
     id: STACK_VIDEO_LTX25_MAX_MODEL_ID, label: partLabel(STACK_VIDEO_LTX25_MAX_MODEL_ID), summary: partDef(STACK_VIDEO_LTX25_MAX_MODEL_ID)!.description, group: "video", role: "video", pins: STACK_VIDEO_LTX25_MAX_MODELS, envs: [envLtx25Max], tiers: ["p128"], licenceNotice: LTX_LICENCE_NOTICE,
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,

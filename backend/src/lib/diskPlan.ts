@@ -128,6 +128,7 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:video-mask": () => engineRow("engine:video-mask", "mask-gen", "SAM 2.1 mask tools", "What tracking a subject through a clip runs on."),
   "engine:music": () => engineRow("engine:music", "music-gen", "Music engine tools", "What making songs runs on."),
   "engine:sound-effects": () => engineRow("engine:sound-effects", "sfx-gen", "Sound effects engine tools", "What making sound effects runs on."),
+  "engine:swap-composite": () => engineRow("engine:swap-composite", "composite-swap", "Swap composite tools", "What putting a new head into a clip and keeping the rest runs on."),
   "engine:score": () => engineRow("engine:score", "score-gen", "Score engine tools", "What turning audio into notes runs on."),
   "engine:stems": () => engineRow("engine:stems", "stems", "Stem splitting tools", "What separating song stems runs on."),
   "engine:align": () => engineRow("engine:align", "align", "Lyric timing tools", "What timing a song's words runs on."),
@@ -136,7 +137,7 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:recorded-speech": () => engineRow("engine:recorded-speech", "recorded-speech", "Recorded speech tools", "What recorded speech rendering runs on."),
   "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:pictures-h3", "engine:image-tools", "engine:liveportrait", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:video-mask", "engine:music", "engine:sound-effects", "engine:score", "engine:stems", "engine:align", "engine:beats", "engine:voice-convert", "engine:recorded-speech"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:pictures-h3", "engine:image-tools", "engine:liveportrait", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:video-mask", "engine:music", "engine:sound-effects", "engine:score", "engine:swap-composite", "engine:stems", "engine:align", "engine:beats", "engine:voice-convert", "engine:recorded-speech"];
 
 function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
@@ -209,7 +210,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (!tier.notAvailable.includes("music") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "music-max", label: partLabel("ace-step-1-5-xl-sft-bf16"), note: partDef("ace-step-1-5-xl-sft-bf16")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MAX_MODELS));
   if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-ltx25", label: partLabel("ltx-2-5-q8-distilled-mlx"), note: partDef("ltx-2-5-q8-distilled-mlx")!.description, need: "optional", engines: ["engine:video-ltx25", "engine:python"] }, STACK_VIDEO_LTX25_MODELS));
   if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-ltx25-max", label: partLabel("ltx-2-5-bf16-distilled-mlx-max"), note: partDef("ltx-2-5-bf16-distilled-mlx-max")!.description, need: "optional", engines: ["engine:video-ltx25-max", "engine:python"] }, STACK_VIDEO_LTX25_MAX_MODELS));
-  if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video-minimax-h3", label: partLabel("minimax-h3"), note: partDef("minimax-h3")!.description, need: "optional", engines: ["engine:minimax-h3-video-gen"] }, STACK_VIDEO_H3_MODELS));
+  if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video-minimax-h3", label: partLabel("minimax-h3"), note: partDef("minimax-h3")!.description, need: "optional", engines: ["engine:minimax-h3-video-gen", "engine:swap-composite"] }, STACK_VIDEO_H3_MODELS));
   if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64")) rows.push(modelRow({ id: "video-mask", label: partLabel("sam2.1-hiera-small"), note: partDef("sam2.1-hiera-small")!.description, need: "optional", engines: ["engine:video-mask", "engine:python"] }, STACK_VIDEO_MASK_MODELS));
   // MP-07: sound effects, optional, on every tier with 32 GB or more (about 6.5 GB while a sound is made); the maker's licence is accepted at install.
   if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p32")) rows.push(modelRow({ id: "sound-effects", label: partLabel("stable-audio-3-small-sfx"), note: partDef("stable-audio-3-small-sfx")!.description, need: "optional", engines: ["engine:sound-effects", "engine:python"] }, STACK_SFX_MODELS));

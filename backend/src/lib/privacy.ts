@@ -43,6 +43,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: ["pypi.org", "files.pythonhosted.org"],
   },
   {
+    id: "swap-composite-environment",
+    what: "Building the offline swap composite environment",
+    when: "Only the first time a face swap needs it",
+    carries: "Names and hashes of pinned Python packages; clips and pictures remain on this computer and the worker has no network access",
+    receiver: "The Python Package Index, straight from this computer",
+    setting: null,
+    hosts: ["pypi.org", "files.pythonhosted.org"],
+  },
+  {
     id: "beats-environment",
     what: "Building the offline beat analysis environment",
     when: "Only when Home installs beat and section analysis or its first request builds the environment",

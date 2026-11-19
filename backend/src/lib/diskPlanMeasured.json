@@ -101,6 +101,12 @@
       "peak_temp_bytes": 180000000,
       "basis": "estimate"
     },
+    "composite-swap": {
+      "installed_bytes": 125000000,
+      "download_bytes": 65000000,
+      "peak_temp_bytes": 125000000,
+      "basis": "estimate"
+    },
     "stems": {
       "installed_bytes": 1200000000,
       "download_bytes": 800000000,

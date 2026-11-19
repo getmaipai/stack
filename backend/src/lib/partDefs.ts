@@ -83,6 +83,7 @@ export const PART_DEFS: readonly PartDef[] = [
   { id: "minimax-h3-video-gen", kind: "engine", category: "engines", priority: 26, label: "H3 video engine", neutralLabel: "H3 video engine", description: "Makes clips with sound with the MiniMax H3 video model.", adultOnly: false },
   { id: "chatterbox-vc", kind: "engine", category: "engines", priority: 27, label: "Chatterbox voice engine", neutralLabel: "Chatterbox voice engine", description: "Changes a voice toward a reference voice.", adultOnly: false },
   { id: "face-repair", kind: "engine", category: "engines", priority: 28, label: "Face repair engine", neutralLabel: "Face repair engine", description: "Repairs faces in old or soft pictures.", adultOnly: false },
+  { id: "composite-swap", kind: "engine", category: "engines", priority: 29, label: "Swap composite engine", neutralLabel: "Swap composite engine", description: "Puts a new head into a clip and keeps every other pixel.", adultOnly: false },
 ];
 
 export function partDef(id: string): PartDef | undefined { return PART_DEFS.find((part) => part.id === id); }

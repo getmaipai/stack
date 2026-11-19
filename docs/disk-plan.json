@@ -24,7 +24,7 @@
     "p64.ai_required_free_bytes": 191231792656,
     "p128.required_free_bytes": 229074434482,
     "p128.minimum_required_free_bytes": 37187187977,
-    "p128.everything_required_free_bytes": 554749898618,
+    "p128.everything_required_free_bytes": 555024898618,
     "p128.needed_bytes": 192147547232,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 225898111205
@@ -2557,7 +2557,8 @@
             "minimax-h3"
           ],
           "engines": [
-            "engine:minimax-h3-video-gen"
+            "engine:minimax-h3-video-gen",
+            "engine:swap-composite"
           ],
           "installed": false,
           "basis": "pins"
@@ -2998,6 +2999,21 @@
           "basis": "estimate"
         },
         {
+          "id": "engine:swap-composite",
+          "label": "Swap composite tools",
+          "note": "What putting a new head into a clip and keeping the rest runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 65000000,
+          "installed_bytes": 125000000,
+          "peak_temp_bytes": 125000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:stems",
           "label": "Stem splitting tools",
           "note": "What separating song stems runs on.",
@@ -3073,11 +3089,11 @@
         "required_free_bytes": 37187187977
       },
       "everything": {
-        "download_bytes": 442369663402,
-        "installed_bytes": 450904448350,
-        "peak_temp_bytes": 13664560598,
-        "needed_bytes": 464569008948,
-        "required_free_bytes": 554749898618
+        "download_bytes": 442434663402,
+        "installed_bytes": 451029448350,
+        "peak_temp_bytes": 13789560598,
+        "needed_bytes": 464819008948,
+        "required_free_bytes": 555024898618
       },
       "measured_on": "2026-10-17",
       "default_selected": [
