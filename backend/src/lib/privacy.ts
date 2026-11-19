@@ -25,6 +25,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: ["github.com"],
   },
   {
+    id: "engine-release-check",
+    what: "Checking whether a program the Stack installs (llama.cpp, for the chat engine) has a newer release",
+    when: "Only when Home has switched update checks on: at most once every 12 hours, and when Home calls the update check. Nothing is downloaded or installed by it",
+    carries: "One GET of the program's latest public release record with User-Agent: maipai-stack/<version> (<os>-<arch>), no query string or identifier; only the release tag is read",
+    receiver: "GitHub's public release API (api.github.com)",
+    setting: "stack.updates.enabled",
+    hosts: ["api.github.com"],
+  },
+  {
     id: "downloads",
     what: "Downloading a model, an engine build or a LoRA",
     when: "Only when Home installs one or applies an update, when an adult adds a LoRA by a Hugging Face link, or, on a Mac whose chat engine is oMLX by default (Apple silicon, 64 GB or more) with the chat engine setting on automatic or oMLX, once in the background at start to fetch the pinned MLX build of the chat model (ENGINE-MLX-01; set the engine to llama-server and nothing is fetched)",

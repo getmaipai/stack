@@ -41,6 +41,7 @@ import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
 import { wireMaxWindowReduced } from "@/lib/maxWindowReduced";
 import { resetReducedChatOnBoot } from "@/lib/reducedChatLease";
 import { setupHomeModeRuntime } from "@/lib/homeModeRuntime";
+import { checkEngineUpdates } from "@/lib/engineUpdates";
 
 /** Bun's default request body limit is 128 MB; a LoRA upload (VIDEO-GEN-03) may be up to 2 GB, so the limit leaves room for it. Every route checks its own size. */
 export const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024 * 1024 + 64 * 1024 * 1024;
@@ -108,6 +109,10 @@ async function serve(): Promise<void> {
   void runSweeps("start");
   const sweeps = setInterval(() => { void runSweeps("timer"); }, 10 * 60_000);
   (sweeps as unknown as { unref?: () => void }).unref?.();
+  // Newer upstream releases of the programs the Stack installs: a public read at most once every 12 hours, off with the update checks.
+  const releaseCheck = setInterval(() => { void checkEngineUpdates(); }, 60 * 60_000);
+  (releaseCheck as unknown as { unref?: () => void }).unref?.();
+  void checkEngineUpdates();
   const idle = setInterval(() => {
     const values = settingValues();
     // The coding engine unloads after its own keep-warm minutes, on battery or not, in place of the runtime-wide limits (CODE-STACK-01 S2).
@@ -124,6 +129,7 @@ async function serve(): Promise<void> {
     stopMemoryWatchdog();
     clearInterval(idle);
     clearInterval(sweeps);
+    clearInterval(releaseCheck);
     stopSelfHeal();
     // ISOLATION-01: nothing is left stopped; each worker is continued before it is told to quit.
     heavyGate.resumeEverything("shutdown");

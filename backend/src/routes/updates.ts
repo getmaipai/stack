@@ -4,6 +4,7 @@ import type { AppEnv } from "@/types";
 import { checkCatalog, modelRecommendations, updatesState } from "@/updates/catalog";
 import { applyAvailableEngineUpdate, rollbackEngine } from "@/updates/engines";
 import { restartRole, stopRole } from "@/lib/supervisor";
+import { checkEngineUpdates } from "@/lib/engineUpdates";
 
 const EngineStateSchema = z.object({ name: z.string(), installed: z.string().nullable(), available: z.string().nullable(), availableKnown: z.boolean(), lastChecked: z.string().nullable(), notes: z.string().nullable() });
 const ModelStateSchema = z.object({ id: z.string(), installed: z.string(), available: z.string().nullable() });
@@ -20,7 +21,7 @@ async function withRecommendations(state: ReturnType<typeof updatesState>) { ret
 
 export const updatesRoutes = apiRouter<AppEnv>();
 updatesRoutes.openapi(stateRoute, async (c) => c.json(await withRecommendations(updatesState()), 200));
-updatesRoutes.openapi(checkRoute, async (c) => { try { return c.json(await withRecommendations(await checkCatalog()), 200); } catch (error) { return c.json(await withRecommendations(updatesState()), 200); } });
+updatesRoutes.openapi(checkRoute, async (c) => { await checkEngineUpdates({ force: true }); try { return c.json(await withRecommendations(await checkCatalog()), 200); } catch (error) { return c.json(await withRecommendations(updatesState()), 200); } });
 updatesRoutes.openapi(applyRoute, async (c) => {
   if (c.req.valid("param").name !== "llama-server") return c.json({ error: "Only llama-server updates are managed today." }, 400);
   try { const applied = await applyAvailableEngineUpdate(); return c.json({ applied: applied !== null, tag: applied?.tag ?? null, previous: applied?.previous ?? null }, 200); }

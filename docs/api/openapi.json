@@ -13715,6 +13715,23 @@
                           "roleReason": {
                             "type": "string",
                             "nullable": true
+                          },
+                          "update": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "newest": {
+                                "type": "string"
+                              },
+                              "since": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "newest",
+                              "since"
+                            ],
+                            "description": "A newer upstream release than the installed build, with the date the Stack first noticed it; null when none is known."
                           }
                         },
                         "required": [
