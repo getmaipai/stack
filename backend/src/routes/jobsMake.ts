@@ -3,6 +3,7 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import { StackMakeRequest, StackMakeResult, StackMakeRefusal } from "@maipai/spec/stack/ts/stack-make.js";
 import type { AppEnv } from "@/types";
 import { listParts } from "@/lib/partsList";
+import { dispatchSong, dispatchSongEdit, dispatchStems } from "@/lib/makeDispatchAudio";
 import { planMake } from "@/lib/makePlan";
 import { WIRED_JOBS, dispatchClip, dispatchPicture, dispatchPictureEdit, type PictureBytes } from "@/lib/makeDispatch";
 
@@ -45,6 +46,6 @@ jobsMakeRoutes.openapi(route, async (c) => {
     const response = await app.request(path, { method: "POST", body: form });
     return { status: response.status, json: await response.json().catch(() => null) };
   };
-  const result = request.job === "clip" ? await dispatchClip(request, plan, forward, read) : request.job === "picture_edit" ? await dispatchPictureEdit(request, plan, read, forwardForm) : await dispatchPicture(request as never, plan, forward);
+  const result = request.job === "song" ? await dispatchSong(request, plan, forward) : request.job === "song_edit" ? await dispatchSongEdit(request, plan, read, forward) : request.job === "stems" ? await dispatchStems(request, plan, read, forward) : request.job === "clip" ? await dispatchClip(request, plan, forward, read) : request.job === "picture_edit" ? await dispatchPictureEdit(request, plan, read, forwardForm) : await dispatchPicture(request as never, plan, forward);
   return c.json(result.body as never, result.status as 200) as never;
 });

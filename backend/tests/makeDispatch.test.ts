@@ -66,7 +66,7 @@ test("the route answers not_on_this_model for a named part that cannot do the jo
 });
 test("the catalog never calls an unwired job available", async () => {
   const catalog = await jobsCatalog("adult");
-  for (const job of catalog.jobs) if (!["picture", "picture_edit", "clip"].includes(job.job)) expect(job.available).toBe(false);
+  for (const job of catalog.jobs) if (!["picture", "picture_edit", "clip", "song", "song_edit", "stems"].includes(job.job)) expect(job.available).toBe(false);
 });
 
 import { clipBody, dispatchClip, dispatchPictureEdit, PICTURE_UNREADABLE_LINE, editFields } from "@/lib/makeDispatch";
@@ -109,4 +109,30 @@ test("the catalog now lists clip as wired (available only when a part is ready)"
   const catalog = await jobsCatalog("adult");
   const clip = catalog.jobs.find((j) => j.job === "clip")!;
   expect(clip.available).toBe(false); // nothing is installed in the test environment
+});
+
+import { dispatchSong, dispatchSongEdit, dispatchStems, songBody, songEditBody, SONG_UNREADABLE_LINE } from "@/lib/makeDispatchAudio";
+const musicPlan = (req: StackMakeRequest, id = "ace-step-1-5-turbo") => { const def = PART_DEFS.find((d) => d.id === id)!; const view = { id, kind: def.kind, category: def.category, priority: def.priority, label: def.label, description: "", enabled: true, state: "ready", size_bytes: 1, fits: { standard: true, boost: true, max: true, reason: null }, can_install: false, install_block: null, can_uninstall: true, uninstall_block: null, licence_needed: false, required_by: [], update: null } as unknown as StackPartView; const p = planMake(req, [view]); if (!p.ok) throw new Error("not planned"); return p; };
+const m4a = { bytes: new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 77, 52, 65, 32]), type: "audio/mp4" };
+test("a song becomes a text2music request: the pack's caption, quality from the level, instrumental when there are no lyrics", async () => {
+  const req = { job: "song", audience: "adult", description: "a calm tune", style_words: ["piano"], seconds: 60 } as StackMakeRequest;
+  const plan = musicPlan(req);
+  expect(songBody(req as never, plan)).toMatchObject({ task: "text2music", caption: "a calm tune, piano", quality: "quick", instrumental: true, duration_s: 60 });
+  let sent: unknown; const done = await dispatchSong(req as never, plan, async (_p, body) => { sent = body; return { status: 200, json: { job: "s1", data: [{ duration_s: 60, lrc: null }] } }; });
+  expect(sent).toBeTruthy();
+  expect(done.body).toMatchObject({ id: "s1", job: "song", state: "done", files: ["/v1/audio/music/s1/file"], made_with: { seconds: 60, sound: true } });
+});
+test("a song edit sends the song and the change; an unreadable song is refused plainly", async () => {
+  const req = { job: "song_edit", audience: "adult", song: "/v1/audio/music/s1/file", change: { kind: "extend", add_seconds: 20, at: "end" } } as StackMakeRequest;
+  const plan = musicPlan(req);
+  expect(songEditBody(req as never, plan, "data:x")).toMatchObject({ task: "extend", add_s: 20, at: "end", source: "data:x" });
+  let sent: Record<string, unknown> = {}; await dispatchSongEdit(req as never, plan, async () => m4a, async (_p, body) => { sent = body as never; return { status: 200, json: { job: "s2", data: [] } }; });
+  expect(String(sent.source)).toStartWith("data:audio/mp4;base64,");
+  expect((await dispatchSongEdit(req as never, plan, async () => null, async () => ({ status: 200, json: {} }))).body).toEqual({ code: "not_available", line: SONG_UNREADABLE_LINE });
+});
+test("stems keep only the parts asked for", async () => {
+  const req = { job: "stems", audience: "adult", song: "/v1/audio/music/s1/file", stems: ["vocals"] } as StackMakeRequest;
+  const plan = musicPlan(req, "htdemucs");
+  const done = await dispatchStems(req as never, plan, async () => m4a, async () => ({ status: 200, json: { job: "t1", data: [{ stem: "vocals", url: "/v1/audio/stems/t1/vocals" }, { stem: "drums", url: "/v1/audio/stems/t1/drums" }] } }));
+  expect(done.body).toMatchObject({ job: "stems", state: "done", stems: [{ name: "vocals", file: "/v1/audio/stems/t1/vocals" }], files: ["/v1/audio/stems/t1/vocals"] });
 });
