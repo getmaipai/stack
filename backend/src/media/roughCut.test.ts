@@ -78,6 +78,13 @@ describe.skipIf(!have)("media.rough_cut on fixtures built with ffmpeg", () => {
     expect(Math.abs(probeSeconds(result.file) - 6)).toBeLessThan(0.3);
     expect(Object.keys(result).sort()).toEqual(["file", "lines", "shots", "total_s"]);
   }, 120_000);
+  it("a silent shot's caption asks for the words on screen (the ffmpeg run gets a subtitle step), and the file keeps its length", async () => {
+    const out = join(dir, "silent-caption"); const calls: string[][] = [];
+    const result = await buildRoughCut({ audience: "adult", shots: shots(2, 2).map((shot, i) => (i === 0 ? { ...shot, caption: "The light came on at six." } : shot)) }, out, deps({ run: (async (...args: unknown[]) => { calls.push(args.flat().map(String)); return (spawnRunner as (...a: unknown[]) => unknown)(...args); }) as never }));
+    expect(result.lines).toEqual([]); expect(Math.abs(probeSeconds(result.file) - 4)).toBeLessThan(0.3);
+    expect(calls.some((c) => c.some((a) => a.includes("captions-1.ass")))).toBe(true);
+    expect(calls.some((c) => c.some((a) => a.includes("captions-2.ass")))).toBe(false);
+  }, 120_000);
   it("voices a line at its shot, with the voice of its speaker, and nowhere else", async () => {
     spoken.length = 0;
     const out = join(dir, "voiced");

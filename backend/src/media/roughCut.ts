@@ -26,7 +26,7 @@ const text = z.string().min(1);
 const id = z.string().min(1).max(60).regex(/^[A-Za-z0-9._-]+$/);
 export const RoughCutInput = z.object({
   audience: z.enum(["adult", "minor"]),
-  shots: z.array(z.object({ id, picture: text, seconds: z.number().positive().max(60), motion: text.optional() }).strict()).min(1).max(24),
+  shots: z.array(z.object({ id, picture: text, seconds: z.number().positive().max(60), motion: text.optional(), caption: z.string().min(1).max(200).optional() }).strict()).min(1).max(24),
   lines: z.array(z.object({ shot_id: id, line: StackClipDialogue }).strict()).max(96).optional(),
   voices: z.array(z.object({ speaker: text, voice_address: text.optional(), minor: z.boolean().optional() }).strict()).max(24).optional(),
 }).strict();
@@ -138,11 +138,13 @@ export async function buildRoughCut(input: RoughCutInput, outDir: string, deps: 
     await ff(deps, kenBurnsArgs(deps.ffmpeg, still, motionPath, motionOp(shot.motion, shot.seconds), true));
     let piecePath = motionPath;
     const line = lineByShot.get(shot.id);
-    if (line && fontFile) {
+    // A voiced line is captioned with its own text; a shot with no voiced line shows its `caption` (the silent animatic's words).
+    const words = line ? line.text : shot.caption;
+    if (words && fontFile) {
       const captioned = join(outDir, `shot-${index + 1}.mp4`);
       const motionClip: Clip = { path: motionPath, probe: await probeFile(deps.run, deps.ffprobe, motionPath, deps.signal) };
       // The words on screen are secondary to the voice: a build of ffmpeg without the subtitle filter keeps the moving picture without them.
-      if (await ffTry(deps, captionsArgs(deps.ffmpeg, motionClip, captioned, { op: "captions", lines: [{ from_s: 0, to_s: shot.seconds, text: line.text.slice(0, 200) }], position: "bottom" }, fontFile, join(outDir, `captions-${index + 1}.ass`)))) piecePath = captioned;
+      if (await ffTry(deps, captionsArgs(deps.ffmpeg, motionClip, captioned, { op: "captions", lines: [{ from_s: 0, to_s: shot.seconds, text: words.slice(0, 200) }], position: "bottom" }, fontFile, join(outDir, `captions-${index + 1}.ass`)))) piecePath = captioned;
     }
     pieces.push({ path: piecePath, probe: await probeFile(deps.run, deps.ffprobe, piecePath, deps.signal) });
   }
