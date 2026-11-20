@@ -73,7 +73,7 @@ const PicSchema = z.object({
   mode: z.enum(["generate", "image-to-image", "edit", "edit-masked", "restore"]),
 });
 export const ImageResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(PicSchema), notes: z.array(z.string()).optional().openapi({ description: "Plain sentences about what the Stack ignored or changed in the request (for example a `steps` value a fixed-step model does not take). Absent when there is nothing to say." }) });
-export const ImageErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
+export const ImageErrorBody = z.object({ error: z.string(), code: z.string(), kind: z.literal("disk").optional(), job: z.string().optional() });
 const JobStatusSchema = z.object({
   job: z.string(),
   state: z.enum(["queued", "running", "done", "failed", "cancelled"]),
@@ -112,7 +112,7 @@ function reply<T extends Context>(c: T, body: unknown, status: number) {
   for (const [name, value] of Object.entries(RoleReplyHeaders.parse(identityHeaders(null)))) c.header(name, value);
   return c.json(body as never, status as never);
 }
-const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string) => reply(c, { error, code, ...(job ? { job } : {}) }, status);
+const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string, kind?: "disk") => reply(c, { error, code, ...(kind ? { kind } : {}), ...(job ? { job } : {}) }, status);
 
 function entries(meta: ImageResultMeta, withBytes: boolean) {
   return meta.images.map((item) => ({
@@ -267,8 +267,8 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   }
   if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
   const quantize = quantizeFor(family, "generate", tier);
-  const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(peakBytes(family, "generate", quantize, loras.length, 1, family === STACK_IMAGE_H3_ID));
-  if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
+  const verdict = governorDecides(body.tier) ? { ok: true as const } : await memoryVerdict(peakBytes(family, "generate", quantize, loras.length, 1, family === STACK_IMAGE_H3_ID));
+  if (!verdict.ok) return fail(c, 503, verdict.kind === "disk" ? "disk" : "no_memory", verdict.reason, undefined, verdict.kind);
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
   const loraIds = loras.map((lora) => lora.record.id);
@@ -333,8 +333,8 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   const tier = getGovernorStatus().tier;
   if (!(IMAGE_FAMILIES[family].tiers as string[]).includes(tier)) return fail(c, 503, "not_available_on_this_computer", "Editing needs a computer with 32 GB of memory or more.");
   if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
-  const verdict = memoryVerdict(peakBytes(family, "edit", null, 0, 1, h3));
-  if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
+  const verdict = await memoryVerdict(peakBytes(family, "edit", null, 0, 1, h3));
+  if (!verdict.ok) return fail(c, 503, verdict.kind === "disk" ? "disk" : "no_memory", verdict.reason, undefined, verdict.kind);
   const info = IMAGE_FAMILIES[family];
   const notes: string[] = [];
   if (info.stepsMax === info.stepsDefault && form.steps !== undefined && form.steps !== info.stepsDefault) notes.push(stepsNote(info.label, form.steps, info.stepsDefault));
@@ -362,8 +362,8 @@ export async function restoreImages<T extends Context>(c: T, form: RestoreForm) 
   const out = restoreOutputSize(size.width, size.height, scale);
   if (typeof out === "string") return fail(c, (RESTORE_SCALES as readonly number[]).includes(scale) ? 413 : 422, (RESTORE_SCALES as readonly number[]).includes(scale) ? "too_large" : "bad_scale", out);
   if (activeJobs() >= IMAGE_QUEUE_MAX) return fail(c, 429, "queue_full", `${IMAGE_QUEUE_MAX} pictures are already waiting. Try again when one finishes.`);
-  const verdict = memoryVerdict(RESTORE_PEAK_BYTES);
-  if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
+  const verdict = await memoryVerdict(RESTORE_PEAK_BYTES);
+  if (!verdict.ok) return fail(c, 503, verdict.kind === "disk" ? "disk" : "no_memory", verdict.reason, undefined, verdict.kind);
   const seed = form.seed ?? Math.floor(Math.random() * 2 ** 32);
   const token = crypto.randomUUID();
   stashImage(token, { op: "restore", prompt: "", negativePrompt: null, family: RESTORE_FAMILY, quantize: null, width: 0, height: 0, steps: 1, seed, count: 1, loras: [], loraIds: [], initImage: null, strength: 0, image, mask: null, region: null, feather: 0, resolution: Math.min(out.width, out.height), derived: form.image_source !== "generated" });

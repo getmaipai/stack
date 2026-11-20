@@ -25,6 +25,7 @@ import { TreeSnapshot } from "@/lib/processTree";
 import { registerOwned } from "@/lib/ownedProcesses";
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { lowDiskRefusal } from "@/lib/diskState";
+import { diskAdmission } from "@/lib/diskState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
@@ -385,11 +386,13 @@ setWarmWorkerUnload("image-pool", () => imageGen.stopIfIdle());
 export function imageEngineActive(service: ImageGenService = imageGen): boolean { return service.supported() && service.hasModels(); }
 
 /** Whether a request for a family could ever fit beside what is resident right now. A job that cannot is refused now with the numbers; one that only waits on another generator queues. */
-export function memoryVerdict(peak: number): { ok: true } | { ok: false; reason: string } {
+export async function memoryVerdict(peak: number): Promise<{ ok: true } | { ok: false; kind?: "disk"; reason: string }> {
   const lowMemory = lowMemoryRefusal();
   if (lowMemory) return { ok: false, reason: lowMemory };
-  const lowDisk = lowDiskRefusal();
-  if (lowDisk) return { ok: false, reason: lowDisk };
+  const lowDisk = await lowDiskRefusal();
+  if (lowDisk) return { ok: false, ...lowDisk };
+  const disk = await diskAdmission(peak);
+  if (!disk.ok) return { ok: false, kind: "disk", reason: disk.reason };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
   if (resident + peak > status.capBytes) return { ok: false, reason: `Pictures need about ${Math.ceil(peak / 1e9)} GB of free memory, and there is not enough right now. Close other big jobs, or try again in a few minutes.` };

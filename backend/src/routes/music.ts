@@ -43,7 +43,7 @@ const statusRoute = createRoute({ method: "get", path: "/", tags: ["Music"], sum
 
 export const musicRoutes = apiRouter<AppEnv>();
 
-musicRoutes.openapi(statusRoute, (c) => {
+musicRoutes.openapi(statusRoute, async (c) => {
   const availability = tierAvailability();
   const status = musicGen.status();
   const tierLimit = availability.available ? tierLimits(availability.tier) : null;
@@ -51,7 +51,7 @@ musicRoutes.openapi(statusRoute, (c) => {
   const models = musicInstallModels(installed);
   const boostModels = musicXlInstallModels(installed);
   const maxModels = musicMaxInstallModels(installed);
-  const verdict = memoryVerdict();
+  const verdict = await memoryVerdict();
   const pin = installedEnginePin(MUSIC_GEN_NAME);
   return c.json({ music: {
     state: status.state, available: availability.available, code: availability.code, reason: availability.reason, tier: availability.tier,

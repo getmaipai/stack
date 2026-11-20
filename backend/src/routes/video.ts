@@ -142,9 +142,9 @@ const removeRoute = createRoute({ method: "delete", path: "/loras/{id}", tags: [
 export const videoRoutes = apiRouter<AppEnv>();
 
 type PlanModel = ReturnType<typeof videoInstallModels>[number];
-function qualityView(quality: "quick" | "ltx25" | "ltx25max", models: PlanModel[], _installed: string[], available: boolean) {
+async function qualityView(quality: "quick" | "ltx25" | "ltx25max", models: PlanModel[], _installed: string[], available: boolean) {
   const spec = VIDEO_SPECS[quality];
-  const verdict = memoryVerdict(quality);
+  const verdict = await memoryVerdict(quality);
   const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);
   return {
     id: spec.modelId, installed: models.every((model) => model.installed), available, audio: spec.audio, image_to_video: spec.imageToVideo, end_image: spec.endImage,
@@ -162,8 +162,8 @@ function ltx25LorasView(quality: "ltx25" | "ltx25max") {
   return { supported: profile.supported, max: profile.max, max_strength: profile.max_strength, mode: profile.mode, admit_factor: profile.mode === "unfused" ? LTX25_UNFUSED_ADMIT_FACTOR : 0, runtime: profile.runtime, base_models: profile.base_models, reason: profile.reason };
 }
 
-function ltx25View(models: PlanModel[], installed: string[], available: boolean) {
-  const base = qualityView("ltx25", models, installed, available);
+async function ltx25View(models: PlanModel[], installed: string[], available: boolean) {
+  const base = await qualityView("ltx25", models, installed, available);
   const pin = installedEnginePin(LTX25_GEN_NAME);
   const environment = { engine: pin ? `${pin.name} ${pin.tag}` : LTX25_GEN_NAME, version: LTX25_GEN_VERSION, ready: ltx25EnvironmentReady() };
   return {
@@ -182,8 +182,8 @@ function editFootprint(kind: "extend" | "retake", size: string): { peak_gb: numb
   return { peak_gb: Math.round(ltx25EditPeakBytes(row, kind) / 1e8) / 10, admit_gb: Math.round(ltx25EditAdmitBytes(kind, size) / 1e8) / 10 };
 }
 
-function ltx25MaxView(models: PlanModel[], installed: string[], available: boolean) {
-  const base = qualityView("ltx25max", models, installed, available);
+async function ltx25MaxView(models: PlanModel[], installed: string[], available: boolean) {
+  const base = await qualityView("ltx25max", models, installed, available);
   const pin = installedEnginePin(LTX25_MAX_GEN_NAME);
   const environment = { engine: pin ? `${pin.name} ${pin.tag}` : LTX25_MAX_GEN_NAME, version: LTX25_MAX_GEN_VERSION, ready: ltx25MaxEnvironmentReady() };
   return {
@@ -203,12 +203,12 @@ function ltx25MaxView(models: PlanModel[], installed: string[], available: boole
   };
 }
 
-videoRoutes.openapi(statusRoute, (c) => {
+videoRoutes.openapi(statusRoute, async (c) => {
   const availability = tierAvailability();
   const status = videoGen.status();
   const installed = listModels().map(modelView).filter((model) => model.state === "installed").map((model) => model.id);
   const models = videoInstallModels(installed);
-  const verdict = memoryVerdict();
+  const verdict = await memoryVerdict();
   const pin = installedEnginePin(VIDEO_GEN_NAME);
   return c.json({ video: {
     state: status.state, phase: status.phase, available: availability.available, code: availability.code, reason: availability.reason, tier: availability.tier,
@@ -222,21 +222,21 @@ videoRoutes.openapi(statusRoute, (c) => {
     environment: { engine: pin ? `${pin.name} ${pin.tag}` : VIDEO_GEN_NAME, version: VIDEO_GEN_VERSION, source: videoGenSourceInstalled(), ready: videoGenEnvironmentReady() },
     install: { models, remaining_bytes: models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0) },
     qualities: {
-      quick: qualityView("quick", models, installed, availability.available),
+      quick: await qualityView("quick", models, installed, availability.available),
       detailed: { id: "ltx-2-3-distilled-mlx", installed: false, available: false, audio: true, image_to_video: false, end_image: false, reason: "The Detailed video model was retired. Use ltx25 or ltx25max.", limits: { max_seconds: 0, fps: VIDEO_FPS, default_size: "768x448", max_pixels: 768 * 448, size_step: 64, min_side: 256, max_frames: 0 }, memory: { fits: false, reason: "The Detailed video model was retired.", peak_gb: 0 }, install: { models: [], remaining_bytes: 0, download_bytes: 0 }, licence: null, lora_base_model: "ltx-2.3" },
-      ltx25: ltx25View(videoLtx25InstallModels(installed), installed, availability.available),
-      ltx25max: ltx25MaxView(videoLtx25MaxInstallModels(installed), installed, availability.available),
-      h3: h3View("h3"),
+      ltx25: await ltx25View(videoLtx25InstallModels(installed), installed, availability.available),
+      ltx25max: await ltx25MaxView(videoLtx25MaxInstallModels(installed), installed, availability.available),
+      h3: await h3View("h3"),
       h3_swap: { ready: h3SwapReady(), max_seconds: H3_SWAP_MAX_SECONDS, sizes: ["640x480", "512x384"], references_max: 3, peak_gb: 112, licence: "MiniMax H3 Community License (use outside the US, EU, UK and Korea only)" },
-      ...(videoModelPaths("h3stream") ? { h3stream: h3View("h3stream") } : {}),
+      ...(videoModelPaths("h3stream") ? { h3stream: await h3View("h3stream") } : {}),
     },
   } }, 200 as const);
 });
 
-function h3View(quality: "h3" | "h3stream") {
+async function h3View(quality: "h3" | "h3stream") {
   const spec = VIDEO_SPECS[quality];
   const ready = videoModelPaths(quality) !== null;
-  const verdict = memoryVerdict(quality);
+  const verdict = await memoryVerdict(quality);
   return {
     id: spec.modelId, installed: ready, available: ready, ready, audio: true,
     image_to_video: H3_VIDEO_CAPABILITIES.first_picture, end_image: H3_VIDEO_CAPABILITIES.last_picture,
@@ -282,7 +282,7 @@ videoRoutes.openapi(importRoute, async (c) => {
   } finally { if (temp) rmSync(temp, { force: true }); }
 });
 
-videoRoutes.openapi(installRoute, (c) => {
+videoRoutes.openapi(installRoute, async (c) => {
   const body = c.req.valid("json");
   try {
     const job = startVideoLoraInstall({ site: body.source, url: body.url, name: body.name, licence: body.licence, licenceAcknowledged: body.licence_acknowledged, classification: body.audience === undefined ? undefined : body.audience === "adult" ? "adult-only" : "all-ages", strengthDefault: body.strength_default, triggerWords: body.trigger_words, addedBy: body.added_by ?? null, baseModel: body.base_model ?? null, sha256Expected: body.sha256_expected ?? null, token: body.token ?? null, sourceUrl: body.source_url ?? null });

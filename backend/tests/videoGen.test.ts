@@ -242,7 +242,7 @@ test("video is off below 128 GB, not installed without the model, and refused wi
   const full = await post({ prompt: "x" });
   expect(full.status).toBe(503);
   expect(await full.json()).toMatchObject({ code: "no_memory", error: "Not enough free memory for video right now. Close other big jobs, or try again in a few minutes." });
-  expect(memoryVerdict().ok).toBe(false);
+  expect((await memoryVerdict()).ok).toBe(false);
   expect(tierAvailability("p128").available).toBe(true);
   expect(tierAvailability("p64")).toMatchObject({ available: false, code: "not_available_on_this_computer" });
   expect(tierAvailability("p16").available).toBe(false);

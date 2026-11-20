@@ -33,6 +33,7 @@ import { registerOwned } from "@/lib/ownedProcesses";
 import { forgetLoadedItem, setIdleTtlSeconds, setWarmWorkerUnload } from "@/lib/governor";
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { lowDiskRefusal } from "@/lib/diskState";
+import { diskAdmission } from "@/lib/diskState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { installedEnginePin, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
@@ -180,11 +181,13 @@ export function tierAvailability(tier = getGovernorStatus().tier, totalMemoryByt
 }
 
 /** Whether a clip's peak can ever fit beside what is resident right now. A clip that cannot is refused now with the numbers; one that only waits on another generator queues. */
-export function memoryVerdict(quality: VideoQuality = "quick", peakBytes: number = VIDEO_SPECS[quality].peakBytes): { ok: true } | { ok: false; reason: string } {
+export async function memoryVerdict(quality: VideoQuality = "quick", peakBytes: number = VIDEO_SPECS[quality].peakBytes): Promise<{ ok: true } | { ok: false; kind?: "disk"; reason: string }> {
   const lowMemory = lowMemoryRefusal();
   if (lowMemory) return { ok: false, reason: lowMemory };
-  const lowDisk = lowDiskRefusal();
-  if (lowDisk) return { ok: false, reason: lowDisk };
+  const lowDisk = await lowDiskRefusal();
+  if (lowDisk) return { ok: false, ...lowDisk };
+  const disk = await diskAdmission(peakBytes);
+  if (!disk.ok) return { ok: false, kind: "disk", reason: disk.reason };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
   if (resident + peakBytes > status.capBytes) return { ok: false, reason: "Not enough free memory for video right now. Close other big jobs, or try again in a few minutes." };

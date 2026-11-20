@@ -154,8 +154,8 @@ test("VIDEO-PICTURE-ADMIT-01: beside a chat model that leaves room for 55 GB, th
   __setGovernorTuningForTestsOnly({ tier: "p128", totalMemoryBytes: 128 * GB, freeMemoryBytes: 120 * GB });
   const cap = getGovernorStatus().capBytes;
   await admit({ id: "chat", kind: "resident", requestedBytes: cap - 55e9, pinned: true });
-  expect(memoryVerdict("ltx25max", LTX25_MAX_PEAK_BYTES).ok).toBe(true);
-  expect(memoryVerdict("ltx25max", LTX25_MAX_PICTURE_PEAK_BYTES).ok).toBe(false);
+  expect((await memoryVerdict("ltx25max", LTX25_MAX_PEAK_BYTES)).ok).toBe(true);
+  expect((await memoryVerdict("ltx25max", LTX25_MAX_PICTURE_PEAK_BYTES)).ok).toBe(false);
   const refused = await post({ prompt: "x", model: "ltx25-max", size: "1024x576", seconds: 10, image: png });
   expect(refused.status).toBe(503);
   expect(await refused.json()).toMatchObject({ code: "no_memory" });

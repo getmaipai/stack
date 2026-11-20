@@ -1,7 +1,6 @@
-import { existsSync, statfsSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { diskLevel, diskLines } from "@maipai/spec/stack/ts/disk-levels.js";
-import { settingValues } from "@/settings";
 import { modelsDir, dataDir } from "@/lib/paths";
 import { engineRoot } from "@/lib/store/layout";
 import { selectedModel } from "@/lib/supervisor";
@@ -9,6 +8,7 @@ import { ROLE_IDS } from "@/roles";
 import { getModel } from "@/lib/modelStore";
 import { STACK_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_H3_ID, STACK_VIDEO_H3_MODELS, STACK_VIDEO_H3_MODEL_ID, STACK_VIDEO_MODEL_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
 import { H3_LAYOUT } from "@/images/h3Layout";
+import { detectHardware } from "@maipai/core/src/hardware";
 
 export interface MissingModelFiles { role: string; model: string; missing_paths: string[]; }
 /** Files the selected role model actually reads, following its pinned install layout. */
@@ -42,46 +42,53 @@ export function missingModelFiles(): MissingModelFiles[] {
 
 export type DiskLevel = "normal" | "warn" | "critical";
 export interface DiskVolume { path: string; free_bytes: number; total_bytes: number; level: DiskLevel; warn_bytes: number; critical_bytes: number; }
-type Reader = (path: string) => { free: number; total: number; device?: number };
+type Reader = (path: string) => Promise<{ free: number; total: number; device?: number }> | { free: number; total: number; device?: number };
 const GB = 1_000_000_000;
 const REFUSAL = "There is not enough room left on this computer for that. Free up space in Settings, then try again.";
 const levels = new Map<string, DiskLevel>();
 let volumes: DiskVolume[] = [];
 let sampledAt = 0;
-const realReader: Reader = (path) => { const s = statfsSync(path); return { free: Number(s.bavail) * Number(s.bsize), total: Number(s.blocks) * Number(s.bsize), device: Number(statSync(path).dev) }; };
-let reader: Reader = process.env.MAIPAI_TEST_NO_PORTS ? () => ({ free: 500_000_000_000, total: 1_000_000_000_000, device: 1 }) : realReader;
+const realReader: Reader = async (path) => { const s = await detectHardware({ diskPath: path }); return { free: s.freeDiskBytes ?? 0, total: s.totalDiskBytes ?? 0, device: Number(statSync(path).dev) }; };
+const safeReader: Reader = process.env.MAIPAI_TEST_NO_PORTS ? () => ({ free: 500_000_000_000, total: 1_000_000_000_000, device: 1 }) : realReader;
+let reader: Reader = safeReader;
 const paths = () => [modelsDir, engineRoot, join(dataDir, "jobs")];
-function overrides(): { warn: number; critical: number } {
-  const values = settingValues();
-  const value = (key: string) => { const n = Number(values[key] ?? 0); return Number.isFinite(n) && n > 0 ? n * GB : undefined; };
-  return { warn: value("stack.storage.warn_free_gb") ?? 0, critical: value("stack.storage.critical_free_gb") ?? 0 };
+let runtimeConfig = { warn_free_gb: 0, critical_free_gb: 0 };
+export function setDiskConfig(config: { warn_free_gb: number; critical_free_gb: number }): void { runtimeConfig = { ...config }; sampledAt = 0; }
+export function getDiskConfig(): { warn_free_gb: number; critical_free_gb: number } { return { ...runtimeConfig }; }
+function sample(force = false): Promise<void> {
+  if (sampling) return sampling;
+  sampling = doSample(force).finally(() => { sampling = null; });
+  return sampling;
 }
-function sample(force = false): void {
+let sampling: Promise<void> | null = null;
+async function doSample(force = false): Promise<void> {
   if (!force && Date.now() - sampledAt < 60_000) return;
   sampledAt = Date.now();
   const seen = new Set<number>(); const next: DiskVolume[] = [];
   for (const path of paths()) {
     try {
       let probe = path; while (true) { try { statSync(probe); break; } catch { probe = resolve(probe, ".."); } }
-      const stats = reader(probe); if (stats.device !== undefined && seen.has(stats.device)) continue;
+      const stats = await reader(probe); if (stats.device !== undefined && seen.has(stats.device)) continue;
       if (stats.device !== undefined) seen.add(stats.device);
-      const previous = levels.get(resolve(path)) ?? "normal"; const o = overrides();
-      const level = diskLevel(stats.free, stats.total, previous, { warnFreeGb: o.warn / GB, criticalFreeGb: o.critical / GB });
+      const previous = levels.get(resolve(path)) ?? "normal";
+      const level = diskLevel(stats.free, stats.total, previous, { warnFreeGb: runtimeConfig.warn_free_gb, criticalFreeGb: runtimeConfig.critical_free_gb });
       levels.set(resolve(path), level);
-      const lines = diskLines(stats.total, { warnFreeGb: o.warn / GB, criticalFreeGb: o.critical / GB });
+      const lines = diskLines(stats.total, { warnFreeGb: runtimeConfig.warn_free_gb, criticalFreeGb: runtimeConfig.critical_free_gb });
       next.push({ path, free_bytes: stats.free, total_bytes: stats.total, level, warn_bytes: lines.warnBytes, critical_bytes: lines.criticalBytes });
     } catch { /* An unavailable storage folder is omitted until it can be sampled. */ }
   }
   volumes = next;
 }
-export function diskLevelNow(): DiskLevel { sample(); return volumes.reduce<DiskLevel>((worst, v) => v.level === "critical" || (v.level === "warn" && worst === "normal") ? v.level : worst, "normal"); }
-export function latestDisk(): { level: DiskLevel; volumes: DiskVolume[] } { sample(); return { level: diskLevelNow(), volumes: volumes.map((v) => ({ ...v })) }; }
-export function lowDiskRefusal(): string | null { return diskLevelNow() === "critical" ? REFUSAL : null; }
-export function diskAdmission(needBytes: number, path?: string): { ok: true } | { ok: false; reason: string } {
-  sample(); const candidates = path ? volumes.filter((v) => resolve(v.path) === resolve(path)) : volumes;
-  const o = overrides();
-  if (candidates.some((v) => v.free_bytes - Math.max(0, needBytes) < (o.critical || v.critical_bytes))) return { ok: false, reason: REFUSAL };
+export async function diskLevelNow(): Promise<DiskLevel> { await sample(); return volumes.reduce<DiskLevel>((worst, v) => v.level === "critical" || (v.level === "warn" && worst === "normal") ? v.level : worst, "normal"); }
+export async function latestDisk(): Promise<{ level: DiskLevel; volumes: DiskVolume[] }> { await sample(); return { level: await diskLevelNow(), volumes: volumes.map((v) => ({ ...v })) }; }
+export interface DiskRefusal { kind: "disk"; reason: string }
+export class DiskRefusalError extends Error implements DiskRefusal { readonly kind = "disk" as const; readonly reason: string; constructor(reason: string) { super(reason); this.reason = reason; this.name = "DiskRefusalError"; } }
+export async function lowDiskRefusal(): Promise<DiskRefusal | null> { return await diskLevelNow() === "critical" ? { kind: "disk", reason: REFUSAL } : null; }
+export async function diskAdmission(needBytes: number, path?: string): Promise<{ ok: true } | { ok: false; kind: "disk"; reason: string }> {
+  await sample(); const candidates = path ? volumes.filter((v) => resolve(v.path) === resolve(path)) : volumes;
+  const criticalBytes = runtimeConfig.critical_free_gb * GB;
+  if (candidates.some((v) => v.free_bytes - Math.max(0, needBytes) < (criticalBytes || v.critical_bytes))) return { ok: false, kind: "disk", reason: REFUSAL };
   return { ok: true };
 }
-export function __setDiskReaderForTests(next: Reader | null): void { reader = next ?? (process.env.MAIPAI_TEST_NO_PORTS ? () => ({ free: 500_000_000_000, total: 1_000_000_000_000, device: 1 }) : realReader); volumes = []; levels.clear(); sampledAt = 0; }
-export function __sampleDiskForTests(): void { sample(true); }
+export function __setDiskReaderForTests(next: Reader | null): void { reader = next ?? safeReader; volumes = []; levels.clear(); sampledAt = 0; sampling = null; runtimeConfig = { warn_free_gb: 0, critical_free_gb: 0 }; }
+export async function __sampleDiskForTests(): Promise<void> { await sample(true); }

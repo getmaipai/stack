@@ -11,7 +11,7 @@ import { STACK_MODELS, STACK_STEMS_MODELS } from "@/lib/modelCatalog";
 import { modelsDir } from "@/lib/paths";
 import { restartForNewChatEngine, restartForNewProjector } from "@/lib/supervisor";
 import { warmUp } from "@/lib/warmup";
-import { diskAdmission } from "@/lib/diskState";
+import { diskAdmission, DiskRefusalError } from "@/lib/diskState";
 import { buildDiskPlan } from "@/lib/diskPlan";
 import { PROFILE_TIERS } from "@/profiles";
 import type { RoleId } from "@/roles";
@@ -29,11 +29,11 @@ export function installPurpose(model: Pick<CatalogModelLike, "engine" | "compone
 export const MISSING_PART_CODE = (id: string): string => `model-part-missing.${id}`;
 
 /** Starts the install job for a pin. `done` settles when the install ends. */
-export function startModelInstall(model: Pin, role: RoleId, download?: DownloadModelOptions["download"]): { job: string; done: Promise<void> } {
+export async function startModelInstall(model: Pin, role: RoleId, download?: DownloadModelOptions["download"]): Promise<{ job: string; done: Promise<void> }> {
   const row = PROFILE_TIERS.flatMap((tier) => buildDiskPlan(tier).rows).find((candidate) => candidate.model_ids.includes(model.id));
   const need = row ? row.download_bytes + row.installed_bytes + row.peak_temp_bytes : model.download.approx_bytes * 3;
-  const admission = diskAdmission(need);
-  if (!admission.ok) throw new Error(admission.reason);
+  const admission = await diskAdmission(need);
+  if (!admission.ok) throw new DiskRefusalError(admission.reason);
   // One directory per model id: two pins whose URLs end in the same file name never share a path.
   const destination = join(modelsDir, model.id, basename(new URL(model.download.url).pathname) || `${model.id}.gguf`);
   const items = model.download.files?.map((file) => ({ id: file.path, label: file.path, completedBytes: 0, totalBytes: file.bytes, state: "queued" as const })) ?? [{ id: basename(destination), label: basename(destination), completedBytes: 0, totalBytes: model.download.approx_bytes, state: "queued" as const }];
@@ -86,7 +86,7 @@ export async function pullMissingDeclaredParts(pins: readonly CatalogModelLike[]
     const code = MISSING_PART_CODE(part.id);
     started.push(part.id);
     try {
-      const { done } = startModelInstall(part, part.role, download);
+      const { done } = await startModelInstall(part, part.role, download);
       await done;
       if (onDisk(part.id)) resolveHealth(code);
       else raise({ code, severity: "warning", title: "Chat cannot read pictures yet", text: `The picture reader (${part.id}) could not be downloaded, so chat answers text only.`, cause: "The download did not finish.", fix: { label: "Try again", action: "retry_download" } });

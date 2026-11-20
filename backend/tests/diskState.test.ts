@@ -11,23 +11,23 @@ const refusal = "There is not enough room left on this computer for that. Free u
 afterEach(() => __setDiskReaderForTests(null));
 afterEach(() => { __setPreferredModelForTests("chat", null); clearModelsForTests(); });
 
-test("disk sampling tracks hysteretic levels and critical admission without reading the real disk", () => {
+test("disk sampling tracks hysteretic levels and critical admission without reading the real disk", async () => {
   let free = 9_000_000_000;
   __setDiskReaderForTests(() => ({ free, total: 100_000_000_000, device: 1 }));
-  __sampleDiskForTests();
-  expect(latestDisk().level).toBe("critical");
-  expect(lowDiskRefusal()).toBe(refusal);
+  await __sampleDiskForTests();
+  expect((await latestDisk()).level).toBe("critical");
+  expect(await lowDiskRefusal()).toEqual({ kind: "disk", reason: refusal });
   expect(refusal).not.toMatch(/[0-9]|GB/i);
   free = 10_500_000_000;
-  __sampleDiskForTests();
-  expect(latestDisk().level).toBe("critical");
+  await __sampleDiskForTests();
+  expect((await latestDisk()).level).toBe("critical");
   free = 12_000_000_000;
-  __sampleDiskForTests();
-  expect(latestDisk().level).toBe("warn");
-  expect(diskAdmission(3_000_000_000).ok).toBe(false);
+  await __sampleDiskForTests();
+  expect((await latestDisk()).level).toBe("warn");
+  expect((await diskAdmission(3_000_000_000)).ok).toBe(false);
   free = 20_000_000_000;
-  __sampleDiskForTests();
-  expect(diskAdmission(1_000_000_000)).toEqual({ ok: true });
+  await __sampleDiskForTests();
+  expect(await diskAdmission(1_000_000_000)).toEqual({ ok: true });
 });
 
 test("GET /stack/v1/disk includes volumes and selected-model missing list", async () => {
@@ -39,6 +39,13 @@ test("GET /stack/v1/disk includes volumes and selected-model missing list", asyn
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ level: expect.any(String), volumes: [expect.objectContaining({ path: expect.any(String), free_bytes: expect.any(Number), total_bytes: expect.any(Number), warn_bytes: expect.any(Number), critical_bytes: expect.any(Number) })], missing: expect.arrayContaining([expect.objectContaining({ role: "chat", model: STACK_CHAT_8B_MODEL.id, missing_paths: [missingPath] })]) });
   __setPreferredModelForTests("chat", null);
+});
+
+test("disk config is accepted at runtime and resets in the test lifecycle", async () => {
+  const response = await app.request("/stack/v1/disk/config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ warn_free_gb: 40, critical_free_gb: 15 }) });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ok: true, config: { warn_free_gb: 40, critical_free_gb: 15 } });
+  __setDiskReaderForTests(null);
 });
 
 test("selected model file checks report deleted fixtures and ignore present files", () => {

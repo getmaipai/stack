@@ -4981,6 +4981,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -5005,6 +5011,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -5031,6 +5043,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -5055,6 +5073,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -5081,6 +5105,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -5106,6 +5136,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -5130,6 +5166,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -5543,6 +5585,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -5567,6 +5615,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -5948,6 +6002,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -5972,6 +6032,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -5998,6 +6064,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6023,6 +6095,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6047,6 +6125,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -6308,6 +6392,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6378,6 +6468,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6445,6 +6541,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6501,6 +6603,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6556,6 +6664,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -6624,6 +6738,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6649,6 +6769,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6673,6 +6799,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -6744,6 +6876,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6769,6 +6907,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6793,6 +6937,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -6901,6 +7051,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6925,6 +7081,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -6951,6 +7113,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -6975,6 +7143,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -7703,6 +7877,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -7727,6 +7907,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -7753,6 +7939,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -7777,6 +7969,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -7803,6 +8001,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -7827,6 +8031,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -7853,6 +8063,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -7877,6 +8093,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -8072,6 +8294,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -8142,6 +8370,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -8208,6 +8442,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -12807,6 +13047,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -12877,6 +13123,12 @@
                     "code": {
                       "type": "string"
                     },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
                     "job": {
                       "type": "string"
                     }
@@ -12946,6 +13198,12 @@
                     },
                     "code": {
                       "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
                     },
                     "job": {
                       "type": "string"
@@ -14417,11 +14675,26 @@
             }
           },
           "503": {
-            "description": "The install would cross the critical free-space line.",
+            "description": "The install would cross the critical free-space line (kind: disk).",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "disk"
+                          ]
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -22288,6 +22561,76 @@
                     "level",
                     "volumes",
                     "missing"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/disk/config": {
+      "post": {
+        "tags": [
+          "Disk"
+        ],
+        "summary": "Set runtime disk thresholds",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "warn_free_gb": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "critical_free_gb": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "warn_free_gb",
+                  "critical_free_gb"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "In-memory thresholds, reset to zero on restart.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "warn_free_gb": {
+                          "type": "number"
+                        },
+                        "critical_free_gb": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "warn_free_gb",
+                        "critical_free_gb"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "config"
                   ]
                 }
               }

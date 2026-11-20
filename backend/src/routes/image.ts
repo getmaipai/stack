@@ -101,7 +101,7 @@ const removeRoute = createRoute({ method: "delete", path: "/loras/{id}", tags: [
 
 export const imageRoutes = apiRouter<AppEnv>();
 
-imageRoutes.openapi(statusRoute, (c) => {
+imageRoutes.openapi(statusRoute, async (c) => {
   const availability = imageAvailability(imageGen.supported());
   const status = imageGen.status();
   const installedIds = listModels().map(modelView).filter((model) => model.state === "installed").map((model) => model.id);
@@ -117,7 +117,7 @@ imageRoutes.openapi(statusRoute, (c) => {
       install: { models: pins, remaining_bytes: pins.filter((pin) => !pin.installed).reduce((sum, pin) => sum + pin.approx_bytes, 0) },
     };
   });
-  const verdict = memoryVerdict(peakBytes(defaultModel ?? DEFAULT_FAMILY, "generate", quantizeFor(defaultModel ?? DEFAULT_FAMILY, "generate", tier), 0));
+  const verdict = await memoryVerdict(peakBytes(defaultModel ?? DEFAULT_FAMILY, "generate", quantizeFor(defaultModel ?? DEFAULT_FAMILY, "generate", tier), 0));
   const plan = imageInstallModels(DEFAULT_FAMILY, installedIds);
   return c.json({ image: {
     state: status.state, phase: status.phase, available: availability.available, code: availability.code, reason: availability.reason, tier: availability.tier,
@@ -133,7 +133,7 @@ imageRoutes.openapi(statusRoute, (c) => {
   } }, 200 as const);
 });
 
-imageRoutes.openapi(installRoute, (c) => {
+imageRoutes.openapi(installRoute, async (c) => {
   const body = c.req.valid("json");
   const family = body.family ?? DEFAULT_FAMILY;
   if (!isFamilyId(family)) return c.json({ error: `Unknown picture model ${family.slice(0, 60)}. Use ${Object.keys(IMAGE_FAMILIES).join(" or ")}.`, code: "unknown_model" }, 404);

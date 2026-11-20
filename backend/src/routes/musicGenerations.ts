@@ -75,7 +75,7 @@ const MusicDataSchema = z.object({
   transcript: z.string().optional().openapi({ description: "When requested, the locally transcribed words, returned once to the caller of this job and never persisted or logged." }),
 });
 const MusicResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(MusicDataSchema) });
-const ErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
+const ErrorBody = z.object({ error: z.string(), code: z.string(), kind: z.literal("disk").optional(), job: z.string().optional() });
 const JobStatusSchema = z.object({
   job: z.string(),
   state: z.enum(["queued", "running", "done", "failed", "cancelled"]),
@@ -121,7 +121,7 @@ function reply<T extends Context>(c: T, body: unknown, status: number) {
   for (const [name, value] of Object.entries(RoleReplyHeaders.parse(identityHeaders(null)))) c.header(name, value);
   return c.json(body as never, status as never);
 }
-const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string) => reply(c, { error, code, ...(job ? { job } : {}) }, status);
+const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string, kind?: "disk") => reply(c, { error, code, ...(kind ? { kind } : {}), ...(job ? { job } : {}) }, status);
 
 function entry(meta: MusicResultMeta) {
   const transcript = takeTranscript(meta.job);
@@ -250,8 +250,8 @@ musicV1Routes.openapi(postRoute, async (c) => {
   const edit = body.task === "edit";
   if (!edit) {
     if (activeSongs() >= MUSIC_QUEUE_MAX) return fail(c, 429, "queue_full", `${MUSIC_QUEUE_MAX} songs are already waiting. Try again when one finishes.`);
-    const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(checked.fields.dit, checked.fields.transcribe);
-    if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
+    const verdict = governorDecides(body.tier) ? { ok: true as const } : await memoryVerdict(checked.fields.dit, checked.fields.transcribe);
+    if (!verdict.ok) return fail(c, 503, verdict.kind === "disk" ? "disk" : "no_memory", verdict.reason, undefined, verdict.kind);
   }
   const fields = checked.fields;
   const seed = edit ? undefined : fields.seed ?? Math.floor(Math.random() * 2 ** 32);

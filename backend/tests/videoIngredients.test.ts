@@ -121,8 +121,8 @@ test("ingredients admission reserves its own measured footprint, not the coloriz
 
 test("on a computer with room for the measured Ingredients peak but not the colorizer's, an Ingredients clip is accepted", async () => {
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 72 * GB, freeMemoryBytes: 72 * GB, tier: "p128" });
-  expect(memoryVerdict("ltx25max", LTX25_ICLORA_PEAK_BYTES).ok).toBe(false);
-  expect(memoryVerdict("ltx25max", LTX25_INGREDIENTS_PEAK_BYTES).ok).toBe(true);
+  expect((await memoryVerdict("ltx25max", LTX25_ICLORA_PEAK_BYTES)).ok).toBe(false);
+  expect((await memoryVerdict("ltx25max", LTX25_INGREDIENTS_PEAK_BYTES)).ok).toBe(true);
   await install("ltx-2.5-22b-ic-lora-ingredients-0.9");
   const response = await post({ timeout_ms: "50" });
   expect(response.status).not.toBe(503); // 200 (finished in the fake worker) or 202; never no_memory

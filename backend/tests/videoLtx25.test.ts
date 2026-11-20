@@ -307,8 +307,8 @@ test("memory: beside 28 GB of chat a clip is judged by its own measured footprin
   const cap = getGovernorStatus().capBytes;
   expect(cap).toBeGreaterThan(28 * GB + 25.3e9);
   expect(cap).toBeLessThan(28 * GB + 45.8e9);
-  expect(memoryVerdict("ltx25", 25.3e9).ok).toBe(true);
-  expect(memoryVerdict("ltx25", 45.8e9).ok).toBe(false);
+  expect((await memoryVerdict("ltx25", 25.3e9)).ok).toBe(true);
+  expect((await memoryVerdict("ltx25", 45.8e9)).ok).toBe(false);
   const refused = await post({ prompt: "x", model: "ltx25-q8", size: "768x448", seconds: 5 });
   expect(refused.status).toBe(503);
   expect(await refused.json()).toMatchObject({ code: "no_memory" });

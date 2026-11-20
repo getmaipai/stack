@@ -24,6 +24,7 @@
 import { engineIdleMs } from "@/lib/engineIdle";
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { lowDiskRefusal } from "@/lib/diskState";
+import { diskAdmission } from "@/lib/diskState";
 import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
@@ -228,11 +229,13 @@ export function tierLimits(tier: string = getGovernorStatus().tier): { max_secon
 }
 
 /** Whether a song's peak can ever fit beside what is resident right now. A song that cannot is refused now with the numbers; one that only waits on another generator queues. */
-export function memoryVerdict(dit?: string, transcribe = false): { ok: true } | { ok: false; reason: string } {
+export async function memoryVerdict(dit?: string, transcribe = false): Promise<{ ok: true } | { ok: false; kind?: "disk"; reason: string }> {
   const lowMemory = lowMemoryRefusal();
   if (lowMemory) return { ok: false, reason: lowMemory };
-  const lowDisk = lowDiskRefusal();
-  if (lowDisk) return { ok: false, reason: lowDisk };
+  const lowDisk = await lowDiskRefusal();
+  if (lowDisk) return { ok: false, ...lowDisk };
+  const disk = await diskAdmission(musicAdmissionBytes(undefined, dit, transcribe));
+  if (!disk.ok) return { ok: false, kind: "disk", reason: disk.reason };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
   if (resident + musicAdmissionBytes(undefined, dit, transcribe) > status.capBytes) return { ok: false, reason: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." };

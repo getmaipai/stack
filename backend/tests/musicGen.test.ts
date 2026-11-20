@@ -505,7 +505,7 @@ test("not installed without the model, and refused with the numbers when a song 
   const full = await post(song);
   expect(full.status).toBe(503);
   expect(await full.json()).toMatchObject({ code: "no_memory", error: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." });
-  expect(memoryVerdict().ok).toBe(false);
+  expect((await memoryVerdict()).ok).toBe(false);
   expect(MUSIC_PEAK_BYTES).toBe(33_000_000_000);
   expect(MUSIC_XL_PEAK_BYTES).toBe(52_000_000_000);
 });

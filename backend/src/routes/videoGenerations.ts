@@ -67,7 +67,7 @@ const VideoDataSchema = z.object({
   model: z.string(), quality: z.enum(["quick", "ltx25", "ltx25max", "h3", "h3stream"]), audio: z.boolean().openapi({ description: "Whether the model made a sound track. Wan Quick is silent." }), mode: z.enum(["text-to-video", "image-to-video", "extend", "retake", "ic_lora"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
 });
 const VideoResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(VideoDataSchema), lora_warnings: z.array(z.object({ id: z.string(), code: z.enum(["untested_on_25", "tested_on_25"]), message: z.string() })).optional().openapi({ description: "LTXD-18B. Present when an LTX-2.3 style ran on an LTX-2.5 clip: one entry per such style. `untested_on_25` = no bench result; `tested_on_25` = a bench clip showed it changes the output." }) });
-const ErrorBody = z.object({ error: z.string(), code: z.string(), job: z.string().optional() });
+const ErrorBody = z.object({ error: z.string(), code: z.string(), kind: z.literal("disk").optional(), job: z.string().optional() });
 const JobStatusSchema = z.object({
   job: z.string(),
   state: z.enum(["queued", "running", "done", "failed", "cancelled"]),
@@ -156,7 +156,7 @@ function reply<T extends Context>(c: T, body: unknown, status: number) {
   for (const [name, value] of Object.entries(RoleReplyHeaders.parse(identityHeaders(null)))) c.header(name, value);
   return c.json(body as never, status as never);
 }
-const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string) => reply(c, { error, code, ...(job ? { job } : {}) }, status);
+const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string, kind?: "disk") => reply(c, { error, code, ...(kind ? { kind } : {}), ...(job ? { job } : {}) }, status);
 
 function entry(meta: VideoResultMeta) {
   return { url: `/v1/videos/generations/${meta.job}/video.mp4`, poster_url: `/v1/videos/generations/${meta.job}/poster.jpg`, content_type: "video/mp4" as const, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, model: meta.model, quality: meta.quality ?? "quick", audio: meta.audio === true, mode: meta.mode, lora_ids: meta.lora_ids, ms: meta.ms, bytes: meta.bytes, poster_bytes: meta.poster_bytes };
@@ -409,8 +409,8 @@ videoV1Routes.openapi(ingredientsRoute, async (c) => {
 async function runClip(c: Context, body: z.infer<typeof VideoRequestSchema>, quality: VideoQuality, clip: StashedClip, jobFields: Record<string, unknown>, peakBytes: number | undefined) {
   if (!videoGen.hasModels(quality)) return fail(c, 503, "not_installed", quality === "ltx25max" ? "The LTX-2.5 Max video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : quality === "ltx25" ? "The LTX-2.5 video model is not installed yet. An admin can install it in Settings, Models and storage, then try again." : "The video model is not installed yet. Install it from Home's Engines page, then try again.");
   if (activeClips() >= VIDEO_QUEUE_MAX) return fail(c, 429, "queue_full", `${VIDEO_QUEUE_MAX} clips are already waiting. Try again when one finishes.`);
-  const verdict = governorDecides(body.tier) ? { ok: true as const } : memoryVerdict(quality, peakBytes);
-  if (!verdict.ok) return fail(c, 503, "no_memory", verdict.reason);
+  const verdict = governorDecides(body.tier) ? { ok: true as const } : await memoryVerdict(quality, peakBytes);
+  if (!verdict.ok) return fail(c, 503, verdict.kind === "disk" ? "disk" : "no_memory", verdict.reason, undefined, verdict.kind);
   const token = crypto.randomUUID();
   const warned = Array.isArray(jobFields.lora_warnings) ? { lora_warnings: jobFields.lora_warnings } : {};
   stashClip(token, clip);

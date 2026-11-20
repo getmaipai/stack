@@ -34,7 +34,7 @@ const ImportSchema = z.object({ id: z.string(), path: z.string(), roles: z.array
 const ActionSchema = z.object({ action: z.enum(["load", "unload", "pin", "unpin"]) });
 
 const listRoute = createRoute({ method: "get", path: "/", tags: ["Models"], summary: "Installed and known models", responses: { 200: { content: { "application/json": { schema: z.object({ models: z.array(ModelSchema) }) } }, description: "Every model record with its provenance and state." } } });
-const pullRoute = createRoute({ method: "post", path: "/", tags: ["Models"], summary: "Install a pinned model (progress on the event feed)", request: { body: { content: { "application/json": { schema: PullSchema } } } }, responses: { 202: { content: { "application/json": { schema: z.object({ job: z.string(), model: z.string() }) } }, description: "The download job." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Provenance incomplete, or an id that is not a plain name." }, 503: { content: { "application/json": { schema: ErrorSchema } }, description: "The install would cross the critical free-space line." } } });
+const pullRoute = createRoute({ method: "post", path: "/", tags: ["Models"], summary: "Install a pinned model (progress on the event feed)", request: { body: { content: { "application/json": { schema: PullSchema } } } }, responses: { 202: { content: { "application/json": { schema: z.object({ job: z.string(), model: z.string() }) } }, description: "The download job." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Provenance incomplete, or an id that is not a plain name." }, 503: { content: { "application/json": { schema: ErrorSchema.extend({ kind: z.literal("disk").optional() }) } }, description: "The install would cross the critical free-space line (kind: disk)." } } });
 const importRoute = createRoute({ method: "post", path: "/import", tags: ["Models"], summary: "Import a local model file by verified link", request: { body: { content: { "application/json": { schema: ImportSchema } } } }, responses: { 200: { content: { "application/json": { schema: ModelSchema } }, description: "The imported model." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "The path is not a file." } } });
 const InspectSchema = z.object({ source: z.string().min(1), file: z.string().optional() });
 const inspectRoute = createRoute({ method: "post", path: "/inspect", tags: ["Models"], summary: "Read a Hugging Face model file's facts without downloading it", request: { body: { content: { "application/json": { schema: InspectSchema } } } }, responses: { 200: { content: { "application/json": { schema: z.record(z.string(), z.unknown()) } }, description: "Size, sha256, licence, architecture and the repository's sampling card; unreadable parts are null with a reason" }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "The source cannot be added, with what to do" } } });
@@ -91,7 +91,7 @@ modelsRoutes.openapi(wakewordFileRoute, (c) => {
   }
   return c.body(bytes, 200, { "content-type": "application/octet-stream", "content-length": String(bytes.byteLength), "content-disposition": `attachment; filename="${basename(new URL(pin.download.url).pathname)}"`, etag: `"${actual}"` });
 });
-modelsRoutes.openapi(pullRoute, (c) => {
+modelsRoutes.openapi(pullRoute, async (c) => {
   const body = c.req.valid("json");
   // The id names the model's directory under the store.
   try { refuseUnsafeModelId(body.id); } catch (error) { return c.json({ error: (error as Error).message }, 400); }
@@ -106,8 +106,8 @@ modelsRoutes.openapi(pullRoute, (c) => {
   if (model.engine === "mlx-serve" && !model.download.files) return c.json({ error: `${body.id} is an MLX model and needs its pinned file list; none is known for revision ${body.revision}.` }, 400);
   // One directory per model id: two pins whose URLs end in the same file
   // name never share a path.
-  let started: ReturnType<typeof startModelInstall>;
-  try { started = startModelInstall(model, body.role); } catch (error) { return c.json({ error: error instanceof Error ? error.message : "The install could not start." }, 503); }
+  let started: Awaited<ReturnType<typeof startModelInstall>>;
+  try { started = await startModelInstall(model, body.role); } catch (error) { return c.json({ error: error instanceof Error ? error.message : "The install could not start.", ...(error && typeof error === "object" && "kind" in error ? { kind: "disk" as const } : {}) }, 503); }
   const job = { id: started.job };
 
   return c.json({ job: job.id, model: body.id }, 202);

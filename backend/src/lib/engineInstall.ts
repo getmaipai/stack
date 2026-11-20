@@ -7,7 +7,7 @@ import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
 import { readEngineManifest, removeEngineManifest, writeEngineManifest } from "@/lib/store/manifests";
 import { listModels } from "@/lib/modelStore";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
-import { diskAdmission } from "@/lib/diskState";
+import { diskAdmission, DiskRefusalError } from "@/lib/diskState";
 
 export function engineDir(pin: EngineBinaryPin): string {
   return engineTagRoot(pin.name, pin.tag);
@@ -68,8 +68,8 @@ async function installEngine(
   if (existsSync(readyMarker)) return;
   mkdirSync(destination, { recursive: true });
   const archives = [pin.archive, ...(pin.extraArchives ?? [])];
-  const admission = diskAdmission(archives.reduce((sum, archive) => sum + archive.approxBytes, 0) * 3);
-  if (!admission.ok) throw new Error(admission.reason);
+  const admission = await diskAdmission(archives.reduce((sum, archive) => sum + archive.approxBytes, 0) * 3);
+  if (!admission.ok) throw new DiskRefusalError(admission.reason);
   const totalBytes = archives.reduce((sum, archive) => sum + archive.approxBytes, 0);
   let completedBefore = 0;
   for (const archive of archives) {
