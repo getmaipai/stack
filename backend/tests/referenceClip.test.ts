@@ -69,7 +69,7 @@ test("object, place, and mixed references compose through Ingredients multipart"
     });
     expect(response.status).toBe(200);
     expect(forms[0]?.get("sheet")).toBeInstanceOf(File);
-    expect(forms[0]?.get("prompt")).toBe("A short scene");
+    expect(forms[0]?.get("prompt")).toBe("One reference sheet of a character or object, then A short scene. The sheet keeps who it is; the description says what they do.");
     expect(forms[0]?.get("route_name")).toBe("reference_clip");
     expect(forms[0]?.get("route_reason")).toBe("The sheet was composed from the attached pictures.");
   }

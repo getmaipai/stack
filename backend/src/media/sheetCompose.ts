@@ -16,16 +16,21 @@ export function sheetSlots(panels: readonly SheetPanel[], layout: SheetLayout, p
   if (!panels.length) throw new SheetComposeError("A sheet needs at least one picture.");
   const places = panels.filter((panel) => panel.role === "place").length;
   if (places > max_places) throw new SheetComposeError(`A sheet holds up to ${max_places} place pictures. Send fewer places.`);
-  // A place sheet shows multiple views of one place; the place-column cap is only for reference clips.
-  const count = panels.length;
-  const placeCount = placeColumns ? places : 0;
-  const objectCount = count - placeCount;
-  const slotWidth = objectCount === 0 ? place_width : Math.floor((width - gap * (count - 1) - placeCount * place_width) / objectCount);
-  const widths = panels.map((panel) => placeColumns && panel.role === "place" ? place_width : slotWidth);
-  const totalWidth = widths.reduce((sum, item) => sum + item, 0) + gap * (count - 1);
-  if (totalWidth > width || widths.some((item) => item < 1)) throw new SheetComposeError("The sheet panels do not fit this layout.");
-  let x = Math.floor((width - totalWidth) / 2);
-  return panels.map((panel, index) => { const slot = { index, label: panel.label, x, y: 0, width: widths[index]!, height }; x += slot.width + gap; return slot; });
+  // Attached place pictures (reference clips only) are full-height columns on the left; every other panel, including the views of one place, goes in a grid in the remaining width.
+  const placePanels = placeColumns ? panels.filter((panel) => panel.role === "place") : [];
+  const gridPanels = panels.filter((panel) => !placePanels.includes(panel));
+  const slots = new Map<SheetPanel, SheetSlot>();
+  let x = 0;
+  for (const panel of placePanels) { slots.set(panel, { index: panels.indexOf(panel), label: panel.label, x, y: 0, width: place_width, height }); x += place_width + gap; }
+  if (gridPanels.length) {
+    const areaWidth = width - x;
+    const columns = gridPanels.length <= 2 ? gridPanels.length : gridPanels.length <= 4 ? 2 : gridPanels.length <= 6 ? 3 : 4;
+    const rows = Math.ceil(gridPanels.length / columns);
+    const cellW = Math.floor((areaWidth - gap * (columns - 1)) / columns), cellH = Math.floor((height - gap * (rows - 1)) / rows);
+    if (cellW < 1 || cellH < 1) throw new SheetComposeError("The sheet panels do not fit this layout.");
+    gridPanels.forEach((panel, i) => slots.set(panel, { index: panels.indexOf(panel), label: panel.label, x: x + (i % columns) * (cellW + gap), y: Math.floor(i / columns) * (cellH + gap), width: cellW, height: cellH }));
+  } else if (x - gap > width) throw new SheetComposeError("The sheet panels do not fit this layout.");
+  return panels.map((panel) => slots.get(panel)!);
 }
 
 export function sheetFfmpegArgs(ffmpeg: string, inputs: readonly string[], slots: readonly SheetSlot[], layout: SheetLayout, output: string): string[] {
