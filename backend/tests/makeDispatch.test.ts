@@ -69,7 +69,8 @@ test("the catalog never calls an unwired job available", async () => {
   for (const job of catalog.jobs) if (!["picture", "picture_edit", "clip", "song", "song_edit", "stems"].includes(job.job)) expect(job.available).toBe(false);
 });
 
-import { clipBody, dispatchClip, dispatchPictureEdit, PICTURE_UNREADABLE_LINE, editFields } from "@/lib/makeDispatch";
+import { clipBody, dispatchClip, dispatchPictureEdit, INPUT_UNREADABLE_LINE, PICTURE_UNREADABLE_LINE, editFields } from "@/lib/makeDispatch";
+import { sha256Hex } from "@/video/receipt";
 const clipReq = (over: Partial<Extract<StackMakeRequest, { job: "clip" }>> = {}): Extract<StackMakeRequest, { job: "clip" }> => ({ job: "clip", audience: "adult", description: "a dog barks", shape: "landscape", level: "standard", seconds: 5, seed: 3, ...over });
 const clipPlanned = (req = clipReq()) => { const p = planMake(req, [ready("ltx-2-5-q8-distilled-mlx"), ready("minimax-h3")]); if (!p.ok) throw new Error("not planned"); return p; };
 
@@ -82,7 +83,32 @@ test("a finished clip's result carries the job, the file, the poster, the sound 
   const result = await dispatchClip(clipReq(), clipPlanned(), async (path) => ({ status: 200, json: { job: "v1", data: [{ url: "/v1/videos/generations/v1/0.mp4", poster_url: "/v1/videos/generations/v1/0.jpg", seconds: 5, audio: true }] } }));
   expect(result.body).toMatchObject({ id: "v1", job: "clip", state: "done", files: ["/v1/videos/generations/v1/0.mp4"], poster: "/v1/videos/generations/v1/0.jpg", made_with: { part: "ltx-2-5-q8-distilled-mlx", seconds: 5, sound: true } });
 });
+test("a clip's result names its receipt by the job id (VF-RECEIPT-01)", async () => {
+  const result = await dispatchClip(clipReq(), clipPlanned(), async () => ({ status: 200, json: { job: "v1", data: [{ url: "/v1/videos/generations/v1/0.mp4", poster_url: "/v1/videos/generations/v1/0.jpg", seconds: 5, audio: true }] } }));
+  expect(result.body).toMatchObject({ made_with: { receipt: "v1" } });
+});
 const png = { bytes: new Uint8Array([137, 80, 78, 71]), type: "image/png" };
+test("typed inputs are read and handed on as a role and a hash for the receipt, and acted on by nothing (VF-ROLES-01)", async () => {
+  let sent: Record<string, unknown> = {};
+  const request = clipReq({ inputs: [{ role: "identity", file: "/v1/images/generations/a/0.png" }, { role: "wardrobe", file: "/v1/images/generations/b/0.png" }], dialogue: [{ speaker: "sage", text: "I left it here." }], intent: "new_shot" });
+  const result = await dispatchClip(request, clipPlanned(), async (_p, body) => { sent = body as Record<string, unknown>; return { status: 200, json: { job: "v1", data: [] } }; }, async () => png);
+  expect(result.status).toBe(200);
+  expect(sent.roles).toEqual([{ role: "identity", sha256: sha256Hex(png.bytes), bytes: 4 }, { role: "wardrobe", sha256: sha256Hex(png.bytes), bytes: 4 }]);
+  // Not acted on: no picture is sent as a frame, and the dialogue and the intent change neither the prompt nor the body.
+  expect(sent.image).toBeUndefined(); expect(sent.end_image).toBeUndefined();
+  const plain = clipBody(clipReq(), clipPlanned());
+  expect(clipBody(request, clipPlanned())).toEqual(plain);
+  expect(JSON.stringify(sent)).not.toContain("I left it here");
+});
+test("an input that cannot be read is refused plainly, never dropped", async () => {
+  const refused = await dispatchClip(clipReq({ inputs: [{ role: "identity", file: "nope" }] }), clipPlanned(), async () => ({ status: 200, json: {} }), async () => null);
+  expect(refused).toEqual({ status: 409, body: { code: "not_available", line: INPUT_UNREADABLE_LINE } });
+});
+test("a clip with only start and end pictures still means the opening and closing frames, and sends no roles", async () => {
+  let sent: Record<string, unknown> = {};
+  await dispatchClip(clipReq({ start_picture: "/v1/images/generations/a/0.png", end_picture: "data:image/png;base64,AAAA" }), clipPlanned(), async (_p, body) => { sent = body as Record<string, unknown>; return { status: 200, json: { job: "v1", data: [] } }; }, async () => png);
+  expect(typeof sent.image).toBe("string"); expect(typeof sent.end_image).toBe("string"); expect(sent.roles).toBeUndefined();
+});
 test("a clip that starts on a picture sends it to the runner as the first frame; an unreadable picture is refused plainly", async () => {
   let sent: Record<string, unknown> = {};
   await dispatchClip(clipReq({ start_picture: "/v1/images/generations/j/0.png", end_picture: "data:image/png;base64,AAAA" }), clipPlanned(), async (_p, body) => { sent = body as Record<string, unknown>; return { status: 200, json: { job: "v2", data: [] } }; }, async () => png);

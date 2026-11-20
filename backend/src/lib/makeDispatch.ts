@@ -1,6 +1,7 @@
 // MODELPACK-JOBS-01: the second door. A generic request is planned (`planMake`), its prompt is filled from the chosen pack's recipe and its size
 // and part come from the pack, then it is handed to the existing runner's route in this process, so the same seed makes the same files as the
 // old route. Only the jobs listed in WIRED_JOBS are served; the catalog never claims a job that is not wired (see jobsCatalog.ts).
+import { sha256Hex } from "@/video/receipt";
 import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
 import type { MakePlan } from "@/lib/makePlan";
 import { fillRecipe } from "@/lib/recipe";
@@ -35,6 +36,7 @@ export async function dispatchPicture(request: Extract<StackMakeRequest, { job: 
 
 type ClipRequest = Extract<StackMakeRequest, { job: "clip" }>;
 /** A picture named in a request is a file this Stack already served (a path under /v1/) or a data: URL. Anything else cannot be read here and is refused plainly. */
+export const INPUT_UNREADABLE_LINE = "A file named in the request could not be found. Send a file this Stack just made, or a data: URL of it.";
 export const PICTURE_UNREADABLE_LINE = "That picture could not be found. Send the picture a job just made, or a data: URL of it.";
 export type PictureBytes = (reference: string) => Promise<{ bytes: Uint8Array; type: string } | null>;
 export type FormForward = (path: string, form: FormData) => Promise<{ status: number; json: unknown }>;
@@ -102,6 +104,17 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     if (first) body.image = first;
     if (last) body.end_image = last;
   }
+  // VF-ROLES-01: typed inputs are validated by the spec, read, and handed on as a role and a hash for the receipt; nothing acts on them yet.
+  // `dialogue` and `intent` are accepted and ignored (the plain description is what the model is given). An input that cannot be read is refused, never dropped.
+  if (request.inputs?.length) {
+    const roles: Array<{ role: (typeof request.inputs)[number]["role"]; sha256: string; bytes: number }> = [];
+    for (const input of request.inputs) {
+      const got = read ? await read(input.file) : null;
+      if (!got) return { status: 409, body: { code: "not_available", line: INPUT_UNREADABLE_LINE } };
+      roles.push({ role: input.role, sha256: sha256Hex(got.bytes), bytes: got.bytes.length });
+    }
+    body.roles = roles;
+  }
   const sent = await forward("/v1/videos/generations", body);
   if (sent.status !== 200 && sent.status !== 202) return { status: sent.status, body: sent.json };
   const reply = sent.json as { job: string; data?: Array<{ url: string; poster_url?: string; seconds?: number; audio?: boolean }>; notes?: string[] };
@@ -109,7 +122,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
   const result: StackMakeResult = {
     id: reply.job, job: "clip", state: first ? "done" : "running", percent: first ? 100 : 0, status: first ? "Done" : "Making your clip",
     files: (reply.data ?? []).map((d) => d.url), poster: first?.poster_url ?? null,
-    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [] },
+    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job },
   };
   return { status: sent.status, body: result };
 }

@@ -150,6 +150,8 @@ describe("the checks that fail a job, each with one plain line", () => {
 
 // ---- the door and the runner, with fakes ----------------------------------------------------------------------------------------------------
 interface Harness {
+  /** What the sound-track probe prints: empty when the source clip has none. */
+  audio: string;
   calls: string[][]; seeds: number[]; composites: Array<{ start: number; seconds: number; captionBox?: unknown; fps?: number; donor: string }>;
   psnr: number[]; reports: CompositeSwapReport[]; cuts: number[]; probe: string; budget: number; crops: { ok: true; crops: string[] } | { ok: false; line: string; code?: string };
   analysis: { caption_box: [number, number, number, number] | null; people_max: number; many_people_share: number; edge: boolean[] }; adapterReady: boolean;
@@ -158,10 +160,10 @@ const probeJson = (w = 1080, h = 1920, fps = "30/1", duration = "8.0") => JSON.s
 let h: Harness;
 const install = () => {
   useSwapDepsForTests(null);
-  h = { calls: [], seeds: [], composites: [], psnr: [], reports: [], cuts: [3.0], probe: probeJson(), budget: 128 * GIB, crops: { ok: true, crops: ["/crop-1.png"] }, analysis: { caption_box: [170, 1540, 740, 135], people_max: 1, many_people_share: 0, edge: [] }, adapterReady: true };
+  h = { calls: [], seeds: [], composites: [], psnr: [], reports: [], cuts: [3.0], probe: probeJson(), audio: "audio", budget: 128 * GIB, crops: { ok: true, crops: ["/crop-1.png"] }, analysis: { caption_box: [170, 1540, 740, 135], people_max: 1, many_people_share: 0, edge: [] }, adapterReady: true };
   const run: Runner = async (argv) => {
     h.calls.push(argv); const joined = argv.join(" ");
-    if (argv[0] === "/fake/ffprobe") return { code: 0, stdout: h.probe, stderr: "", aborted: false };
+    if (argv[0] === "/fake/ffprobe") return { code: 0, stdout: argv.includes("a:0") ? h.audio : h.probe, stderr: "", aborted: false };
     if (joined.includes("showinfo")) return { code: 0, stdout: "", stderr: h.cuts.map((t, i) => `[Parsed_showinfo_1 @ 0x1] n: ${i} pts: 1 pts_time:${t} pos: 1`).join("\n"), aborted: false };
     if (joined.includes("-lavfi psnr")) return { code: 0, stdout: "", stderr: `[Parsed_psnr_0 @ 0x1] PSNR y:1 u:1 v:1 average:${h.psnr.shift() ?? 20} min:1 max:2`, aborted: false };
     const last = argv[argv.length - 1]!; if (last !== "-" && /\.(mp4|jpg)$/.test(last)) writeFileSync(last, "x");
@@ -203,6 +205,13 @@ describe("the door", () => {
     expect(body).toMatchObject({ job: "swap", files: [], made_with: { part: PART, shape: "portrait", seconds: 6 } });
     expect(body.made_with.notes.join(" ")).toContain("original footage"); expect(getJob(body.id)?.kind).toBe(SWAP_MAKE_JOB_KIND);
     expect(stagedDirs()).toHaveLength(1);
+  });
+  test("the result names its receipt, and says whether the original sound is there to keep (VF-RECEIPT-01)", async () => {
+    const withSound = (await door()).body as { id: string; made_with: { sound: boolean; receipt?: string } };
+    expect(withSound.made_with).toMatchObject({ sound: true, receipt: withSound.id });
+    h.audio = "";   // the source clip has no sound track
+    const silent = (await door()).body as { id: string; made_with: { sound: boolean; receipt?: string } };
+    expect(silent.made_with).toMatchObject({ sound: false, receipt: silent.id });
   });
   test("the job declares the peak of the shape that fits, and a lowered shape is said so", async () => {
     const sent = await door(request(), { boost: false });

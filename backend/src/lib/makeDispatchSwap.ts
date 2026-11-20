@@ -18,6 +18,7 @@ import { defaultToolbox, type MediaToolbox } from "@/media/tools";
 import { spawnRunner, type Runner } from "@/media/run";
 import { analyzeClip, compositeSwap, compositeSwapEnvironmentReady, ensureCompositeSwapEnvironment, referenceCrops, type CompositeSwapReport } from "@/video/compositeSwap";
 import { commitCompositeSwap, DONOR_ADAPTERS, type DonorAdapter } from "@/video/swap";
+import { sha256File } from "@/video/receipt";
 import {
   clipHasTooManyPeople, donorCopiedGuide, donorCopiedLine, donorCropFilter, guideFilter, guideLayout, MANY_PEOPLE_IN_CLIP_LINE, parsePsnr, parseSceneCuts,
   pickSwapShape, planSegments, referenceNames, segmentFailures, swapTuning, type GuideLayout, type Segment, type SwapShapeOffer, type SwapTuning,
@@ -117,6 +118,8 @@ export async function dispatchSwap(request: SwapRequest, plan: Planned, read: Pi
     const probed = await deps.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,avg_frame_rate:format=duration", "-of", "json", source], { collectStdout: true });
     const probe = probed.code === 0 ? parseProbe(probed.stdout) : null;
     if (!probe) return fail(SWAP_CLIP_NOT_VIDEO_LINE);
+    const heard = await deps.run([ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", source], { collectStdout: true });
+    const hasSound = heard.code === 0 && heard.stdout.trim().length > 0;
     const start = request.start_seconds ?? 0;
     if (start + request.seconds > probe.duration + 0.05) return fail(SWAP_WINDOW_LINE);
     if (request.seconds < SWAP_MIN_SECONDS) return fail(`A swap needs at least ${SWAP_MIN_SECONDS} second of clip. Choose a longer part.`);
@@ -136,7 +139,7 @@ export async function dispatchSwap(request: SwapRequest, plan: Planned, read: Pi
     ];
     const result: StackMakeResult = {
       id: submitted.job.id, job: "swap", state: submitted.job.state, percent: 0, status: "Getting ready", files: [], poster: null,
-      made_with: { part: part.id, label: part.label, pack_version: pack.pack.version, shape: picked.offer.shape, seconds: staged.seconds, sound: false, notes },
+      made_with: { part: part.id, label: part.label, pack_version: pack.pack.version, shape: picked.offer.shape, seconds: staged.seconds, sound: hasSound, notes, receipt: submitted.job.id },
     };
     return { status: 202, body: result };
   } catch (error) {
@@ -248,12 +251,19 @@ async function swapSteps(job: Job, staged: Staged, signal: AbortSignal, update: 
   const poster = join(staged.dir, "poster.jpg");
   await media(["-v", "error", "-y", "-i", video, "-frames:v", "1", "-q:v", "2", poster], "Making the poster");
   if (!existsSync(video) || !existsSync(poster)) throw new JobFailure("The finished clip could not be written. Try again.");
-  commitCompositeSwap({ job: job.id, width: staged.sourceSize.width, height: staged.sourceSize.height, fps: staged.fps, frames: totalFrames, seconds: staged.seconds, seed: tuning.retakeSeeds[0]!, ms: Date.now() - started, peakBytes: offer.peakBytes }, staged.dir);
+  await commitCompositeSwap({ job: job.id, width: staged.sourceSize.width, height: staged.sourceSize.height, fps: staged.fps, frames: totalFrames, seconds: staged.seconds, seed: tuning.retakeSeeds[0]!, ms: Date.now() - started, peakBytes: offer.peakBytes, description: staged.description, inputs: swapReceiptInputs(staged) }, staged.dir);
   update({ status: "done", percent: 100 });
   return { job: job.id, segments: segments.length, seconds: staged.seconds, shape: `${offer.width}x${offer.height}`, level: offer.level, caption_erased: captionBox !== null, files: [`/v1/videos/swap/${job.id}/video.mp4`], poster: `/v1/videos/swap/${job.id}/poster.jpg`, checks };
 }
 
 type Media = (args: string[], what: string) => Promise<string>;
+
+/** VF-RECEIPT-01: the swap's inputs by role and hash: the source clip, and each reference picture as the identity. */
+function swapReceiptInputs(staged: Staged): Array<{ role: "source_clip" | "identity"; sha256: string; bytes: number }> {
+  const out: Array<{ role: "source_clip" | "identity"; sha256: string; bytes: number }> = [];
+  try { out.push({ role: "source_clip", ...sha256File(staged.source) }); for (const reference of staged.references) out.push({ role: "identity", ...sha256File(reference) }); } catch { /* a missing input is left out of the receipt */ }
+  return out;
+}
 
 /** The guide for one segment: the original footage with captions erased, fitted to the model's canvas (with room around it when the head leaves the frame), at the model's frame rate. A short piece is played forward and back until it fills one model call. */
 async function makeGuide(media: Media, staged: Staged, segment: Segment, layout: GuideLayout, canvas: { width: number; height: number }, tuning: SwapTuning, captionBox: readonly number[] | null, dir: string): Promise<string> {

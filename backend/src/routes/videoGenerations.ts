@@ -25,7 +25,7 @@ import { MAX_DRAIN_STATUS, MAX_WAIT_STATUS, cancelJob, getJob, hasJobRunner, isJ
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { getLora, listLoras, loraPath, LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
-import { deleteResult, isJobId, messagesPath, posterPath, readResult, videoPath, type VideoResultMeta } from "@/video/results";
+import { deleteResult, isJobId, messagesPath, posterPath, readReceipt, readResult, receiptPath, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
 import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25MaxRefusal, ltx25MaxRow, ltx25PeakBytes, ltx25Refusal, ltx25Row, ltx25TrueSize, LTX25_MAX_MEASURED, LTX25_MEASURED } from "@/video/ltx25";
 import { checkEdit, EditSourceError, editRuntime, ltx25EditAdmitBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED, planSource, probeSource, type Ltx25EditKind } from "@/video/ltx25Edit";
@@ -56,6 +56,7 @@ const VideoRequestSchema = z.object({
   audience: z.enum(["all-ages", "adult"]).optional().openapi({ description: "Who the clip is for, set by Home from the person's age band and the surface. Default all-ages. An adult-only LoRA in the list with audience all-ages is refused (422 lora_not_allowed)." }),
   timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional().openapi({ description: `How long this request waits for the clip before answering 202 with the job id. Default ${DEFAULT_WAIT_MS}. A clip takes about two to three minutes.` }),
   tier: TierFieldSchema,
+  roles: z.array(z.object({ role: z.enum(["identity", "wardrobe", "voice_reference", "edit_source"]), sha256: z.string().regex(/^[0-9a-f]{64}$/), bytes: z.number().int().min(0) })).max(8).optional().openapi({ description: "VF-ROLES-01, set by the generic door only: the typed inputs of a clip request, each as a role and the hash of the file. They are written to the job's receipt and not acted on yet (the capability and route rows do that)." }),
   quiet_seconds: z.number().int().min(20).max(3600).optional(),
   quiet_max_wait_seconds: z.number().int().min(0).max(86400).nullable().optional(),
 });
@@ -64,7 +65,10 @@ const VideoDataSchema = z.object({
   poster_url: z.string().openapi({ description: "GET this for the JPEG of frame 0." }),
   content_type: z.literal("video/mp4"),
   width: z.number().int(), height: z.number().int(), frames: z.number().int(), fps: z.number().int(), seconds: z.number().int(), seed: z.number().int(),
-  model: z.string(), quality: z.enum(["quick", "ltx25", "ltx25max", "h3", "h3stream"]), audio: z.boolean().openapi({ description: "Whether the model made a sound track. Wan Quick is silent." }), mode: z.enum(["text-to-video", "image-to-video", "extend", "retake", "ic_lora"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
+  model: z.string(), quality: z.enum(["quick", "ltx25", "ltx25max", "h3", "h3stream"]), audio: z.boolean().openapi({ description: "Whether the model made a sound track. Wan Quick is silent." }), mode: z.enum(["text-to-video", "image-to-video", "extend", "retake", "ic_lora", "swap"]), lora_ids: z.array(z.string()), ms: z.number().int(), bytes: z.number().int(), poster_bytes: z.number().int(),
+  receipt_url: z.string().optional().openapi({ description: "VF-RECEIPT-01: GET this for the job's receipt (JSON), on the owner's route only. Absent on a result made before receipts." }),
+  native: z.object({ width: z.number().int(), height: z.number().int(), frames: z.number().int(), bytes: z.number().int(), kept: z.boolean() }).optional().openapi({ description: "The file the model made, with its true size; `kept` says it is stored as it was beside the delivered file." }),
+  delivered_is: z.enum(["native", "finished", "messaging_copy"]).optional().openapi({ description: "Whether the delivered video.mp4 is the model's own file, a finished (sharpened or enlarged) copy, or the messaging-ready copy." }),
 });
 const VideoResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(VideoDataSchema), lora_warnings: z.array(z.object({ id: z.string(), code: z.enum(["untested_on_25", "tested_on_25"]), message: z.string() })).optional().openapi({ description: "LTXD-18B. Present when an LTX-2.3 style ran on an LTX-2.5 clip: one entry per such style. `untested_on_25` = no bench result; `tested_on_25` = a bench clip showed it changes the output." }) });
 const ErrorBody = z.object({ error: z.string(), code: z.string(), kind: z.literal("disk").optional(), job: z.string().optional() });
@@ -127,6 +131,10 @@ const posterFileRoute = createRoute({ method: "get", path: "/generations/{job}/p
   200: { content: { "image/jpeg": { schema: z.string().openapi({ format: "binary" }) } }, description: "The JPEG of frame 0." },
   404: { content: { "application/json": { schema: ErrorBody } }, description: "The poster is gone." },
 } });
+const receiptFileRoute = createRoute({ method: "get", path: "/generations/{job}/receipt.json", tags: ["Video"], summary: "The job's receipt (VF-RECEIPT-01)", request: { params: z.object({ job: z.string() }) }, responses: {
+  200: { content: { "application/json": { schema: z.record(z.string(), z.unknown()) } }, description: "What made the clip: runtime and model, steps, adapter, inputs by role and hash, requested and delivered sizes probed from the files, the finish that ran, the prompt as a byte count and hash. Part of the owner's record: it is not logged and no status route carries it." },
+  404: { content: { "application/json": { schema: ErrorBody } }, description: "No receipt: the clip is gone, or it was made before receipts." },
+} });
 const MessagesTitle = z.object({ title: z.string().max(120).optional().openapi({ description: "The title written into the file (the clip's name in a share sheet). Default: MaiPai video." }) });
 const messagesFileRoute = createRoute({ method: "get", path: "/generations/{job}/messages.mp4", tags: ["Video"], summary: "The clip prepared for messaging apps (made on first request, then kept)", request: { params: z.object({ job: z.string() }), query: MessagesTitle }, responses: {
   200: { content: { "video/mp4": { schema: z.string().openapi({ format: "binary" }) } }, description: "H.264 yuv420p mp4 with a silent AAC track, the moov box first, a title, at most 20 MB. New clips are already in this form; this makes it for a clip made before." },
@@ -159,7 +167,7 @@ function reply<T extends Context>(c: T, body: unknown, status: number) {
 const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string, kind?: "disk") => reply(c, { error, code, ...(kind ? { kind } : {}), ...(job ? { job } : {}) }, status);
 
 function entry(meta: VideoResultMeta) {
-  return { url: `/v1/videos/generations/${meta.job}/video.mp4`, poster_url: `/v1/videos/generations/${meta.job}/poster.jpg`, content_type: "video/mp4" as const, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, model: meta.model, quality: meta.quality ?? "quick", audio: meta.audio === true, mode: meta.mode, lora_ids: meta.lora_ids, ms: meta.ms, bytes: meta.bytes, poster_bytes: meta.poster_bytes };
+  return { url: `/v1/videos/generations/${meta.job}/video.mp4`, poster_url: `/v1/videos/generations/${meta.job}/poster.jpg`, content_type: "video/mp4" as const, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, model: meta.model, quality: meta.quality ?? "quick", audio: meta.audio === true, mode: meta.mode, lora_ids: meta.lora_ids, ms: meta.ms, bytes: meta.bytes, poster_bytes: meta.poster_bytes, ...(existsSync(receiptPath(meta.job)) ? { receipt_url: `/v1/videos/generations/${meta.job}/receipt.json` } : {}), ...(meta.native ? { native: meta.native } : {}), ...(meta.delivered_is ? { delivered_is: meta.delivered_is } : {}) };
 }
 
 /** "832x480" to width and height, or the sentence to return. */
@@ -308,7 +316,7 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const basePeak = quality === "ltx25max" ? ltx25MaxPeakBytes(image !== null) : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1, image !== null) : undefined;
   const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
   if (peak !== undefined && peak > LTX25_CLIP_CAP_BYTES) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
-  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
+  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false, ...(body.roles ? { roles: body.roles } : {}) }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
 });
 
 videoV1Routes.openapi(restyleRoute, async (c) => {
@@ -514,6 +522,14 @@ videoV1Routes.openapi(posterFileRoute, (c) => {
   const id = c.req.valid("param").job;
   if (!isJobId(id) || !existsSync(posterPath(id)) || hiddenFromCaller(c, id)) return fail(c, 404, "expired", "That poster is gone: results are kept for a day, or Home deleted it.") as never;
   return fileResponse(c, posterPath(id), "image/jpeg", undefined) as never;
+});
+
+videoV1Routes.openapi(receiptFileRoute, (c) => {
+  const id = c.req.valid("param").job;
+  const receipt = isJobId(id) && existsSync(videoPath(id)) && !hiddenFromCaller(c, id) ? readReceipt(id) : null;
+  if (!receipt) return fail(c, 404, "no_receipt", "There is no receipt for that clip: it is gone, or it was made before receipts. Make it again to get one.") as never;
+  c.header("cache-control", "no-store");
+  return c.json(receipt as Record<string, unknown>, 200) as never;
 });
 
 function messagesFailure<T extends Context>(c: T, error: unknown) {

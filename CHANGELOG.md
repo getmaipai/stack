@@ -8,6 +8,18 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ## [Unreleased]
 
+### Added
+
+- VF-RECEIPT-01: every video job (generate, swap, ingredients, extend, retake, restyle) writes a receipt beside its result and serves it at `GET /v1/videos/generations/{job}/receipt.json`, on the same owner-only guards as the clip (adult results stay hidden from a caller without the full view). It holds the runtime and its revision, the model build, quantization, the steps and schedule that ran, the adapter and strength, each input as a role and a hash (never a file name), the requested size, the native file and the delivered file each probed from the file itself, the finish that ran (operation, from size, to size, ok), the seed, phase times, peak memory, and the prompt as a byte count and a hash (never its text). It is part of the owner's record (rule 6a): no log, status answer, event or admin view carries it. The shape is the spec's `StackVideoReceipt` (`@maipai/spec` 0.1.428); `made_with.receipt` on a generic-door clip or swap result names it by job id. The video entries gain optional `receipt_url`, `native` (true size, `kept`) and `delivered_is`; nothing existing changes.
+- The model's file is never rewritten in place any more. The LTX messaging-ready copy and the H3 finish are made from a kept `native.mp4`, and `video.mp4` (the file Home downloads today) stays the delivered one. A failed copy or finish leaves the native bytes as `video.mp4`. The H3 reply is read from the file, and the H3 poster is cut again after the finish. Disk cleanup of the extra `native.mp4` follows DISK-GUARD-04 (it lives with its result under `data/video/results/<job>/`, swept with it).
+- Swap results tell the truth: mode `swap`, the real byte counts and the sound of the delivered file; `made_with.sound` is whether the source has a sound track.
+
+- VF-ROLES-01 (accept and ignore safely): the generic door's `clip` request now accepts the spec's `inputs` (typed roles), `dialogue` and `intent` (`@maipai/spec` 0.1.431). The inputs are read, hashed and recorded in the receipt by role; nothing acts on them yet and the dialogue and intent change nothing (the capability and route rows do that). An input that cannot be read is refused plainly, never dropped. `start_picture` and `end_picture` still mean the opening and closing frames.
+
+### Changed
+
+- Video results are kept for 24 hours and the newest 120 (was 24), so a film's first shots keep their native files and receipts until the cut.
+
 ### Removed
 
 - The Muse Glimmer 30B chat family and the Qwen3 1.7B chat models (owner decision 2026-11-17). Parts removed: `muse-glimmer-30b-q4-k-xl`, `muse-glimmer-30b-q4-k-m`, `muse-glimmer-30b-mlx-4bit`, the Muse picture projector `muse-glimmer-30b-mmproj-q4-k-m`, `qwen3-1.7b-q8-0` and `qwen3-1.7b-mlx-4bit` (nothing selected the MLX one). Ported first: every profile (p16, p32, p64, p128) now binds the Qwen3 8B as its recommended Standard chat model, the highest-priority chat part left that is cleared for Standard (Boost chat stays the Qwen3.8 27B; the abliterated Qwen3.8 27B is not a default); the first-run plan has no separate small starter chat (the chat model is the starter); the oMLX opt-in builds its environment and runs whichever MLX chat model an admin installed, since no MLX chat model is pinned, so the optional oMLX disk-plan row and its download are gone; the disk plan, measured data, tier slots, part table, catalog, tests and docs follow. An install that still has the old files or records boots: the parts leave the lists and plans, the records and any stored choice are left as they are, and nothing is deleted.

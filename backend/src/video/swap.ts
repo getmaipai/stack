@@ -1,6 +1,6 @@
 // H3-SWAP-STACK-01: private, segmented head replacement through the patched
 // mere.run H3 guide-video interface. Nothing is downloaded here.
-import { existsSync, mkdirSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { registerJobRunner, type Job } from "@/lib/jobs";
@@ -9,6 +9,8 @@ import { defaultToolbox, type MediaToolbox } from "@/media/tools";
 import { spawnRunner, type Runner } from "@/media/run";
 import { workDir, commitResult } from "./results";
 import { VideoError } from "./videoGen";
+import { buildReceipt, probeReceiptFile, reportedFile, type BuildReceiptInput } from "./receipt";
+import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 
 export const H3_SWAP_JOB_KIND = "h3-swap";
 export const H3_SWAP_MAX_SECONDS = 10;
@@ -123,7 +125,7 @@ export function registerH3SwapJobs(): void {
       if (step.code !== 0 || !existsSync(final)) throw new VideoError("failed", "The finished clip could not be written.", 500);
       const poster = join(root, "poster.jpg"); step = await run([ffmpeg, "-y", "-i", final, "-frames:v", "1", "-q:v", "2", poster], signal);
       if (step.code !== 0 || !existsSync(poster)) throw new VideoError("failed", "The poster could not be made.", 500);
-      commitResult({ job: job.id, created: Math.floor(Date.now() / 1000), width: width * 2, height: height * 2, frames: Math.ceil(input.seconds * FPS), fps: FPS, seconds: input.seconds, seed: 42, model: MODEL_ID, quality: "h3", audio: true, mode: "retake", lora_ids: [], ms: Date.now() - started, bytes: 0, poster_bytes: 0, mlx_peak_gb: PEAK[input.size] / GB }, root);
+      await commitCompositeSwap({ job: job.id, width: width * 2, height: height * 2, fps: FPS, frames: Math.ceil(input.seconds * FPS), seconds: input.seconds, seed: 42, ms: Date.now() - started, peakBytes: PEAK[input.size], description: staged.description }, root);
       update({ status: "done", percent: 100 }); return { job: job.id, segments: count, seconds: input.seconds, model: MODEL_ID };
     } catch (error) { rmSync(root, { recursive: true, force: true }); throw error; }
     finally { lease.detach(); try { unlinkSync(staged.source); } catch { /* already removed */ } }
@@ -154,7 +156,21 @@ export const guideVideoSwapAdapter: DonorAdapter = {
 };
 export const DONOR_ADAPTERS: Readonly<Record<string, DonorAdapter>> = { [GUIDE_VIDEO_SWAP_ADAPTER]: guideVideoSwapAdapter };
 
-/** Files a finished composite swap in the video result store, where the old swap route and the generic job routes serve it from. */
-export function commitCompositeSwap(info: { job: string; width: number; height: number; fps: number; frames: number; seconds: number; seed: number; ms: number; peakBytes: number }, work: string): void {
-  commitResult({ job: info.job, created: Math.floor(Date.now() / 1000), width: info.width, height: info.height, frames: info.frames, fps: info.fps, seconds: info.seconds, seed: info.seed, model: MODEL_ID, quality: "h3", audio: true, mode: "retake", lora_ids: [], ms: info.ms, bytes: 0, poster_bytes: 0, mlx_peak_gb: info.peakBytes / GB }, work);
+/**
+ * Files a finished composite swap in the video result store, where the old swap route and the generic job routes serve it from.
+ * VF-RECEIPT-01: the metadata is the truth about the file (its real byte counts, `swap` as the mode, the sound of the delivered file) and a receipt is
+ * written beside it. The swap never derives a second file, so the delivered file is the native one.
+ */
+export async function commitCompositeSwap(info: { job: string; width: number; height: number; fps: number; frames: number; seconds: number; seed: number; ms: number; peakBytes: number; description?: string; inputs?: BuildReceiptInput["inputs"] }, work: string): Promise<void> {
+  const video = join(work, "video.mp4");
+  const poster = join(work, "poster.jpg");
+  const delivered = (await probeReceiptFile(video)) ?? reportedFile(video, { width: info.width, height: info.height, frames: info.frames, fps: info.fps, audio: true });
+  const receipt = buildReceipt({
+    job: info.job, operation: "swap", madeAt: new Date(),
+    runtime: { id: "composite-swap", revision: MANAGED_RUNTIMES.find((runtime) => runtime.name === "composite-swap")?.version ?? "unknown" },
+    model: { id: MODEL_ID, build: "head-composite", quantization: null }, steps: { count: null, schedule: null }, adapter: null, inputs: info.inputs ?? [],
+    requested: { width: info.width, height: info.height, frames: info.frames, seconds: info.seconds }, native: delivered, delivered, deliveredIs: "native", seed: info.seed,
+    phases: [{ name: "swap", ms: info.ms }], peakBytes: info.peakBytes, finish: [], prompt: info.description ?? "",
+  });
+  commitResult({ job: info.job, created: Math.floor(Date.now() / 1000), width: delivered.width, height: delivered.height, frames: delivered.frames, fps: Math.round(delivered.fps) || info.fps, seconds: info.seconds, seed: info.seed, model: MODEL_ID, quality: "h3", audio: delivered.audio, mode: "swap", lora_ids: [], ms: info.ms, bytes: delivered.bytes, poster_bytes: existsSync(poster) ? statSync(poster).size : 0, mlx_peak_gb: info.peakBytes / GB, native: { width: delivered.width, height: delivered.height, frames: delivered.frames, bytes: delivered.bytes, kept: false }, delivered_is: "native" }, work, receipt);
 }

@@ -6,7 +6,7 @@
 // (lib/jobs.ts) gives the clip its place in line and the governor's admission
 // of 44 GB before this runner is called. The kind is not a role id on
 // purpose: `/v1/images/generations` with model "video" must never reach it.
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { registerJobRunner } from "@/lib/jobs";
 import { heavyGate } from "@/lib/heavyGate";
@@ -22,7 +22,11 @@ import { upscaleClip } from "@/media/upscale";
 import { defaultToolbox } from "@/media/tools";
 import { probeFile } from "@/media/probe";
 import { spawnRunner } from "@/media/run";
-import { finishH3Clip } from "./h3";
+import { H3_VIDEO_ENGINE, H3_VIDEO_VERSION } from "./h3";
+import { buildReceipt, phaseDurations, sha256File, sha256Hex, type BuildReceiptInput, type ReceiptOperation } from "./receipt";
+import { deliverClip } from "./deliver";
+import { LTX25_GEN_NAME, LTX25_GEN_VERSION, LTX25_MAX_GEN_NAME, LTX25_MAX_GEN_VERSION } from "./ltx25";
+import { VIDEO_GEN_NAME, VIDEO_GEN_VERSION } from "./videoGen";
 
 export const VIDEO_JOB_KIND = "video_generation";
 export function videoAdmission(input: { quality?: VideoQuality; size?: string; seconds?: number; mode?: string; edit?: Ltx25EditKind; lora_admit_bytes?: number }): { requestedBytes: number; measuredPeakBytes: number; engine: string } {
@@ -49,6 +53,8 @@ export interface StashedClip {
   icLora?: { sourcePath: string; sourceIsResult: boolean; loraPath: string; loraId: string; strength: number; conditioning: "source" | "edges"; audio: boolean };
   /** INGREDIENTS-01 (Max only): one or two reference sheet PNGs (768x448) and the installed Ingredients adapter. */
   ingredients?: { sheets: Uint8Array[]; loraPath: string; loraId: string };
+  /** VF-ROLES-01: the typed inputs of the generic door's clip request (role and file hash), written to the receipt and not acted on yet. */
+  roles?: Array<{ role: "identity" | "wardrobe" | "voice_reference" | "edit_source"; sha256: string; bytes: number }>;
 }
 const pending = new Map<string, StashedClip & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -111,6 +117,17 @@ async function prepareEditSource(edit: NonNullable<StashedClip["edit"]>, work: s
   }
 }
 
+/** VF-RECEIPT-01: the runtime, the model build and its quantization, as each quality runs them (the numbers are the ones the runner uses). */
+function receiptFacts(quality: VideoQuality): Pick<BuildReceiptInput, "runtime" | "model"> {
+  const model = VIDEO_SPECS[quality].modelId;
+  if (quality === "ltx25max") return { runtime: { id: LTX25_MAX_GEN_NAME, revision: LTX25_MAX_GEN_VERSION }, model: { id: model, build: "distilled", quantization: "bf16" } };
+  if (quality === "ltx25") return { runtime: { id: LTX25_GEN_NAME, revision: LTX25_GEN_VERSION }, model: { id: model, build: "distilled", quantization: "q8" } };
+  if (quality === "h3") return { runtime: { id: H3_VIDEO_ENGINE, revision: H3_VIDEO_VERSION }, model: { id: model, build: "boost-8bit", quantization: "8-bit" } };
+  if (quality === "h3stream") return { runtime: { id: H3_VIDEO_ENGINE, revision: H3_VIDEO_VERSION }, model: { id: model, build: "streaming-24gb", quantization: "4-bit" } };
+  return { runtime: { id: VIDEO_GEN_NAME, revision: VIDEO_GEN_VERSION }, model: { id: model, build: "standard", quantization: null } };
+}
+const receiptOperation = (clip: StashedClip): ReceiptOperation => clip.ingredients ? "ingredients" : clip.icLora ? "restyle" : clip.edit ? clip.edit.kind : "generate";
+
 export interface VideoJobResult { job: string; model: string; width: number; height: number; frames: number; fps: number; seconds: number; seed: number; lora_ids: string[]; ms: number; }
 
 export function registerVideoJobs(): void {
@@ -129,6 +146,15 @@ export function registerVideoJobs(): void {
       const outputDir = join(work, "out");
       const started = Date.now();
       const quality = clip.quality ?? "quick";
+      // VF-RECEIPT-01: what was asked (before an edit's source sets the real size), the order phases were entered in, and the inputs by role and hash.
+      const requested = { width: clip.width, height: clip.height, frames: clip.frames, seconds: Math.max(0, Math.round(((clip.frames - 1) / 24) * 1000) / 1000) };
+      const entered: Array<{ name: string; at: number }> = [{ name: "waiting", at: started }];
+      const receiptInputs: BuildReceiptInput["inputs"] = [];
+      const addInput = (role: BuildReceiptInput["inputs"][number]["role"], bytes: Uint8Array): void => { receiptInputs.push({ role, sha256: sha256Hex(bytes), bytes: bytes.length }); };
+      if (clip.image) addInput("start", clip.image);
+      if (clip.endImage) addInput("end", clip.endImage);
+      for (const sheet of clip.ingredients?.sheets ?? []) addInput("sheet", sheet);
+      for (const role of clip.roles ?? []) receiptInputs.push(role);
       // LTX25-EDIT-01: the source is probed again (the authority), fitted to the runtime's table when needed and copied into the job's private folder.
       let editInput: VideoRunInput["edit"] | undefined;
       if (clip.edit) {
@@ -153,6 +179,8 @@ export function registerVideoJobs(): void {
         const status = (value: string) => update({ status: value });
         icLoraInput = { sourcePath: "", path: clip.ingredients.loraPath, strength: 1, conditioning: "source", sheets, ffprobe: await editRuntime.toolbox.path("ffprobe", status, signal), ffmpeg: await editRuntime.toolbox.path("ffmpeg", status, signal) };
       }
+      if (editInput) { const source = sha256File(editInput.sourcePath); receiptInputs.push({ role: "source_clip", ...source }); }
+      else if (icLoraInput && !clip.ingredients && icLoraInput.sourcePath) { const source = sha256File(icLoraInput.sourcePath); receiptInputs.push({ role: "source_clip", ...source }); }
       const pacing = heavyGate.pacing(job.id);
       const tracker = clip.icLora || clip.ingredients
         ? new GenTracker("video_edit", historyKey("video_edit", clip.width, clip.height, `ic_lora-${clip.frames}`), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused)
@@ -166,30 +194,47 @@ export function registerVideoJobs(): void {
       remember(trackers, job.id, tracker);
       const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, endImagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality, ...(editInput ? { edit: editInput } : {}), ...(icLoraInput ? { icLora: icLoraInput } : {}) }, {
         jobId: job.id, signal,
-        onPhase: (phase, phasePercent) => { remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
+        onPhase: (phase, phasePercent) => { if (entered[entered.length - 1]?.name !== phase) entered.push({ name: phase, at: Date.now() }); remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
         onStage: (stage, n, of) => { tracker.enter(stage, n, of); update({ percent: Math.round(tracker.snapshot().fraction * 100) }); },
         onPreview: () => tracker.setPreview(null, null),
       });
-      if (quality === "h3" || quality === "h3stream") try { await finishH3Clip(async (path) => {
-        const ffmpeg = await defaultToolbox.path("ffmpeg", (status) => update({ status }), signal);
-        const ffprobe = await defaultToolbox.path("ffprobe", (status) => update({ status }), signal);
-        const probe = await probeFile(spawnRunner, ffprobe, path, signal);
-        const target = join(outputDir, "video-upscaled.mp4");
-        await upscaleClip({ ffmpeg, run: spawnRunner, input: path, target, work: outputDir, probe, signal, progress: (next) => update(next), basePercent: 95, percentSpan: 4 });
-        copyFileSync(target, path);
-      }, join(outputDir, "video.mp4")); } catch (error) { if (signal.aborted) throw error; update({ status: "The clip is kept as made: the sharpening step could not run, so it is not sharpened." }); }
-      recordRun(tracker.key, tracker.finish());
+      // VF-RECEIPT-01: the model's own file is kept; see deliver.ts. A failed finish tells the person (the clip is kept as made) and still delivers the native file.
       const video = join(outputDir, "video.mp4");
       const poster = join(outputDir, "poster.jpg");
+      const isH3 = quality === "h3" || quality === "h3stream";
+      const delivery = await deliverClip({
+        outputDir, derivedByGenerator: result.derived === "messaging_copy", signal,
+        reported: { width: result.width, height: result.height, frames: result.frames, fps: result.fps, audio: result.audio },
+        finish: isH3 ? async (path) => {
+          try {
+            const ffmpeg = await defaultToolbox.path("ffmpeg", (status) => update({ status }), signal);
+            const ffprobe = await defaultToolbox.path("ffprobe", (status) => update({ status }), signal);
+            const probe = await probeFile(spawnRunner, ffprobe, path, signal);
+            const target = join(outputDir, "video-upscaled.mp4");
+            await upscaleClip({ ffmpeg, run: spawnRunner, input: path, target, work: outputDir, probe, signal, progress: (next) => update(next), basePercent: 95, percentSpan: 4 });
+            copyFileSync(target, path);
+          } catch (error) { if (!signal.aborted) update({ status: "The clip is kept as made: the sharpening step could not run, so it is not sharpened." }); throw error; }
+        } : null,
+        recutPoster: async (file, target) => { const ffmpeg = await defaultToolbox.path("ffmpeg", () => {}, signal); await spawnRunner([ffmpeg, "-y", "-i", file, "-frames:v", "1", "-q:v", "2", target], { signal }); },
+      });
+      recordRun(tracker.key, tracker.finish());
+      const nativeFile = delivery.native, deliveredFile = delivery.delivered, deliveredIs = delivery.deliveredIs, finish = delivery.finish, keptNative = delivery.keptNative;
+      const loraAdapter = clip.loraIds[0] !== undefined ? { id: clip.loraIds[0], strength: clip.loras[0]?.[1] ?? null, sha256: null } : null;
+      const adapter = clip.ingredients ? { id: clip.ingredients.loraId, strength: 1, sha256: null } : clip.icLora ? { id: clip.icLora.loraId, strength: clip.icLora.strength, sha256: null } : result.ran?.adapter ? { ...result.ran.adapter, sha256: null } : loraAdapter;
+      const receipt = buildReceipt({
+        job: job.id, operation: receiptOperation(clip), madeAt: new Date(), ...receiptFacts(quality), steps: { count: result.ran?.steps ?? null, schedule: result.ran?.schedule ?? null }, adapter,
+        inputs: receiptInputs, requested, native: nativeFile, delivered: deliveredFile, deliveredIs, seed: result.seed, phases: phaseDurations(entered, Date.now()), peakBytes: result.peakBytes, finish, prompt: clip.prompt,
+      });
       const meta: VideoResultMeta = {
-        job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), width: result.width, height: result.height, frames: result.frames, fps: result.fps, seconds: Math.round((result.frames - 1) / result.fps),
+        job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), width: deliveredFile.width, height: deliveredFile.height, frames: deliveredFile.frames, fps: Math.round(deliveredFile.fps) || result.fps, seconds: Math.round((deliveredFile.frames - 1) / (deliveredFile.fps || result.fps)),
         seed: result.seed, model: VIDEO_SPECS[quality].modelId, quality, audio: result.audio, mode: clip.icLora || clip.ingredients ? "ic_lora" : clip.edit ? clip.edit.kind : clip.image ? "image-to-video" : "text-to-video", lora_ids: clip.loraIds, ...((job.input as { audience?: unknown } | null)?.audience === "adult" ? { audience: "adult" as const } : {}), ms: Date.now() - started,
         bytes: Bun.file(video).size, poster_bytes: Bun.file(poster).size, mlx_peak_gb: result.peakBytes === null ? null : Math.round(result.peakBytes / 1e8) / 10,
+        native: { width: nativeFile.width, height: nativeFile.height, frames: nativeFile.frames, bytes: nativeFile.bytes, kept: keptNative }, delivered_is: deliveredIs,
       };
       update({ status: "ready", percent: 100 });
       // The poster of a clip the Stack made counts as a picture made here, except one that looks like a person: starting from it again needs a fresh proof.
       recordGeneratedImage(new Uint8Array(readFileSync(poster)));
-      commitResult(meta, outputDir);
+      commitResult(meta, outputDir, receipt);
       remember(progress, job.id, { phase: "ready", phasePercent: 100 });
       return { job: job.id, model: meta.model, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, lora_ids: meta.lora_ids, ms: meta.ms };
     } catch (error) {

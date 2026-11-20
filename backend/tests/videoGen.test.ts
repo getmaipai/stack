@@ -18,7 +18,9 @@ import { importLora, listLoras, LoraError, readLoraHeader, resolveLoras, updateL
 import { __resetProvenanceForTests, recordGeneratedImage, wasGeneratedHere } from "@/video/provenance";
 import { commitResult, deleteResult, readResult, resultsRoot, sweepResults, workDir, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, overallPercent, tierAvailability, VideoError, videoGen, videoRequirementsFileFor, videoRoleState, VideoGenService, workerHandle, type VideoGenDeps, type WorkerEvent, type WorkerHandle, type WorkerReply, type WorkerRequest } from "@/video/videoGen";
-import { dataDir } from "@/lib/paths";
+import { dataDir, logsDir } from "@/lib/paths";
+import { StackVideoReceipt } from "@maipai/spec/stack/ts/stack-video-receipt.js";
+import { sha256Hex } from "@/video/receipt";
 import { __resetGenHistoryForTests, GenTracker, historyKey, recordRun, VIDEO_STAGES } from "@/lib/genProgress";
 import { removeWorkerDir, startLeakyWorker, waitForWorkerRequest, waitForWorkerTreeGone, waitForWorkerPids } from "./helpers/leakyWorker";
 
@@ -515,6 +517,52 @@ test("results keep the newest few for a day, and a swept clip is gone", () => {
   expect(sweepResults(Date.now() + 5000)).toBe(2);
   expect(deleteResult(metas[2]!.job)).toBe(false);
   expect(readResult("../../etc/passwd")).toBeNull();
+});
+
+// ---- VF-RECEIPT-01: the receipt ----
+
+test("a clip's receipt is served on the job's own route with its true facts, and neither the status, the entry nor the log carries the prompt or a hash", async () => {
+  videoGen.useDeps(scripted());
+  const prompt = "zebra-9181 secret prompt words";
+  const response = await post({ prompt, seed: 7, image: `data:image/png;base64,${PNG_B64}`, timeout_ms: 5000 });
+  const body = await response.json() as { job: string; data: Array<Record<string, unknown>> };
+  expect(body.data[0]).toMatchObject({ receipt_url: `/v1/videos/generations/${body.job}/receipt.json`, delivered_is: "native", native: { width: 832, height: 480, kept: false } });
+  // The file Home downloads today is still the default and is the model's file here (no derived copy was made).
+  expect(await (await get(body.data[0]!.url as string)).text()).toBe("MP4DATA-0123456789");
+  const answer = await get(body.data[0]!.receipt_url as string);
+  expect(answer.status).toBe(200); expect(answer.headers.get("cache-control")).toBe("no-store");
+  const text = await answer.text();
+  const receipt = StackVideoReceipt.parse(JSON.parse(text));
+  expect(receipt).toMatchObject({ job_id: body.job, operation: "generate", seed: 7, requested: { width: 832, height: 480, frames: 121 }, delivered_is: "native" });
+  expect(receipt.prompt).toEqual({ bytes: prompt.length, sha256: sha256Hex(prompt) });
+  expect(receipt.inputs).toEqual([{ role: "start", sha256: sha256Hex(PNG), bytes: PNG.length }]);
+  expect(receipt.phases.length).toBeGreaterThan(0);
+  expect(text).not.toContain("zebra");
+  // Rule 6a: no status answer, job record, event or log line shows the text, the file's contents or any hash from the receipt.
+  const status = JSON.stringify(await (await get(`/v1/videos/generations/${body.job}`)).json());
+  const everywhere = [status, JSON.stringify(getJob(body.job)), JSON.stringify(listJobs()), existsSync(join(logsDir, "stack.log")) ? readFileSync(join(logsDir, "stack.log"), "utf8") : ""].join("\n");
+  for (const secret of ["zebra", receipt.prompt.sha256, receipt.inputs[0]!.sha256, "sha256", "peak_memory_bytes"]) expect(everywhere).not.toContain(secret);
+});
+
+test("typed inputs from the generic door reach the receipt as a role and a hash, and the clip is made exactly as before (VF-ROLES-01)", async () => {
+  videoGen.useDeps(scripted());
+  const hash = sha256Hex(PNG);
+  const { job } = await (await post({ prompt: "a boat", roles: [{ role: "identity", sha256: hash, bytes: PNG.length }], timeout_ms: 5000 })).json() as { job: string };
+  const receipt = StackVideoReceipt.parse(JSON.parse(readFileSync(join(resultsRoot(), job, "receipt.json"), "utf8")));
+  expect(receipt.inputs).toEqual([{ role: "identity", sha256: hash, bytes: PNG.length }]);
+  expect(requests[0]).toMatchObject({ image: null });   // nothing acts on the role
+  expect((await post({ prompt: "a boat", roles: [{ role: "start", sha256: hash, bytes: 1 }] })).status).toBe(400);
+});
+
+test("the receipt route answers 404 for a clip that is gone, a made-before-receipts result and a bad id, and deleting the clip deletes its receipt", async () => {
+  videoGen.useDeps(scripted());
+  const { job } = await (await post({ prompt: "a boat", timeout_ms: 5000 })).json() as { job: string };
+  expect((await get(`/v1/videos/generations/${job}/receipt.json`)).status).toBe(200);
+  rmSync(join(resultsRoot(), job, "receipt.json"));
+  expect((await get(`/v1/videos/generations/${job}/receipt.json`)).status).toBe(404);
+  expect((await get(`/v1/videos/generations/not-a-job/receipt.json`)).status).toBe(404);
+  expect((await app.request(`/v1/videos/generations/${job}`, { method: "DELETE" })).status).toBe(200);
+  expect(existsSync(join(resultsRoot(), job))).toBe(false);
 });
 
 test("a stashed clip is taken once", () => {

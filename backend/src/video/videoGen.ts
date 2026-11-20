@@ -34,13 +34,14 @@ import { forgetLoadedItem, setIdleTtlSeconds, setWarmWorkerUnload } from "@/lib/
 import { lowMemoryRefusal } from "@/lib/memoryState";
 import { lowDiskRefusal } from "@/lib/diskState";
 import { diskAdmission } from "@/lib/diskState";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { installedEnginePin, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
 import { ensureEngine } from "@/lib/engineInstall";
 import { getGovernorStatus } from "@/lib/governor";
 import { log } from "@/lib/log";
 import { ffmpegPath, makeMessagesCopy } from "@/video/messages";
+import { probeReceiptFile } from "./receipt";
 import { getModel } from "@/lib/modelStore";
 import { STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MODEL_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
 import { engineTagRoot } from "@/lib/store/layout";
@@ -110,6 +111,16 @@ export function qualityOfModelName(name: string | undefined): VideoQuality | nul
 const rootOf = (quality: VideoQuality): string => (quality === "ltx25" ? ltx25GenRoot() : quality === "ltx25max" ? ltx25MaxGenRoot() : videoGenRoot());
 const idleMs = (): number => engineIdleMs("video");
 const deadlineMs = (): number => Number(process.env.VIDEO_DEADLINE_MS ?? 15 * 60_000);
+
+/**
+ * VF-RECEIPT-01: the delivered `video.mp4` is made from the model's file, which is set aside as `native.mp4` and never rewritten. A copy that cannot be
+ * made leaves the native bytes in place as `video.mp4`. Returns "messaging_copy" when `video.mp4` is now the derived file.
+ */
+export async function deriveDelivered(output: string, native: string, derive: (from: string, to: string) => Promise<void>): Promise<"messaging_copy" | undefined> {
+  try { renameSync(output, native); } catch (error) { log(`video: kept the plain clip, the native copy could not be set aside: ${error instanceof Error ? error.message : "unknown"}`); return undefined; }
+  try { await derive(native, output); return "messaging_copy"; }
+  catch (error) { copyFileSync(native, output); log(`video: kept the plain clip, the messaging copy failed: ${error instanceof Error ? error.message : "unknown"}`); return undefined; }
+}
 
 export class VideoError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) { super(message); }
@@ -323,7 +334,13 @@ export interface VideoRunInput {
   /** Where the worker writes the first-frame preview (a file the job's runner serves while the clip runs). */
   previewPath?: string;
 }
-export interface VideoRunResult { width: number; height: number; frames: number; fps: number; seed: number; ms: number; peakBytes: number | null; /** The clip has a sound track the model made. */ audio: boolean; }
+export interface VideoRunResult {
+  width: number; height: number; frames: number; fps: number; seed: number; ms: number; peakBytes: number | null; /** The clip has a sound track the model made. */ audio: boolean;
+  /** VF-RECEIPT-01: what really ran, for the receipt. `steps` is the count the runner used (H3 reads it from the adapter on disk today), `adapter` the one applied. */
+  ran?: { steps: number | null; schedule: string | null; adapter: { id: string; strength: number | null } | null };
+  /** VF-RECEIPT-01: the model's own file was kept as `native.mp4` and `video.mp4` is a derived copy of it (the messaging-ready one). Absent: `video.mp4` is the native file. */
+  derived?: "messaging_copy";
+}
 
 /** Overall progress of a clip from the phases, weighted by where the time goes (measured: load 3 percent, denoise 8, decode 85, encode 4). */
 export function overallPercent(phase: string, phasePercent: number): number {
@@ -461,7 +478,11 @@ export class VideoGenService {
         if (!ffmpeg) throw new VideoError("failed", "The video tools are not installed (no_ffmpeg).", 503);
         await (this.deps.run ?? spawnRunner)([ffmpeg, "-y", "-i", output, "-frames:v", "1", join(input.outputDir, "poster.jpg")], { signal: options.signal });
         this.lastSuccessAt = Date.now();
-        return { width: input.width, height: input.height, frames: input.frames, fps: VIDEO_FPS, seed: input.seed, ms: 0, peakBytes: VIDEO_SPECS[quality].peakBytes, audio: true };
+        // VF-RECEIPT-01: the reply is read from the file the runner wrote, not taken from the request (the generator's own report is the fallback only when the file cannot be probed).
+        const made = await probeReceiptFile(output, options.signal);
+        const steps = hasLora ? 7 : 12;
+        return { width: made?.width ?? input.width, height: made?.height ?? input.height, frames: made?.frames ?? input.frames, fps: made?.fps ?? VIDEO_FPS, seed: input.seed, ms: 0, peakBytes: VIDEO_SPECS[quality].peakBytes, audio: made?.audio ?? true,
+          ran: { steps, schedule: null, adapter: hasLora ? { id: "turbo-adapter", strength: null } : null } };
       }
       const worker = await this.ensureWorker(quality, onPhase, options.signal);
       lease = heavyGate.attach({ role: "video", jobId: options.jobId, worker: worker.pausable });
@@ -486,11 +507,12 @@ export class VideoGenService {
       }
       if (!existsSync(output) || !existsSync(poster)) throw new VideoError("failed", "The video engine finished without a file. Try again.", 500);
       // The stored clip is the messaging-ready one (silent AAC track, faststart, title): what Home keeps and the person sends.
-      if (ffmpegPath(rootOf(quality))) {
-        try { await makeMessagesCopy(output, output, "MaiPai video", rootOf(quality)); } catch (error) { log(`video: kept the plain clip, the messaging copy failed: ${error instanceof Error ? error.message : "unknown"}`); }
-      }
+      // VF-RECEIPT-01: the model's file is never rewritten in place. It is kept as native.mp4, and the messaging-ready copy is made from it as the delivered video.mp4;
+      // a copy that cannot be made leaves the native file as the delivered one.
+      let derived: "messaging_copy" | undefined;
+      if (ffmpegPath(rootOf(quality))) derived = await deriveDelivered(output, join(input.outputDir, "native.mp4"), (from, to) => makeMessagesCopy(from, to, "MaiPai video", rootOf(quality)).then(() => undefined));
       this.lastSuccessAt = Date.now();
-      return { width: reply.width ?? input.width, height: reply.height ?? input.height, frames: reply.frames ?? input.frames, fps: reply.fps ?? VIDEO_FPS, seed: reply.seed ?? input.seed, ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null, audio: reply.audio === true };
+      return { width: reply.width ?? input.width, height: reply.height ?? input.height, frames: reply.frames ?? input.frames, fps: reply.fps ?? VIDEO_FPS, seed: reply.seed ?? input.seed, ms: reply.ms ?? 0, peakBytes: reply.peak_bytes ?? null, audio: reply.audio === true, ...(derived ? { derived } : {}), ran: { steps: usesLtx25Engine(quality) ? 11 : null, schedule: usesLtx25Engine(quality) ? "distilled 8 + 3 steps, 2x spatial upscale" : null, adapter: null } };
     } finally {
       this.busy -= 1;
       lease?.detach();
