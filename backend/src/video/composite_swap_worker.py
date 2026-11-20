@@ -428,37 +428,48 @@ def halo_outside(region, halo):
     """Pixels farther than `halo` px from the declared region (the encoder spreads an edit a few macroblocks)."""
     return cv2.dilate(region.astype(np.uint8), np.ones((2 * halo + 1, 2 * halo + 1), np.uint8)) == 0
 
-def drift_map(source_encoded, control_encoded, regions, halo):
-    """Where the encoder persistently moves pixels that no edit touched. The control is the source with a violent edit inside the region only, encoded with the
-    same settings: a pixel outside the region plus halo that differs from the source-only encode by more than 8 levels in at least max(3, 3 percent of the
-    frames) frames is encoder drift caused by the rate control reacting to an edit, not by the edit. A hard-edged caption or logo drifts this way even in frames
-    nothing touched. Scattered drift on grain does not persist at one place, so it does not widen the map. The map is grown by 4 px so a drifting edge covers
-    its neighbors."""
-    height, width = source_encoded[0].shape[:2]
-    votes = np.zeros((height, width), np.int32)
-    for a, c, region in zip(source_encoded, control_encoded, regions):
-        votes += ((np.abs(a.astype(np.int16) - c.astype(np.int16)).max(2) > 8) & halo_outside(region, halo)).astype(np.int32)
-    drift = votes >= max(3, int(np.ceil(0.03 * len(source_encoded))))
-    return cv2.dilate(drift.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+DRIFT_REACH_PX = 15        # how far from the control's persistent drift a delivered area may sit and still count as the same drifting edge
+DRIFT_OVERLAP = 0.5        # share of a persistent area that must lie on the control's drift for the whole area to be called encoder drift
+
+
+def persistent_votes(a_frames, b_frames, outside, minimum):
+    """Pixels where the two encodes differ by more than 8 levels in at least `minimum` frames at the same place."""
+    votes = np.zeros(outside[0].shape, np.int32)
+    for a, b, o in zip(a_frames, b_frames, outside):
+        votes += ((np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > 8) & o).astype(np.int32)
+    return votes >= minimum
+
 
 def encoded_preservation_check(source_encoded, delivered, control_encoded, regions, halo):
     """Delivered file against a source-only encode made with the same settings, outside the region plus a halo. A pixel is persistent when it differs by more
-    than 8 levels in at least max(5, 10 percent of the frames) frames at the same place (a real edit stays put, encoder drift flickers), and it counts only
-    where the control encode (an edit inside the region only) did not also move pixels: drift the encoder produces without any outside edit cannot fail the
-    clip. A persistent area of 50 pixels or more fails. Not a tolerance: a faint change outside the region, or an altered second face, is not where the
-    control drifts and still fails."""
+    than 8 levels in at least max(5, 10 percent of the frames) frames at the same place (a real edit stays put, encoder drift flickers). A persistent area is
+    judged as a whole: when at least half of it lies within 15 px of where the drift control (the source with a violent edit inside the region only, encoded
+    the same way) is persistently moved too, it is encoder drift, the kind a hard-edged caption or logo shows even in frames nothing touched, and it does not
+    count. A persistent area of 50 pixels or more that the control does not explain fails the clip. This is not a tolerance: a faint change or an altered
+    face outside the region is not where the control drifts. Limit: an edit that sits on a drifting edge is explained by it; the exact pre-encode check, which
+    the worker runs on its own composite, is the guard for that case."""
     outside = [halo_outside(r, halo) for r in regions]
+    if not source_encoded: return dict(persistent_pixels=0, largest_blob_px=0, share_gt8=0.0, max_diff=0, drift_masked_px=0)
+    minimum = max(5, int(np.ceil(0.1 * len(source_encoded))))
+    delivered_votes = persistent_votes(source_encoded, delivered, outside, minimum)
+    control_votes = persistent_votes(source_encoded, control_encoded, outside, minimum)
+    near_drift = cv2.dilate(control_votes.astype(np.uint8), np.ones((2 * DRIFT_REACH_PX + 1, 2 * DRIFT_REACH_PX + 1), np.uint8)) > 0
+    joined = cv2.dilate(delivered_votes.astype(np.uint8), np.ones((5, 5), np.uint8))
+    count, labels, _, _ = cv2.connectedComponentsWithStats(joined, 8)
+    counted = np.zeros_like(delivered_votes); masked = 0
+    for c in range(1, count):
+        area = (labels == c) & delivered_votes
+        pixels = int(area.sum())
+        if pixels == 0: continue
+        if int((area & near_drift).sum()) >= DRIFT_OVERLAP * pixels: masked += pixels
+        else: counted |= area
+    n2, _, stats, _ = cv2.connectedComponentsWithStats(counted.astype(np.uint8), 8)
+    sizes = stats[1:, cv2.CC_STAT_AREA] if n2 > 1 else []
     diffs = [np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) for a, b in zip(source_encoded, delivered)]
-    if not diffs: return dict(persistent_pixels=0, largest_blob_px=0, share_gt8=0.0, max_diff=0, drift_masked_px=0)
-    drift = drift_map(source_encoded, control_encoded, regions, halo)
-    votes = np.sum(np.stack([(d > 8) & o for d, o in zip(diffs, outside)]), axis=0) >= max(5, int(np.ceil(0.1 * len(diffs))))
-    counted = votes & ~drift
-    count, _, stats, _ = cv2.connectedComponentsWithStats(counted.astype(np.uint8), 8)
-    sizes = stats[1:, cv2.CC_STAT_AREA] if count > 1 else []
     total = sum(int(o.sum()) for o in outside)
     changed = sum(int(((d > 8) & o).sum()) for d, o in zip(diffs, outside))
     return dict(persistent_pixels=int(counted.sum()), largest_blob_px=int(max(sizes) if len(sizes) else 0), share_gt8=changed / max(1, total), max_diff=int(max(d.max() for d in diffs)),
-                drift_masked_px=int((votes & drift).sum()))
+                drift_masked_px=int(masked))
 
 
 def caption_edge_count(frame, box, o: Options):
@@ -513,7 +524,8 @@ def verify_delivered(source, delivered, start=0.0, seconds=2.3333, caption_box=N
     vf = (f"delogo=x={caption_box[0]}:y={caption_box[1]}:w={caption_box[2]}:h={caption_box[3]}," if caption_box else "") + f"fps={o.fps},scale={w}:{h}"
     org = read_frames(source, vf, w, h, n, ss=start, t=seconds)
     back = read_frames(delivered, f"fps={o.fps}", w, h, len(org))
-    org, back = org[:len(back)], back[:len(org)]
+    compared = min(len(org), len(back)); mismatch = abs(len(org) - len(back)) > 1
+    org, back = org[:compared], back[:compared]
     regions, region_source = declare_edit_region(list(org), o, edit_region)
     if caption_box:
         x, y, bw, bh = caption_box
@@ -521,8 +533,8 @@ def verify_delivered(source, delivered, start=0.0, seconds=2.3333, caption_box=N
     encoded, map_path = encoded_check_on_file(list(org), list(back), regions, o, base or delivered, w, h)
     fail = encoded["largest_blob_px"] >= 50
     return {"frames": len(org), "size": [w, h], "edit_region": {"source": region_source, "head_scale": o.region_head_scale, "margin_frac": o.region_margin_frac, "frames_with_region": sum(bool(r.any()) for r in regions)},
-            "preservation": {"verdict": "fail" if fail else "pass", "pre_encode": "not_run", "changed_pixels": None, "violating_frames": [], "encoded": encoded, "map_path": map_path,
-                             "reasons": ["A persistent changed area was found outside the declared edit region."] if fail else []}}
+            "frames_compared": compared, "preservation": {"verdict": "fail" if fail or mismatch else "pass", "pre_encode": "not_run", "changed_pixels": None, "violating_frames": [], "encoded": encoded, "map_path": map_path,
+                             "reasons": (["A persistent changed area was found outside the declared edit region."] if fail else []) + (["The delivered clip and the source differ in length by more than one frame, so they cannot be compared."] if mismatch else [])}}
 
 
 def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None, caption_box=None, reference_crops=(), options: Options | None = None, report_path=None, edit_region=None):
