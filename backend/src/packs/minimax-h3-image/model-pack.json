@@ -103,6 +103,12 @@
           "level": "standard",
           "bytes": 22400000000,
           "status": "measured"
+        },
+        {
+          "shape": "portrait",
+          "level": "standard",
+          "bytes": 22700000000,
+          "status": "measured"
         }
       ]
     },

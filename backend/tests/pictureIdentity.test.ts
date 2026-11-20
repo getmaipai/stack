@@ -115,5 +115,5 @@ test("the planner lets an identity picture through at a first-picture shape and 
 test("H3-Image's landscape first picture carries its measured peak (22.4 GB, scratch Stack run 2026-11-20, 1344x768 at Standard); the square's row is unchanged", async () => {
   const { packs } = await import("@/packs/loader");
   const edit = packs().find((item) => item.pack.part === "minimax-h3-image")!.pack.jobs.find((job) => job.job === "picture_edit")!;
-  expect(edit.peaks).toEqual(expect.arrayContaining([{ shape: "square", level: "standard", bytes: 24_000_000_000, status: "measured" }, { shape: "landscape", level: "standard", bytes: 22_400_000_000, status: "measured" }]));
+  expect(edit.peaks).toEqual(expect.arrayContaining([{ shape: "square", level: "standard", bytes: 24_000_000_000, status: "measured" }, { shape: "landscape", level: "standard", bytes: 22_400_000_000, status: "measured" }, { shape: "portrait", level: "standard", bytes: 22_700_000_000, status: "measured" }]));
 });
