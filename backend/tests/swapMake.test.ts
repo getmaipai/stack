@@ -199,6 +199,17 @@ beforeEach(() => { __resetJobsForTests(); install(); });
 afterEach(() => { useSwapDepsForTests(null); __resetJobsForTests(); for (const token of stagedDirs()) discardStagedSwap(token); });
 
 describe("the door", () => {
+  test("a head swap is served, also when no kind is named; face and person say what to ask for instead (VF-SWAP-01)", async () => {
+    expect((await door(request({ kind: "head" }))).status).toBe(202);
+    expect((await door(request())).status).toBe(202);
+    for (const kind of ["face", "person"] as const) {
+      const refused = await door(request({ kind }));
+      expect(refused.status).toBe(409);
+      const line = (refused.body as { line: string }).line;
+      expect(line).toContain("not available on this computer yet"); expect(line).toContain("the whole head"); noWords(line);
+    }
+    expect(stagedDirs().length).toBe(2);
+  });
   test("a good request is queued with 202, the job to poll, the shape that runs and a plain note", async () => {
     const sent = await door(request({ start_seconds: 1, seconds: 6 }));
     expect(sent.status).toBe(202);

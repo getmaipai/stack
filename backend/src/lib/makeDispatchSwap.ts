@@ -19,6 +19,7 @@ import { spawnRunner, type Runner } from "@/media/run";
 import { analyzeClip, compositeSwap, compositeSwapEnvironmentReady, ensureCompositeSwapEnvironment, referenceCrops, type CompositeSwapReport } from "@/video/compositeSwap";
 import { commitCompositeSwap, DONOR_ADAPTERS, type DonorAdapter } from "@/video/swap";
 import { sha256File } from "@/video/receipt";
+import { DEFAULT_SWAP_KIND, kindNotServedLine, servedKinds, type SwapKind } from "@/lib/swapFramework";
 import {
   clipHasTooManyPeople, donorCopiedGuide, donorCopiedLine, donorCropFilter, guideFilter, guideLayout, MANY_PEOPLE_IN_CLIP_LINE, parsePsnr, parseSceneCuts,
   pickSwapShape, planSegments, referenceNames, segmentFailures, swapTuning, type GuideLayout, type Segment, type SwapShapeOffer, type SwapTuning,
@@ -93,6 +94,10 @@ export async function dispatchSwap(request: SwapRequest, plan: Planned, read: Pi
   let tuning: SwapTuning;
   const recipe = pack.recipes[job.recipe] ?? "";
   try { tuning = swapTuning(recipe); } catch { return refuse("The swap recipe in this model's pack is incomplete, so the swap cannot start. Update the Stack."); }
+  let served: SwapKind[];
+  try { served = servedKinds(recipe); } catch { return refuse("The swap recipe in this model's pack is incomplete, so the swap cannot start. Update the Stack."); }
+  const kind = request.kind ?? DEFAULT_SWAP_KIND;
+  if (!served.includes(kind)) return refuse(kindNotServedLine(kind, served));
   const adapter = job.adapter ? deps.adapters[job.adapter] : undefined;
   if (!adapter || !adapter.ready()) return refuse(SWAP_NOT_INSTALLED_LINE);
 

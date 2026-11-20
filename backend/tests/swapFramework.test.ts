@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  blendWeights, buildRegionTrack, convexHull, isSwapKind, likenessFrames, planWindows, polygonArea, regionFileBody, simplifyHull, swapVerdict,
+  kindNotServedLine, servedKinds, blendWeights, buildRegionTrack, convexHull, isSwapKind, likenessFrames, planWindows, polygonArea, regionFileBody, simplifyHull, swapVerdict,
   type Outline, type OutlineProvider, type Point, type WindowRules,
 } from "@/lib/swapFramework";
 
@@ -147,4 +147,11 @@ describe("the verdict", () => {
     const all = [swapVerdict({ kind: "face", preservation: null, likeness: null }), swapVerdict({ kind: "head", preservation: "fail", likeness: { scores: [0.1, 0.1, 0.1, 0.1, 0.1], actorScores: [0.9] } })].flatMap((v) => v.lines).join(" ");
     expect(/\b(memory|RAM|GB|model|VRAM)\b/i.test(all)).toBe(false);
   });
+});
+
+describe("which kinds a pack serves", () => {
+  test("no kinds line means the head only", () => { expect(servedKinds("{description}\n---measured---\nfps: 24")).toEqual(["head"]); expect(servedKinds("{description}")).toEqual(["head"]); });
+  test("a kinds line lists them", () => { expect(servedKinds("x\n---measured---\nkinds: head, person")).toEqual(["head", "person"]); });
+  test("an unknown kind says which recipe line to fix", () => { expect(() => servedKinds("x\n---measured---\nkinds: head, body")).toThrow("recipes/swap.md"); });
+  test("the refusal line names what to ask for", () => { expect(kindNotServedLine("face", ["head"])).toBe("Swapping only the face is not available on this computer yet. Ask for a swap of the whole head instead."); });
 });

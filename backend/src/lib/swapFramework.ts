@@ -13,6 +13,26 @@ export type Outline = readonly Point[] | null;
 /** The seam a segmentation part fills. The framework only asks for outlines; it never learns which part made them. */
 export interface OutlineProvider { outlines(frameCount: number): Promise<Outline[]> }
 
+// ---- which kinds a pack serves ---------------------------------------------------------------------------------------------------------------
+/** What the request asks for when it names no kind: a whole head, the replacement the first route was built and measured for. */
+export const DEFAULT_SWAP_KIND: SwapKind = "head";
+/** The kinds a pack's swap recipe serves, from an optional `kinds: head, person` line after the `---measured---` marker. No line means the default kind only. */
+export function servedKinds(recipe: string): SwapKind[] {
+  const after = recipe.split("---measured---")[1] ?? "";
+  const line = /^kinds:\s*(.+)$/m.exec(after)?.[1];
+  if (!line) return [DEFAULT_SWAP_KIND];
+  const kinds = line.split(",").map((part) => part.trim());
+  const bad = kinds.find((kind) => !isSwapKind(kind));
+  if (bad !== undefined) throw new Error(`The swap recipe lists the kind "${bad}", which is not face, head or person. Fix recipes/swap.md.`);
+  return kinds as SwapKind[];
+}
+const KIND_WORDS: Record<SwapKind, string> = { face: "only the face", head: "the whole head", person: "the whole person" };
+/** The one plain line for a kind this computer's swap does not do yet. It names what to ask for instead. */
+export function kindNotServedLine(kind: SwapKind, served: readonly SwapKind[]): string {
+  const alternatives = served.map((k) => KIND_WORDS[k]).join(" or ");
+  return `Swapping ${KIND_WORDS[kind]} is not available on this computer yet. Ask for a swap of ${alternatives} instead.`;
+}
+
 // ---- the declared region -------------------------------------------------------------------------------------------------------------------
 export type RegionEntry = { polygon: [number, number][] } | null;
 export interface RegionOptions {
