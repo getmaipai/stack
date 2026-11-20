@@ -14,6 +14,10 @@ import { resolveReadable } from "@/media/paths";
 import { videoPath, readResult, readTake } from "@/video/results";
 import { packFor } from "@/packs/loader";
 import { existsSync } from "node:fs";
+import { getLora, loraPath, LORA_BASE_LTX25 } from "@/video/loras";
+import { isLoraId } from "@/video/loras";
+import { statSync } from "node:fs";
+import { sha256OfFile } from "@/lib/fileHash";
 
 export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit", "clip", "swap", "song", "song_edit", "stems", "character_sheet", "contact_sheet"]);
 
@@ -159,6 +163,31 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     const reply = sent.json as { job: string; data?: Array<{ url: string; poster_url?: string; seconds?: number; audio?: boolean }>; notes?: string[] };
     const first = reply.data?.[0];
     return { status: sent.status, body: { id: reply.job, job: "clip", state: first ? "done" : "running", percent: first ? 100 : 0, status: first ? "Done" : "Making your clip", files: (reply.data ?? []).map((d) => d.url), poster: first?.poster_url ?? null, made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job } } };
+  }
+  if (request.operation === "restyle") {
+    const source = request.inputs?.find((input) => input.role === "edit_source")?.file;
+    let sourcePath: string;
+    try {
+      const match = source?.match(/^\/v1\/videos\/generations\/([^/]+)\/video\.mp4$/);
+      const job = match?.[1];
+      if (job) {
+        if (!readResult(job) || !existsSync(videoPath(job))) throw new Error("missing video result");
+        sourcePath = videoPath(job);
+      } else sourcePath = resolveReadable(source ?? "");
+    } catch { return { status: 409, body: { code: "not_available", line: INPUT_UNREADABLE_LINE } }; }
+    const styleId = request.styles?.[0];
+    const record = styleId && isLoraId(styleId) ? getLora(styleId) : null;
+    const styleFile = record ? loraPath(record.id) : "";
+    if (!record || !existsSync(styleFile) || (record.base_model ?? "") !== LORA_BASE_LTX25) return { status: 409, body: { code: "not_available", line: "That style is not available. Choose an installed LTX-2.5 style." } };
+    const stat = statSync(styleFile);
+    if (stat.size !== record.bytes || (Math.floor(stat.mtimeMs) !== record.mtime_ms && await sha256OfFile(styleFile) !== record.sha256)) return { status: 409, body: { code: "not_available", line: "That style is not available. Choose an installed LTX-2.5 style." } };
+    const recipe = plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";
+    const body = { source: sourcePath, lora: record.id, strength: request.style_strength ?? record.strength_default, conditioning: request.conditioning ?? "source", prompt: fillRecipe(recipe, { description: request.description }), ...(request.seed !== undefined ? { seed: request.seed } : {}), ...(request.wait !== undefined ? { timeout_ms: Math.max(1, request.wait * 1000) } : {}), route: { name: "restyle", reason: chosen.reason } };
+    const sent = await forward("/v1/videos/restyle", body);
+    if (sent.status !== 200 && sent.status !== 202) return { status: sent.status, body: sent.json };
+    const reply = sent.json as { job: string; data?: Array<{ url: string; poster_url?: string; seconds?: number; audio?: boolean }>; notes?: string[] };
+    const done = (reply.data?.length ?? 0) > 0;
+    return { status: sent.status, body: { id: reply.job, job: "clip", state: done ? "done" : "running", percent: done ? 100 : 0, status: done ? "Done" : "Restyling your clip", files: (reply.data ?? []).map((item) => item.url), poster: reply.data?.[0]?.poster_url ?? null, made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: reply.data?.[0]?.seconds ?? 5, sound: reply.data?.[0]?.audio ?? true, notes: reply.notes ?? [], receipt: reply.job, route: "restyle", route_reason: chosen.reason } } };
   }
   let body: Record<string, unknown>;
   try { body = clipBody(request, plan, route); if (filmSize) body.size = filmSize; }

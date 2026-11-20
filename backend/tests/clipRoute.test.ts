@@ -43,6 +43,15 @@ test("retake and extend select available Max edit rows and explain their routes"
   expect(planClipRoute(req({ level: "max", operation: "enhance" }), max)).toMatchObject({ ok: false, refusal: { line: "Enhancing a clip has its own request." } });
 });
 
+test("restyle requires one edit source and one style and is only served by a Max restyle capability row", () => {
+  const max = rowsForJob("ltx-2-5-bf16-distilled-mlx-max", "clip");
+  expect(planClipRoute(req({ level: "max", operation: "restyle", styles: ["style"], inputs: [{ role: "edit_source", file: "clip" }] }), max)).toMatchObject({ ok: true, operation: "restyle" });
+  for (const [part, level] of [["ltx-2-5-q8-distilled-mlx", "standard"], ["ltx-2-5-q8-distilled-mlx", "boost"], ["minimax-h3", "standard"]] as const) {
+    const planned = planClipRoute(req({ level, operation: "restyle", styles: ["style"], inputs: [{ role: "edit_source", file: "clip" }] }), rowsForJob(part, "clip"));
+    expect(planned).toMatchObject({ ok: false, refusal: { code: "input_not_supported", line: expect.any(String) } });
+  }
+});
+
 test("every available clip operation row accepts the input shape it advertises", () => {
   for (const r of videoOperationRows().filter((x) => x.available && x.operation.startsWith("clip_") && x.operation !== "clip_film_shot")) {
     const inputs = [ ...(r.inputs.references ? [{ role: "identity", file: "i" }] : []) ];

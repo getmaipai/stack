@@ -75,3 +75,21 @@ test("restyle submits IC worker fields and returns the standard clip and poster 
 test("restyle admission reserves exactly the IC-LoRA footprint", () => {
   expect(videoAdmission({ quality: "ltx25max", mode: "ic_lora" })).toEqual({ requestedBytes: LTX25_ICLORA_PEAK_BYTES, measuredPeakBytes: LTX25_ICLORA_PEAK_BYTES, engine: "video-gen" });
 });
+
+test("generic clip restyle resolves a style id and reuses the legacy restyle route", async () => {
+  const { planMake } = await import("@/lib/makePlan");
+  const { PART_DEFS } = await import("@/lib/partDefs");
+  const def = PART_DEFS.find((item) => item.id === "ltx-2-5-bf16-distilled-mlx-max")!;
+  const part = { id: def.id, kind: def.kind, category: def.category, priority: def.priority, label: def.label, description: "", enabled: true, state: "ready", size_bytes: 1, download_bytes: 1, percent: null, fits: { standard: true, boost: true, max: true, reason: null }, can_install: false, install_block: null, can_uninstall: true, uninstall_block: null, licence_needed: false, required_by: [], update: { available: false, version: null } } as never;
+  const request = { job: "clip", audience: "adult", operation: "restyle", description: "A painted paper world", shape: "landscape", level: "max", seconds: 5, style_strength: 0.7, conditioning: "edges", styles: [loraId], inputs: [{ role: "edit_source", file: source }] } as never;
+  const plan = planMake(request, [part]);
+  if (!plan.ok) throw new Error("not planned");
+  const { dispatchClip } = await import("@/lib/makeDispatch");
+  const sent: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const result = await dispatchClip(request, plan, async (path, body) => { sent.push({ path, body: body as Record<string, unknown> }); return { status: 200, json: { job: "restyle-job", data: [{ url: "/video.mp4", poster_url: "/poster.jpg", seconds: 5, audio: true }] } }; });
+  expect(sent).toHaveLength(1);
+  expect(sent[0]!.path).toBe("/v1/videos/restyle");
+  expect(sent[0]!.body).toMatchObject({ source: expect.stringContaining("clip.mp4"), lora: loraId, strength: 0.7, conditioning: "edges", prompt: "A painted paper world", route: { name: "restyle" } });
+  expect(sent[0]!.body.model).toBeUndefined();
+  expect(result).toMatchObject({ status: 200, body: { made_with: { route: "restyle" } } });
+});

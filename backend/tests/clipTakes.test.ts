@@ -37,6 +37,9 @@ test("the spec parses the take shapes", () => {
   expect(StackMakeRequest.safeParse(clip({ operation: "extend", inputs: [SOURCE] })).success).toBe(true);
   expect(StackMakeRequest.safeParse(clip({ take_of: "job1", seed: 9 })).success).toBe(true);
   expect(StackMakeRequest.safeParse(clip({ operation: "rewind" })).success).toBe(false);
+  expect(StackMakeRequest.safeParse(clip({ operation: "restyle", inputs: [SOURCE], styles: ["style"] })).success).toBe(true);
+  expect(StackMakeRequest.safeParse(clip({ operation: "restyle", inputs: [SOURCE], styles: ["style"], model: "ltx25-max" })).success).toBe(false);
+  expect(StackMakeRequest.safeParse(clip({ operation: "restyle", inputs: [SOURCE], styles: ["style"], lora: "style" })).success).toBe(false);
 });
 
 test("an unreadable source clip is refused with not_available, never dropped, and nothing is forwarded", async () => {

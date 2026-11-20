@@ -84,7 +84,7 @@ test("the catalog says what this Stack speaks: the spec version it was built aga
     }
   }
   const clip = (await jobsCatalog("adult")).jobs.find((job) => job.job === "clip")!;
-  for (const field of ["description", "shape", "level", "seconds", "inputs", "intent", "operation", "take_of", "wait"]) expect(clip.request_fields, field).toContain(field);
+  for (const field of ["description", "shape", "level", "seconds", "inputs", "intent", "operation", "take_of", "wait", "styles", "style_strength", "conditioning"]) expect(clip.request_fields, field).toContain(field);
 });
 
 test("the song entry's levels and longest lengths cover every song part, installed or not, so a level is never hidden behind the first part", async () => {

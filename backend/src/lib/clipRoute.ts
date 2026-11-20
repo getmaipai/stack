@@ -4,7 +4,7 @@ import { checkVideoInputs } from "@/video/caps";
 
 type ClipRequest = Extract<StackMakeRequest, { job: "clip" }>;
 export type PlannedClipRoute =
-  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend"; identityUsed: number; reason: string; /** The request is a film shot: the dispatcher chooses the Max recipe from the machine (no size field). */ filmShot?: true }
+  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend" | "restyle"; identityUsed: number; reason: string; /** The request is a film shot: the dispatcher chooses the Max recipe from the machine (no size field). */ filmShot?: true }
   | { ok: false; refusal: StackMakeRefusal };
 
 export const NEEDS_START_PICTURE_LINE = "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.";
@@ -16,6 +16,13 @@ export function planClipRoute(request: ClipRequest, rows: readonly StackOperatio
   const hasWardrobe = request.inputs?.some((input) => input.role === "wardrobe") ?? false;
   const hasEditSource = request.inputs?.some((input) => input.role === "edit_source") ?? false;
   if (request.operation === "enhance") return refuse("Enhancing a clip has its own request.");
+  if (request.operation === "restyle") {
+    if (request.start_picture || request.end_picture || identityCount || hasVoice || hasWardrobe || (request.inputs ?? []).some((input) => input.role !== "edit_source")) return refuse("Restyling a clip cannot be combined with pictures or other inputs.");
+    if ((request.inputs ?? []).filter((input) => input.role === "edit_source").length !== 1) return refuse("Send one edit_source clip to restyle.");
+    if (!request.styles || request.styles.length !== 1) return refuse("Choose one installed style to restyle the clip.");
+    if (request.level !== "max" || !rows.some((candidate) => candidate.operation === "retake" && candidate.level === "max" && candidate.available)) return refuse("Restyling a clip is not available at the chosen quality.");
+    return { ok: true, route: "words", operation: "restyle", identityUsed: 0, reason: "Restyling the clip you sent." };
+  }
   if (request.operation === "retake_from" || request.operation === "extend") {
     if (request.start_picture || request.end_picture || identityCount || hasVoice || hasWardrobe || (request.inputs ?? []).some((input) => input.role !== "edit_source")) return refuse("Retaking or extending a clip cannot be combined with pictures or other inputs.");
     if (!hasEditSource) return refuse("Send an edit_source clip to retake or extend.");
