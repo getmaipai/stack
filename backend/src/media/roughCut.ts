@@ -17,6 +17,7 @@ import { concatEncodeArgs, captionsArgs, kenBurnsArgs, type Clip, type EditOp } 
 import { jobDir, resolveReadable } from "./paths";
 import { probeFile } from "./probe";
 import type { Runner } from "./run";
+import { decodeWave } from "@/speech/audio";
 import { finalizeWav, wavDuration } from "./tts";
 
 // The request and result mirror commons spec `stack-rough-cut-request` and `stack-rough-cut-result` (one fixture set both tests read).
@@ -30,7 +31,20 @@ export const RoughCutInput = z.object({
   voices: z.array(z.object({ speaker: text, voice_address: text.optional(), minor: z.boolean().optional() }).strict()).max(24).optional(),
 }).strict();
 export type RoughCutInput = z.infer<typeof RoughCutInput>;
-export interface RoughCutResult { file: string; total_s: number; shots: Array<{ id: string; start_s: number; end_s: number }>; lines: Array<{ shot_id: string; speaker: string; start_s: number; length_s: number; audio: string }>; }
+export interface RoughCutResult { file: string; total_s: number; shots: Array<{ id: string; start_s: number; end_s: number }>; lines: Array<{ shot_id: string; speaker: string; start_s: number; length_s: number; audio: string; wave?: number[] }>; }
+
+/** Loudness samples of one line's audio for the player's small waveform: RMS in up to 40 equal parts, the loudest scaled to 1 (silence stays 0). */
+export function waveOf(wav: Uint8Array, parts = 40): number[] | undefined {
+  try {
+    const { samples } = decodeWave(wav);
+    if (samples.length === 0) return undefined;
+    const count = Math.max(1, Math.min(parts, Math.floor(samples.length / 160)));
+    const size = samples.length / count; const rms: number[] = [];
+    for (let part = 0; part < count; part++) { let sum = 0; const from = Math.floor(part * size), to = Math.floor((part + 1) * size); for (let i = from; i < to; i++) sum += samples[i]! * samples[i]!; rms.push(Math.sqrt(sum / Math.max(1, to - from))); }
+    const top = Math.max(...rms); if (!(top > 0)) return rms.map(() => 0);
+    return rms.map((value) => Math.round((value / top) * 1000) / 1000);
+  } catch { return undefined; }
+}
 
 /** Where a line starts inside its shot, so the voice does not begin on the cut. */
 export const LINE_LEAD_S = 0.2;
@@ -97,7 +111,7 @@ export async function buildRoughCut(input: RoughCutInput, outDir: string, deps: 
 
   // Speech first: a line longer than its shot is refused before any picture work.
   tick(2, "speaking the lines");
-  const spoken = new Map<string, { path: string; length_s: number; speaker: string }>();
+  const spoken = new Map<string, { path: string; length_s: number; speaker: string; wave?: number[] }>();
   let spokenCount = 0;
   for (const shot of input.shots) {
     const line = lineByShot.get(shot.id); if (!line) continue;
@@ -107,7 +121,8 @@ export async function buildRoughCut(input: RoughCutInput, outDir: string, deps: 
     if (LINE_LEAD_S + length > shot.seconds) throw new RoughCutRefusal("bad_input", `The line in a ${shot.seconds}-second shot takes ${Math.ceil((LINE_LEAD_S + length) * 10) / 10} seconds to say. Make the shot longer or the line shorter.`);
     const path = join(outDir, `line-${spokenCount + 1}.wav`);
     writeFileSync(path, bytes, { mode: 0o600 });
-    spoken.set(shot.id, { path, length_s: Math.round(length * 1000) / 1000, speaker: line.speaker });
+    const wave = waveOf(bytes);
+    spoken.set(shot.id, { path, length_s: Math.round(length * 1000) / 1000, speaker: line.speaker, ...(wave ? { wave } : {}) });
     spokenCount++;
     tick(2 + Math.round((spokenCount / Math.max(1, lineByShot.size)) * 18), "speaking the lines");
   }
@@ -144,7 +159,7 @@ export async function buildRoughCut(input: RoughCutInput, outDir: string, deps: 
   const lines: RoughCutResult["lines"] = [];
   for (const shot of shots) {
     const voiced = spoken.get(shot.id); if (!voiced) continue;
-    lines.push({ shot_id: shot.id, speaker: voiced.speaker, start_s: Math.round((shot.start_s + LINE_LEAD_S) * 1000) / 1000, length_s: voiced.length_s, audio: voiced.path });
+    lines.push({ shot_id: shot.id, speaker: voiced.speaker, start_s: Math.round((shot.start_s + LINE_LEAD_S) * 1000) / 1000, length_s: voiced.length_s, audio: voiced.path, ...(voiced.wave ? { wave: voiced.wave } : {}) });
   }
 
   const file = join(outDir, "rough-cut.mp4");

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { POCKET_TTS_PRESET_VOICES } from "@/speech/voices";
 import { precheck } from "./jobs";
-import { buildRoughCut, checkRoughCutRequest, LINE_LEAD_S, motionOp, RoughCutRefusal, type RoughCutDeps, type RoughCutInput } from "./roughCut";
+import { buildRoughCut, checkRoughCutRequest, LINE_LEAD_S, motionOp, RoughCutRefusal, waveOf, type RoughCutDeps, type RoughCutInput } from "./roughCut";
 import { spawnRunner } from "./run";
 
 const ffmpeg = process.env.STACK_MEDIA_FFMPEG ?? "ffmpeg";
@@ -26,6 +26,16 @@ const deps = (over: Partial<RoughCutDeps> = {}): RoughCutDeps => ({
 const probeSeconds = (path: string): number => Number(spawnSync(ffprobe, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path], { encoding: "utf8" }).stdout);
 const hasAudio = (path: string): boolean => spawnSync(ffprobe, ["-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type", "-of", "csv=p=0", path], { encoding: "utf8" }).stdout.includes("audio");
 const silent = (path: string, from: number, len: number): boolean => spawnSync(ffmpeg, ["-hide_banner", "-ss", String(from), "-t", String(len), "-i", path, "-vn", "-af", "volumedetect", "-f", "null", "-"], { encoding: "utf8" }).stderr.match(/max_volume: (-?[\d.]+|-inf) dB/)?.[1] === "-inf" || Number(spawnSync(ffmpeg, ["-hide_banner", "-ss", String(from), "-t", String(len), "-i", path, "-vn", "-af", "volumedetect", "-f", "null", "-"], { encoding: "utf8" }).stderr.match(/max_volume: (-?[\d.]+) dB/)?.[1] ?? "0") < -50;
+
+describe("media.rough_cut: the line's waveform", () => {
+  it.skipIf(!have)("is loudness from 0 to 1, loudest at 1, and 0 where the line is silent", () => {
+    const out = join(dir, "half.wav"); spawnSync(ffmpeg, ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=f=440:r=24000:d=1", "-af", "apad=pad_dur=1", "-c:a", "pcm_s16le", out]);
+    const wave = waveOf(new Uint8Array(readFileSync(out)))!;
+    expect(wave.length).toBe(40); expect(Math.max(...wave)).toBe(1); expect(wave.every((v) => v >= 0 && v <= 1)).toBe(true);
+    expect(wave.slice(0, 15).every((v) => v > 0.9)).toBe(true); expect(wave.slice(25).every((v) => v < 0.05)).toBe(true);
+  });
+  it("gives nothing for bytes that are not audio", () => { expect(waveOf(new Uint8Array([1, 2, 3]))).toBeUndefined(); });
+});
 
 describe("media.rough_cut: rules that need no file", () => {
   it("maps the plan's motion words, holding still for anything else", () => {
@@ -74,7 +84,7 @@ describe.skipIf(!have)("media.rough_cut on fixtures built with ffmpeg", () => {
     const result = await buildRoughCut({ audience: "adult", shots: shots(3, 3), lines: [line(2), line(3, "It was my grandmother's.")], voices: [{ speaker: "iris", voice_address: "/media/voices/iris-home.wav" }] }, out, deps());
     expect(spoken.map((s) => s.voice)).toEqual(["/media/voices/iris-home.wav", "/media/voices/iris-home.wav"]);
     expect(result.lines.map((l) => [l.shot_id, l.speaker, l.start_s])).toEqual([["shot-2", "iris", 3 + LINE_LEAD_S], ["shot-3", "iris", 6 + LINE_LEAD_S]]);
-    for (const l of result.lines) { expect(l.length_s).toBeGreaterThan(0.9); expect(l.length_s).toBeLessThan(1.1); }
+    for (const l of result.lines) { expect(l.length_s).toBeGreaterThan(0.9); expect(l.length_s).toBeLessThan(1.1); expect(l.wave!.length).toBeGreaterThan(5); expect(Math.max(...l.wave!)).toBe(1); }
     expect(hasAudio(result.file)).toBe(true);
     expect(silent(result.file, 0, 2.8)).toBe(true);                 // shot 1 has no line
     expect(silent(result.file, 3.3, 0.8)).toBe(false);              // shot 2 carries its line
