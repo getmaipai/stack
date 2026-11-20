@@ -31,3 +31,19 @@ export function fillRecipe(text: string, inputs: RecipeInputs): string {
   const prompt = fill(inputs.identity && identity ? identity : base, inputs);
   return inputs.words && wordsAddendum ? `${prompt}\n\n${fill(wordsAddendum, inputs)}` : prompt;
 }
+
+/**
+ * VF-RESTYLE-OP-01: the restyle recipe is keyed by the style's name: a `---style:<name>---` part replaces the base for that style (matched without case, as a
+ * whole word of the style's own name). A style with no part of its own uses the base. The pack holds every word; the caller sends only the person's own words.
+ */
+export function fillStyleRecipe(text: string, styleName: string, inputs: RecipeInputs): string {
+  const sections = text.split(/^---style:([^-\n]+)---$/m);
+  const base = parseRecipe(sections[0] ?? "").base;
+  let chosen = base;
+  for (let i = 1; i < sections.length; i += 2) {
+    const key = sections[i]!.trim().toLowerCase();
+    const body = (sections[i + 1] ?? "").split(/^---(?:words|measured|identity)---$/m)[0]!.trim();
+    if (key && new RegExp(`\\b${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(styleName)) { chosen = body; break; }
+  }
+  return fillRecipe(chosen, inputs);
+}

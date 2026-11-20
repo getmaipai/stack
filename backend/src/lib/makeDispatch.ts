@@ -4,7 +4,7 @@
 import { sha256Hex } from "@/video/receipt";
 import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
 import type { MakePlan } from "@/lib/makePlan";
-import { fillRecipe } from "@/lib/recipe";
+import { fillRecipe, fillStyleRecipe } from "@/lib/recipe";
 import { writePrompt, writerData } from "@/video/promptWriter";
 import { planClipRoute } from "@/lib/clipRoute";
 import { engineOfPart, rowsForJob } from "@/video/caps";
@@ -181,8 +181,8 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     if (!record || !existsSync(styleFile) || (record.base_model ?? "") !== LORA_BASE_LTX25) return { status: 409, body: { code: "not_available", line: "That style is not available. Choose an installed LTX-2.5 style." } };
     const stat = statSync(styleFile);
     if (stat.size !== record.bytes || (Math.floor(stat.mtimeMs) !== record.mtime_ms && await sha256OfFile(styleFile) !== record.sha256)) return { status: 409, body: { code: "not_available", line: "That style is not available. Choose an installed LTX-2.5 style." } };
-    const recipe = plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";
-    const body = { source: sourcePath, lora: record.id, strength: request.style_strength ?? record.strength_default, conditioning: request.conditioning ?? "source", prompt: fillRecipe(recipe, { description: request.description }), ...(request.seed !== undefined ? { seed: request.seed } : {}), ...(request.wait !== undefined ? { timeout_ms: Math.max(1, request.wait * 1000) } : {}), route: { name: "restyle", reason: chosen.reason } };
+    const recipe = plan.serving.pack.recipes["recipes/restyle.md"] ?? plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";
+    const body = { source: sourcePath, lora: record.id, strength: request.style_strength ?? record.strength_default, conditioning: request.conditioning ?? "source", prompt: fillStyleRecipe(recipe, record.name, { description: request.description }), ...(request.seed !== undefined ? { seed: request.seed } : {}), ...(request.wait !== undefined ? { timeout_ms: Math.max(1, request.wait * 1000) } : {}), route: { name: "restyle", reason: chosen.reason } };
     const sent = await forward("/v1/videos/restyle", body);
     if (sent.status !== 200 && sent.status !== 202) return { status: sent.status, body: sent.json };
     const reply = sent.json as { job: string; data?: Array<{ url: string; poster_url?: string; seconds?: number; audio?: boolean }>; notes?: string[] };

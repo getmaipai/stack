@@ -123,3 +123,13 @@ test("a film shot falls back to the standard Max size, never full HD, when the M
     expect((body as { route?: { reason: string } }).route?.reason).toContain("cannot hold full HD right now");
   } finally { setMachineTier(null); __resetGovernorForTests(); }
 });
+
+test("the restyle recipe holds the colour wording: the colorize style gets natural realistic colours in daylight, any other style the person's own words, and Home sends no template", async () => {
+  const { fillStyleRecipe } = await import("@/lib/recipe");
+  const { packFor } = await import("@/packs/loader");
+  const recipe = packFor("ltx-2-5-bf16-distilled-mlx-max")!.recipes["recipes/restyle.md"]!;
+  expect(fillStyleRecipe(recipe, "Colorize", { description: "the street in summer" })).toBe("the street in summer, natural realistic colours, daylight");
+  expect(fillStyleRecipe(recipe, "colorize old film", { description: "x" })).toBe("x, natural realistic colours, daylight");
+  expect(fillStyleRecipe(recipe, "Paper world", { description: "a painted street" })).toBe("a painted street");
+  expect(fillStyleRecipe(recipe, "Colorize", { description: "" })).toBe(", natural realistic colours, daylight");
+});
