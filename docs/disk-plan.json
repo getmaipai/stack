@@ -24,7 +24,7 @@
     "p64.ai_required_free_bytes": 191231792656,
     "p128.required_free_bytes": 197949623094,
     "p128.minimum_required_free_bytes": 37187187977,
-    "p128.everything_required_free_bytes": 555024898618,
+    "p128.everything_required_free_bytes": 636665700781,
     "p128.needed_bytes": 166083740632,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 194773299817
@@ -2550,8 +2550,8 @@
           "kind": "model",
           "need": "optional",
           "selectable": true,
-          "download_bytes": 0,
-          "installed_bytes": 0,
+          "download_bytes": 68034001802,
+          "installed_bytes": 68034001802,
           "peak_temp_bytes": 0,
           "model_ids": [
             "minimax-h3"
@@ -3089,11 +3089,11 @@
         "required_free_bytes": 37187187977
       },
       "everything": {
-        "download_bytes": 442434663402,
-        "installed_bytes": 451029448350,
+        "download_bytes": 510468665204,
+        "installed_bytes": 519063450152,
         "peak_temp_bytes": 13789560598,
-        "needed_bytes": 464819008948,
-        "required_free_bytes": 555024898618
+        "needed_bytes": 532853010750,
+        "required_free_bytes": 636665700781
       },
       "measured_on": "2026-10-17",
       "default_selected": [
