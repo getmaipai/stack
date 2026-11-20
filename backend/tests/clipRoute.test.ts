@@ -65,3 +65,9 @@ test("the resend after a derivation carries its start picture, is never answered
   const bad = planClipRoute(req({ intent: "derived_start", inputs: [{ role: "identity", file: "i" }] }), h3);
   expect(bad).toMatchObject({ ok: false, refusal: { code: "input_not_supported" } });
 });
+
+test("needs_start_picture names wardrobe among the inputs to use when the request carries one", () => {
+  const planned = planClipRoute(req({ inputs: [{ role: "identity", file: "i" }, { role: "wardrobe", file: "w" }] }), h3);
+  expect(planned).toMatchObject({ ok: false, refusal: { code: "needs_start_picture", shape: "landscape", inputs: ["identity", "wardrobe"] } });
+  if (!planned.ok) expect(StackMakeRefusal.safeParse(planned.refusal).success).toBe(true);
+});

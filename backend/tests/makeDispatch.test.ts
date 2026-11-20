@@ -101,7 +101,7 @@ test("identity inputs without a reference row are refused before files are read"
   let sent: Record<string, unknown> = {};
   const request = clipReq({ inputs: [{ role: "identity", file: "/v1/images/generations/a/0.png" }, { role: "wardrobe", file: "/v1/images/generations/b/0.png" }], dialogue: [{ speaker: "sage", text: "I left it here." }], intent: "new_shot" });
   const result = await dispatchClip(request, clipPlanned(), async () => { throw new Error("must not forward"); }, async () => { throw new Error("must not read"); });
-  expect(result).toEqual({ status: 422, body: { code: "needs_start_picture", line: "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.", shape: "landscape", inputs: ["identity"] } });
+  expect(result).toEqual({ status: 422, body: { code: "needs_start_picture", line: "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.", shape: "landscape", inputs: ["identity", "wardrobe"] } });
 });
 test("an input that cannot be read is refused plainly, never dropped", async () => {
   const refused = await dispatchClip(clipReq({ inputs: [{ role: "identity", file: "nope" }] }), clipPlanned(), async () => ({ status: 200, json: {} }), async () => null);

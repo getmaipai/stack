@@ -30,7 +30,7 @@ export function planClipRoute(request: ClipRequest, rows: readonly StackOperatio
     reason = request.intent === "derived_start" ? "The start picture was made from the identity picture and opens the shot." : identityCount ? "The start picture opens the shot; identity pictures are recorded in the receipt, not used to hold the person in this clip." : "The start picture opens the shot.";
   } else if (identityCount > 0) {
     const row = rows.find((candidate) => candidate.operation === "clip_references" && candidate.level === request.level && candidate.available);
-    if (!row) return { ok: false, refusal: { code: "needs_start_picture", line: NEEDS_START_PICTURE_LINE, shape: request.shape, inputs: ["identity"] } };
+    if (!row) return { ok: false, refusal: { code: "needs_start_picture", line: NEEDS_START_PICTURE_LINE, shape: request.shape, inputs: hasWardrobe ? ["identity", "wardrobe"] : ["identity"] } };
     route = "references"; operation = "clip_references";
     identityUsed = Math.min(identityCount, row.inputs.references, 1);   // ONE identity picture by default; more only when admission for more is built (a row alone does not say the machine admits it)
     const setAside = identityCount - identityUsed;
