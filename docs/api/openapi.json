@@ -7538,6 +7538,95 @@
         }
       }
     },
+    "/v1/videos/enhance": {
+      "post": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Refine the details of a finished clip (refused until the adapter is installed)",
+        "description": "VF-ENHANCE-01 door. The clip is checked first (422 with a plain line), then the Stack refuses with `not_installed` (409) until the Refine Details adapter is a pinned, installed part. Nothing is stored and no model runs on a refusal.",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source_video": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "409": {
+            "description": "The adapter is not installed; the clip is unchanged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "not_installed"
+                      ]
+                    },
+                    "line": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "line"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The clip was not sent, or is not an MP4.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The adapter is installed but the operation is not wired on this build.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/audio/music": {
       "post": {
         "tags": [
