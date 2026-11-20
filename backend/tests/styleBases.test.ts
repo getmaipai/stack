@@ -19,7 +19,7 @@ afterEach(() => { __resetPartChoicesForTests(); __setPartsHardwareForTests(null)
 const VIDEO_PACKS = ["ltx-2-5-q8-distilled-mlx", "ltx-2-5-bf16-distilled-mlx-max"];
 const LTX25 = { id: "ltx-2.5", label: "LTX 2.5", short: "LTX-2.5", media: "video" as const, civitai_labels: ["LTXV 2.5"], text_patterns: ["ltx[\\s_-]*(?:v|video)?[\\s_-]*2[._-]?5"], browse: ["ltx-2.5"], generic_labels: ["LTXV2"] };
 
-test("each LTX 2.5 pack lists the 2.5 base with Home's labels and patterns, and the retired 2.3 base with the base it is judged on", () => {
+test("each video pack lists the current base with Home's labels and patterns, and the retired older base with the base it is judged on", () => {
   for (const part of VIDEO_PACKS) {
     const bases = packFor(part)!.pack.style_bases!;
     expect(bases.find((b) => b.id === "ltx-2.5")).toEqual(LTX25);
