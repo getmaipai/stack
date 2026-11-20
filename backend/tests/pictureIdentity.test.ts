@@ -1,5 +1,6 @@
 // VF-ROUTE-DERIVE-01: the generic `picture` job acting on an identity input. A fake edit route records the form; no model runs.
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { planMake } from "@/lib/makePlan";
 import { PART_DEFS } from "@/lib/partDefs";
 import { __setPartsHardwareForTests } from "@/lib/partsList";
 import { __resetPartChoicesForTests } from "@/lib/partChoices";
@@ -103,4 +104,10 @@ test("the blank canvas is a valid PNG of the asked size", () => {
   expect(Array.from(png.subarray(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
   const view = new DataView(png.buffer, png.byteOffset);
   expect([view.getUint32(16), view.getUint32(20)]).toEqual([64, 32]);
+});
+
+test("the planner lets an identity picture through at a first-picture shape and still refuses an ordinary picture at that shape (the reported 409 shape_not_served)", () => {
+  expect(planMake(req({ shape: "landscape" }), parts)).toMatchObject({ ok: true });
+  expect(planMake(req({ shape: "portrait" }), parts)).toMatchObject({ ok: true });
+  expect(planMake(req({ shape: "landscape", inputs: undefined }), parts)).toMatchObject({ ok: false, refusal: { code: "shape_not_served" } });
 });
