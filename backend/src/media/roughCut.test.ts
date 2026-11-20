@@ -53,10 +53,10 @@ describe("media.rough_cut: rules that need no file", () => {
     expect(motionOp("pan left", 4)).toMatchObject({ pan: "left" }); expect(motionOp("pan right", 4)).toMatchObject({ pan: "right" });
     expect(motionOp("wobbles", 4)).toMatchObject({ zoom_from: 1, zoom_to: 1, pan: "none" });
   });
-  it("refuses a line that names no shot, two lines in one shot, and a repeated shot name, in plain words", () => {
+  it("refuses a line that names no shot, more than three lines in a shot, and a repeated shot name, in plain words", () => {
     const base: RoughCutInput = { audience: "adult", shots: [{ id: "a", picture: "/p.png", seconds: 3 }, { id: "b", picture: "/p.png", seconds: 3 }] };
     expect(() => checkRoughCutRequest({ ...base, lines: [{ shot_id: "zzz", line: { speaker: "iris", text: "Hi." } }] })).toThrow(/not in the film/);
-    expect(() => checkRoughCutRequest({ ...base, lines: [{ shot_id: "a", line: { speaker: "iris", text: "Hi." } }, { shot_id: "a", line: { speaker: "iris", text: "Again." } }] })).toThrow(/more than one line/);
+    expect(() => checkRoughCutRequest({ ...base, lines: [{ shot_id: "a", line: { speaker: "iris", text: "Hi." } }, { shot_id: "a", line: { speaker: "iris", text: "Again." } }, { shot_id: "a", line: { speaker: "iris", text: "Third." } }, { shot_id: "a", line: { speaker: "iris", text: "Fourth." } }] })).toThrow("A shot has at most 3 spoken lines. Move a line to another shot.");
     expect(() => checkRoughCutRequest({ ...base, shots: [base.shots[0]!, base.shots[0]!] })).toThrow(/share a name/);
   });
   it("refuses a cloned voice for a speaker flagged minor, and for every speaker when the audience is minor, but allows a starter voice or none", () => {
@@ -108,13 +108,32 @@ describe.skipIf(!have)("media.rough_cut on fixtures built with ffmpeg", () => {
     expect(silent(result.file, 6.3, 0.8)).toBe(false);              // shot 3 carries its line
     expect(Math.abs(probeSeconds(result.file) - 9)).toBeLessThan(0.3);
   }, 180_000);
+  it("keeps three lines in one shot in request order with their own speaker voices and separated starts", async () => {
+    const calls: Array<{ text: string; voice: string | undefined }> = [];
+    const result = await buildRoughCut({ audience: "adult", shots: shots(1, 5), lines: [
+      { shot_id: "shot-1", line: { speaker: "minor", text: "First." } },
+      { shot_id: "shot-1", line: { speaker: "adult", text: "Second." } },
+      { shot_id: "shot-1", line: { speaker: "other", text: "Third." } },
+    ], voices: [{ speaker: "minor", minor: true }, { speaker: "adult", voice_address: "/media/voices/adult.wav" }] }, join(dir, "three-lines"), deps({ speak: async (text, voice) => { calls.push({ text, voice }); return sine(440, 1); } }));
+    expect(calls).toEqual([{ text: "First.", voice: undefined }, { text: "Second.", voice: "/media/voices/adult.wav" }, { text: "Third.", voice: undefined }]);
+    expect(result.lines.map((l) => [l.speaker, l.start_s])).toEqual([["minor", 0.2], ["adult", 1.5], ["other", 2.8]]);
+    expect(result.lines).toHaveLength(3);
+  }, 180_000);
+  it("budgets all lines in a shot and refuses duplicate voice entries", async () => {
+    const tooLong = { audience: "adult" as const, shots: shots(1, 3), lines: [line(1, "One."), line(1, "Two."), line(1, "Three.")] };
+    await expect(buildRoughCut(tooLong, join(dir, "lines-too-long"), deps({ speak: async () => sine(440, 1) }))).rejects.toThrow(/3-second shot take 3\.8 seconds/);
+    expect(() => checkRoughCutRequest({ ...tooLong, voices: [{ speaker: "iris" }, { speaker: "iris", voice_address: "/voice.wav" }] })).toThrow("Two voice entries name the same speaker: iris. Keep one voice entry per speaker.");
+  }, 60_000);
+  it("refuses a clone for a minor line's own speaker", () => {
+    expect(() => checkRoughCutRequest({ audience: "adult", shots: shots(1), lines: [{ shot_id: "shot-1", line: { speaker: "child", text: "Hi." } }], voices: [{ speaker: "child", minor: true, voice_address: "/media/voices/clone.wav" }] })).toThrow(/starter voice/);
+  });
   it("uses the household default voice when no address is sent", async () => {
     spoken.length = 0;
     await buildRoughCut({ audience: "adult", shots: shots(2, 3), lines: [line(1)] }, join(dir, "default"), deps());
     expect(spoken[0]!.voice).toBeUndefined();
   }, 120_000);
   it("refuses a line longer than its shot before any picture work, and says what to do", async () => {
-    await expect(buildRoughCut({ audience: "adult", shots: shots(2, 1), lines: [line(1)] }, join(dir, "toolong"), deps({ speak: async () => sine(440, 2) }))).rejects.toThrow(/longer or the line shorter/);
+    await expect(buildRoughCut({ audience: "adult", shots: shots(2, 1), lines: [line(1)] }, join(dir, "toolong"), deps({ speak: async () => sine(440, 2) }))).rejects.toThrow(/longer or the lines shorter/);
   }, 60_000);
   it("refuses a clone for a flagged minor before the speech engine is called", async () => {
     spoken.length = 0;

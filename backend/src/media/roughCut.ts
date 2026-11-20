@@ -59,10 +59,17 @@ export function checkRoughCutRequest(input: RoughCutInput): void {
   for (const entry of input.lines ?? []) if (!shotIds.has(entry.shot_id)) throw new RoughCutRefusal("bad_input", "A line names a shot that is not in the film. Check the shot names and try again.");
   const perShot = new Map<string, number>();
   for (const entry of input.lines ?? []) perShot.set(entry.shot_id, (perShot.get(entry.shot_id) ?? 0) + 1);
-  if ([...perShot.values()].some((count) => count > 1)) throw new RoughCutRefusal("bad_input", "A shot has more than one line. Put each line in its own shot.");
-  for (const voice of input.voices ?? []) {
-    const minor = input.audience === "minor" || voice.minor === true;
-    if (minor && voice.voice_address !== undefined && voiceNeedsCloning(voice.voice_address)) throw new RoughCutRefusal("clone_refused", "A child's lines use a starter voice. A cloned voice is not allowed for them. Choose a starter voice or none.");
+  if ([...perShot.values()].some((count) => count > 3)) throw new RoughCutRefusal("bad_input", "A shot has at most 3 spoken lines. Move a line to another shot.");
+  const voices = input.voices ?? [];
+  const speakers = new Set<string>();
+  for (const voice of voices) {
+    if (speakers.has(voice.speaker)) throw new RoughCutRefusal("bad_input", `Two voice entries name the same speaker: ${voice.speaker}. Keep one voice entry per speaker.`);
+    speakers.add(voice.speaker);
+  }
+  for (const line of input.lines ?? []) {
+    const voice = voices.find((entry) => entry.speaker === line.line.speaker);
+    const minor = input.audience === "minor" || voice?.minor === true;
+    if (minor && voice?.voice_address !== undefined && voiceNeedsCloning(voice.voice_address)) throw new RoughCutRefusal("clone_refused", "A child's lines use a starter voice. A cloned voice is not allowed for them. Choose a starter voice or none.");
   }
 }
 
@@ -99,24 +106,29 @@ export async function buildRoughCut(input: RoughCutInput, outDir: string, deps: 
   checkRoughCutRequest(input);
   mkdirSync(outDir, { recursive: true, mode: 0o700 });
   const tick = (percent: number, status: string) => deps.progress?.(percent, status);
-  const lineByShot = new Map((input.lines ?? []).map((entry) => [entry.shot_id, entry.line]));
+  const lineEntries = input.lines ?? [];
 
   // Speech first: a line longer than its shot is refused before any picture work.
   tick(2, "speaking the lines");
-  const spoken = new Map<string, { path: string; length_s: number; speaker: string; wave?: number[] }>();
-  let spokenCount = 0;
-  for (const shot of input.shots) {
-    const line = lineByShot.get(shot.id); if (!line) continue;
+  const spoken: Array<{ shot_id: string; line: NonNullable<RoughCutInput["lines"]>[number]["line"]; path: string; length_s: number; wave?: number[] }> = [];
+  const shotOffsets = new Map<string, number>();
+  for (let index = 0; index < lineEntries.length; index++) {
+    const entry = lineEntries[index]!;
+    const shot = input.shots.find((item) => item.id === entry.shot_id)!;
+    const line = entry.line;
     const voice = (input.voices ?? []).find((entry) => entry.speaker === line.speaker);
     const bytes = await deps.speak(line.text, voice?.voice_address, deps.signal);
     const length = wavDuration(bytes);
-    if (LINE_LEAD_S + length > shot.seconds) throw new RoughCutRefusal("bad_input", `The line in a ${shot.seconds}-second shot takes ${Math.ceil((LINE_LEAD_S + length) * 10) / 10} seconds to say. Make the shot longer or the line shorter.`);
-    const path = join(outDir, `line-${spokenCount + 1}.wav`);
+    const elapsed = shotOffsets.get(shot.id);
+    const lineStart = elapsed ?? LINE_LEAD_S;
+    const total = lineStart + length;
+    if (total > shot.seconds) throw new RoughCutRefusal("bad_input", `The lines in a ${shot.seconds}-second shot take ${Math.ceil(total * 10) / 10} seconds to say. Make the shot longer or the lines shorter.`);
+    const path = join(outDir, `line-${index + 1}.wav`);
     writeFileSync(path, bytes, { mode: 0o600 });
     const wave = waveOf(bytes);
-    spoken.set(shot.id, { path, length_s: Math.round(length * 1000) / 1000, speaker: line.speaker, ...(wave ? { wave } : {}) });
-    spokenCount++;
-    tick(2 + Math.round((spokenCount / Math.max(1, lineByShot.size)) * 18), "speaking the lines");
+    spoken.push({ shot_id: shot.id, line, path, length_s: Math.round(length * 1000) / 1000, ...(wave ? { wave } : {}) });
+    shotOffsets.set(shot.id, total + 0.3);
+    tick(2 + Math.round(((index + 1) / Math.max(1, lineEntries.length)) * 18), "speaking the lines");
   }
 
   // One piece per shot: its motion, then its line as words for the whole shot (the silent animatic's look).
@@ -129,7 +141,7 @@ export async function buildRoughCut(input: RoughCutInput, outDir: string, deps: 
     const motionPath = join(outDir, `shot-${index + 1}-motion.mp4`);
     await ff(deps, kenBurnsArgs(deps.ffmpeg, still, motionPath, motionOp(shot.motion, shot.seconds), true));
     let piecePath = motionPath;
-    const line = lineByShot.get(shot.id);
+    const line = lineEntries.find((entry) => entry.shot_id === shot.id)?.line;
     // A voiced line is captioned with its own text; a shot with no voiced line shows its `caption` (the silent animatic's words).
     const words = line ? line.text : shot.caption;
     if (words && fontFile) {
@@ -151,9 +163,12 @@ export async function buildRoughCut(input: RoughCutInput, outDir: string, deps: 
   const shots = input.shots.map((shot) => { const entry = { id: shot.id, start_s: Math.round(at * 1000) / 1000, end_s: Math.round((at + shot.seconds) * 1000) / 1000 }; at += shot.seconds; return entry; });
   const total_s = Math.round(at * 1000) / 1000;
   const lines: RoughCutResult["lines"] = [];
-  for (const shot of shots) {
-    const voiced = spoken.get(shot.id); if (!voiced) continue;
-    lines.push({ shot_id: shot.id, speaker: voiced.speaker, start_s: Math.round((shot.start_s + LINE_LEAD_S) * 1000) / 1000, length_s: voiced.length_s, audio: voiced.path, ...(voiced.wave ? { wave: voiced.wave } : {}) });
+  const shotLineOffsets = new Map<string, number>();
+  for (const voiced of spoken) {
+    const shot = shots.find((item) => item.id === voiced.shot_id)!;
+    const offset = shotLineOffsets.get(voiced.shot_id) ?? LINE_LEAD_S;
+    lines.push({ shot_id: voiced.shot_id, speaker: voiced.line.speaker, start_s: Math.round((shot.start_s + offset) * 1000) / 1000, length_s: voiced.length_s, audio: voiced.path, ...(voiced.wave ? { wave: voiced.wave } : {}) });
+    shotLineOffsets.set(voiced.shot_id, offset + voiced.length_s + 0.3);
   }
 
   const file = join(outDir, "rough-cut.mp4");
