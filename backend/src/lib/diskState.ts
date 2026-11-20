@@ -14,7 +14,7 @@ const levels = new Map<string, DiskLevel>();
 let volumes: DiskVolume[] = [];
 let sampledAt = 0;
 const realReader: Reader = async (path) => { const s = await detectHardware({ diskPath: path }); return { free: s.freeDiskBytes ?? 0, total: s.totalDiskBytes ?? 0, device: Number(statSync(path).dev) }; };
-const safeReader: Reader = process.env.MAIPAI_TEST_NO_PORTS ? () => ({ free: 500_000_000_000, total: 1_000_000_000_000, device: 1 }) : realReader;
+const safeReader: Reader = process.env.NODE_ENV === "test" ? () => ({ free: 500_000_000_000, total: 1_000_000_000_000, device: 1 }) : realReader;
 let reader: Reader = safeReader;
 const paths = () => [modelsDir, engineRoot, join(dataDir, "jobs")];
 let runtimeConfig = { warn_free_gb: 0, critical_free_gb: 0 };

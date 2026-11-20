@@ -25,9 +25,9 @@ test("IC-LoRA is restricted to the measured Max size and 10 second limit", () =>
   expect(ltx25IcLoraRefusal("ltx25max", 1024, 576, 121)).toBeNull();
 });
 
-test("IC-LoRA admission uses the measured OS footprint plus governor headroom", () => {
+test("IC-LoRA admission uses the measured OS footprint plus governor headroom", async () => {
   expect(LTX25_ICLORA_PEAK_BYTES).toBeGreaterThanOrEqual(81_000_000_000);
-  expect(memoryVerdict("ltx25max", LTX25_ICLORA_PEAK_BYTES)).toHaveProperty("ok");
+  expect(await memoryVerdict("ltx25max", LTX25_ICLORA_PEAK_BYTES)).toHaveProperty("ok");
 });
 
 const GB = 1_073_741_824;
