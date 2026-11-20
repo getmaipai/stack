@@ -5,13 +5,13 @@ import type { StackReferenceClipRules } from "@maipai/spec/stack/ts/stack-model-
 
 type ClipRequest = Extract<StackMakeRequest, { job: "clip" }>;
 export type PlannedClipRoute =
-  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend" | "restyle" | "companion_take" | "reference_clip"; identityUsed: number; reason: string; roleCounts?: Record<"identity" | "object" | "place", number>; referenceClip?: true; /** The request is a film shot: the dispatcher chooses the Max recipe from the machine (no size field). */ filmShot?: true; companionTake?: true }
+  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend" | "restyle" | "companion_take" | "reference_clip"; identityUsed: number; reason: string; roleCounts?: Record<"identity" | "object" | "place", number>; referenceClip?: true; referenceSheet?: true; /** The request is a film shot: the dispatcher chooses the Max recipe from the machine (no size field). */ filmShot?: true; companionTake?: true }
   | { ok: false; refusal: StackMakeRefusal };
 
 export const NEEDS_START_PICTURE_LINE = "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.";
 const refuse = (line: string): PlannedClipRoute => ({ ok: false, refusal: { code: "input_not_supported", line } });
 
-export function planClipRoute(request: ClipRequest, rows: readonly StackOperationRow[], hasCompanionRecipe = false, referenceRules?: StackReferenceClipRules | null): PlannedClipRoute {
+export function planClipRoute(request: ClipRequest, rows: readonly StackOperationRow[], hasCompanionRecipe = false, referenceRules?: StackReferenceClipRules | null, sheetLayout?: { max_places: number } | null): PlannedClipRoute {
   const identityCount = request.inputs?.filter((input) => input.role === "identity").length ?? 0;
   const hasVoice = request.inputs?.some((input) => input.role === "voice_reference") ?? false;
   const hasWardrobe = request.inputs?.some((input) => input.role === "wardrobe") ?? false;
@@ -28,7 +28,12 @@ export function planClipRoute(request: ClipRequest, rows: readonly StackOperatio
     if (request.level !== "max") return refuse("Reference clips are available at Max quality only.");
     if (request.seconds < referenceRules.seconds.min || request.seconds > referenceRules.seconds.max) return refuse(`Reference clips must be ${referenceRules.seconds.min} to ${referenceRules.seconds.max} seconds long.`);
     if (counts.identity && !request.start_picture) return { ok: false, refusal: { code: "needs_start_picture", line: NEEDS_START_PICTURE_LINE, shape: request.shape, inputs: inputs.map((i) => i.role).filter((role, index, all) => all.indexOf(role) === index) } };
-    if (!counts.identity) return refuse("Object and place reference pictures need a prepared Ingredients sheet. The Stack cannot make that sheet yet.");
+    if (!counts.identity) {
+      const maxPlaces = sheetLayout?.max_places;
+      if (maxPlaces === undefined) return refuse("Reference sheets are not available with this clip model.");
+      if (counts.place > maxPlaces) return refuse(`A reference sheet holds up to ${maxPlaces} place pictures. Send fewer places.`);
+      return { ok: true, route: "start_picture", operation: "reference_clip", identityUsed: 0, roleCounts: counts, reason: "The sheet was composed from the attached pictures.", referenceClip: true, referenceSheet: true };
+    }
     const selected = rows.find((candidate) => candidate.operation === "clip_start_picture" && candidate.level === "max" && candidate.available && candidate.inputs.start_picture);
     if (!selected) return refuse("Reference clips are not available at Max quality here.");
     return { ok: true, route: "start_picture", operation: "reference_clip", identityUsed: counts.identity, roleCounts: counts, reason: "The clip opens on the composed first picture, with the people, objects and places recorded as references.", referenceClip: true };

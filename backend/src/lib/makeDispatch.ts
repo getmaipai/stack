@@ -18,6 +18,7 @@ import { getLora, loraPath, LORA_BASE_LTX25 } from "@/video/loras";
 import { isLoraId } from "@/video/loras";
 import { statSync } from "node:fs";
 import { sha256OfFile } from "@/lib/fileHash";
+import { composeSheet } from "@/media/sheetCompose";
 
 export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit", "clip", "swap", "song", "song_edit", "stems", "character_sheet", "contact_sheet"]);
 
@@ -135,10 +136,35 @@ export function clipBody(request: ClipRequest, plan: Planned, route?: { name: st
   };
 }
 
-export async function dispatchClip(request: ClipRequest, plan: Planned, forward: Forward, read?: PictureBytes): Promise<{ status: number; body: unknown }> {
+export async function dispatchClip(request: ClipRequest, plan: Planned, forward: Forward, read?: PictureBytes, seams: { makeSheet?: typeof composeSheet; forwardIngredients?: FormForward } = {}): Promise<{ status: number; body: unknown }> {
   const companionRecipe = plan.serving.pack.recipes["recipes/companion_take.md"];
-  const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"), !!companionRecipe, referenceClipRules(plan.serving.part.id));
+  const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"), !!companionRecipe, referenceClipRules(plan.serving.part.id), plan.serving.job.sheet_layout);
   if (!chosen.ok) return { status: 422, body: chosen.refusal };
+  if (chosen.referenceSheet) {
+    if (!read) return { status: 409, body: { code: "not_available", line: INPUT_UNREADABLE_LINE } };
+    const layout = plan.serving.job.sheet_layout;
+    if (!layout) return { status: 422, body: { code: "input_not_supported", line: "Reference sheets are not available with this clip model." } };
+    const panels = [];
+    for (const input of request.inputs ?? []) {
+      const got = await read(input.file);
+      if (!got) return { status: 409, body: { code: "not_available", line: INPUT_UNREADABLE_LINE } };
+      panels.push({ role: input.role === "place" ? "place" as const : "object" as const, label: input.role, image: got.bytes });
+    }
+    try {
+      const sheet = await (seams.makeSheet ?? composeSheet)({ panels, layout, placeColumns: true });
+      const form = new FormData();
+      form.set("sheet", new File([sheet.png as unknown as ArrayBuffer], "reference-sheet.png", { type: "image/png" }));
+      form.set("prompt", request.description); form.set("seconds", String(Math.round(request.seconds))); form.set("audience", "adult");
+      form.set("route_name", "reference_clip"); form.set("route_reason", "The sheet was composed from the attached pictures.");
+      if (request.seed !== undefined) form.set("seed", String(request.seed));
+      if (request.wait !== undefined) form.set("timeout_ms", String(Math.max(1, request.wait * 1000)));
+      const sent = await (seams.forwardIngredients ?? (async (path, body) => forward(path, body)))("/v1/videos/ingredients", form);
+      if (sent.status !== 200 && sent.status !== 202) return { status: sent.status, body: sent.json };
+      const reply = sent.json as { job?: string; data?: Array<{ url: string; poster_url?: string; seconds?: number; audio?: boolean }>; notes?: string[] };
+      const first = reply.data?.[0];
+      return { status: sent.status, body: { id: reply.job ?? "", job: "clip", state: first ? "done" : "running", percent: first ? 100 : 0, status: first ? "Done" : "Making your clip", files: (reply.data ?? []).map((d) => d.url), poster: first?.poster_url ?? null, made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? true, notes: reply.notes ?? [], receipt: reply.job, route: "reference_clip", route_reason: "The sheet was composed from the attached pictures." } } };
+    } catch { return { status: 422, body: { code: "input_not_supported", line: "The reference sheet could not be composed from these pictures." } }; }
+  }
   const savedTake = request.take_of ? readTake(request.take_of) : null;
   // VF-ROUTE-01 follow-up: a film shot is made at the best Max recipe this computer can hold (full HD when admitted), chosen here from the operation and the machine, never from a size field.
   let filmSize: string | null = null; let filmReason = chosen.reason;

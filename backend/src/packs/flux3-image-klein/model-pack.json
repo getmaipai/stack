@@ -102,6 +102,13 @@
     },
     {
       "job": "character_sheet",
+      "sheet_angles": {
+        "person": ["Show the person from the front, standing straight, arms relaxed at the sides, looking at the viewer, full body", "Show the person from the side, in profile, standing straight, full body", "Show the person from the back, standing straight, full body", "Show the same person from the chest up, smiling warmly", "Show the same person from the chest up, with a serious, thoughtful face", "Show the same person from the chest up, laughing with the mouth open", "Show the same person, full body, walking forward in mid-stride", "Show the same person, full body, sitting down with a relaxed posture"],
+        "pet": ["Show the animal from the front, standing, looking at the viewer, full body", "Show the animal from the side, in profile, standing, full body", "Show the animal from behind, standing, full body", "Show the same animal's face close up, happy, mouth slightly open", "Show the same animal's face close up, calm, mouth closed", "Show the same animal, full body, sitting", "Show the same animal, full body, lying down"],
+        "object": ["Show the object from the front, centered, filling the frame", "Show the object from the left side", "Show the object from the back", "Show the object from above, looking straight down", "Show the object at a three quarter angle from the front right", "Show a close up of the most detailed part of the object"],
+        "place": ["Show a wide view from the entrance", "Show the left side of the place", "Show the right side of the place", "Show the place from above", "Show a close detail of the main feature of the place", "Show the same place at night"]
+      },
+      "sheet_layout": { "width": 768, "height": 448, "place_width": 288, "gap": 2, "max_places": 2 },
       "limits": {
         "shapes": {
           "square": {
@@ -144,6 +151,7 @@
     },
     {
       "job": "contact_sheet",
+      "sheet_angles": {"person": ["a wide shot showing the whole subject with room around it", "a close up of the face or the most important part", "a view from slightly above", "a view from slightly below, looking up", "a view from the left side", "a view from the right side", "a three quarter view from the front left", "a three quarter view from the front right", "a view from behind", "a medium shot from the waist or middle up", "a candid moment, looking away from the viewer", "a view from far away, small in the frame"]},
       "limits": {
         "shapes": {
           "square": {

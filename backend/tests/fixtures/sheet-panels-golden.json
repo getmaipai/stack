@@ -1,0 +1,23 @@
+{
+  "person": {
+    "with_description": [
+      "Show the person from the front, standing straight, arms relaxed at the sides, looking at the viewer, full body. The person is: GOLDEN DESCRIPTION",
+      "Show the person from the side, in profile, standing straight, full body. The person is: GOLDEN DESCRIPTION",
+      "Show the person from the back, standing straight, full body. The person is: GOLDEN DESCRIPTION",
+      "Show the same person from the chest up, smiling warmly. The person is: GOLDEN DESCRIPTION",
+      "Show the same person from the chest up, with a serious, thoughtful face. The person is: GOLDEN DESCRIPTION",
+      "Show the same person from the chest up, laughing with the mouth open. The person is: GOLDEN DESCRIPTION",
+      "Show the same person, full body, walking forward in mid-stride. The person is: GOLDEN DESCRIPTION",
+      "Show the same person, full body, sitting down with a relaxed posture. The person is: GOLDEN DESCRIPTION"
+    ],
+    "without_description": ["Show the person from the front, standing straight, arms relaxed at the sides, looking at the viewer, full body", "Show the person from the side, in profile, standing straight, full body", "Show the person from the back, standing straight, full body", "Show the same person from the chest up, smiling warmly", "Show the same person from the chest up, with a serious, thoughtful face", "Show the same person from the chest up, laughing with the mouth open", "Show the same person, full body, walking forward in mid-stride", "Show the same person, full body, sitting down with a relaxed posture"]
+  },
+  "pet": {
+    "with_description": ["Show the animal from the front, standing, looking at the viewer, full body. The animal is: GOLDEN DESCRIPTION", "Show the animal from the side, in profile, standing, full body. The animal is: GOLDEN DESCRIPTION", "Show the animal from behind, standing, full body. The animal is: GOLDEN DESCRIPTION", "Show the same animal's face close up, happy, mouth slightly open. The animal is: GOLDEN DESCRIPTION", "Show the same animal's face close up, calm, mouth closed. The animal is: GOLDEN DESCRIPTION", "Show the same animal, full body, sitting. The animal is: GOLDEN DESCRIPTION", "Show the same animal, full body, lying down. The animal is: GOLDEN DESCRIPTION"],
+    "without_description": ["Show the animal from the front, standing, looking at the viewer, full body", "Show the animal from the side, in profile, standing, full body", "Show the animal from behind, standing, full body", "Show the same animal's face close up, happy, mouth slightly open", "Show the same animal's face close up, calm, mouth closed", "Show the same animal, full body, sitting", "Show the same animal, full body, lying down"]
+  },
+  "object": {
+    "with_description": ["Show the object from the front, centered, filling the frame. The object is: GOLDEN DESCRIPTION", "Show the object from the left side. The object is: GOLDEN DESCRIPTION", "Show the object from the back. The object is: GOLDEN DESCRIPTION", "Show the object from above, looking straight down. The object is: GOLDEN DESCRIPTION", "Show the object at a three quarter angle from the front right. The object is: GOLDEN DESCRIPTION", "Show a close up of the most detailed part of the object. The object is: GOLDEN DESCRIPTION"],
+    "without_description": ["Show the object from the front, centered, filling the frame", "Show the object from the left side", "Show the object from the back", "Show the object from above, looking straight down", "Show the object at a three quarter angle from the front right", "Show a close up of the most detailed part of the object"]
+  }
+}

@@ -1,6 +1,6 @@
 # PLACE-SHEET-01: a multi-angle reference sheet for a place and a prop
 
-Status: designed, not built. No model runs are needed to land any slice. Today only characters (a person, a pet) capture a look in more than one view; a place or a prop appears once, as the single picture the person attached.
+Status: 01b, 01c and the attached-picture part of 01d are wired and tested without an engine. Reference clips compose attached object/place pictures and forward them through Ingredients. Generated extra angles are not used by reference clips yet. No model runs are needed. A real run is parked.
 
 ## What exists
 
@@ -12,11 +12,11 @@ Status: designed, not built. No model runs are needed to land any slice. Today o
 
 Both needs are the same operation: turn several panels into one sheet picture with a recorded layout. Build it once, in the Stack, as a pure function with no model and no engine:
 
-`composeSheet({ panels: [{ role, label, image }], layout })` returns `{ png, panels: [{ index, label, slot }] }`.
+`composeSheet({ panels: [{ role, label, image }], layout })` returns `{ png, panels: [{ index, label, slot }] }`. It uses the Stack's managed ffmpeg; it adds no image dependency.
 
-- Lives in `backend/src/media/sheetCompose.ts` (sharp only). The layout numbers (sheet size, place panel width, gap, panel cap) are pack data on the reference clip job, not code (E7); the Ingredients numbers above are the first values.
-- Used by the reference clip's object and place route (REFCLIP step 3): the attached object and place pictures, or their generated angles, become the sheet the engine takes.
-- Used by this row: the "composed" answer of a place or prop sheet.
+- Lives in `backend/src/media/sheetCompose.ts` (ffmpeg). The layout numbers (sheet size, place panel width, gap, panel cap) are pack data on the reference clip job, not code (E7); the Ingredients numbers above are the first values.
+- Used by the reference clip's object and place route (REFCLIP step 3): attached object and place pictures become the sheet the engine takes. Place panels use pack place columns. Generated angles are not connected to this route yet.
+- Used by this row: the "composed" answer of a place or prop sheet. A composed place sheet lays the place's six views out as a grid; `max_places` applies to attached place pictures in a reference clip, not views of one place.
 - Home's `makeSheetFromPictures` becomes a caller of the Stack and is deleted in the Home half, after a Home test that the same layouts come out.
 
 ## Rows

@@ -5,6 +5,9 @@
 import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
 import type { MakePlan } from "@/lib/makePlan";
 import { dispatchPictureEdit, PICTURE_UNREADABLE_LINE, type FormForward, type PictureBytes } from "@/lib/makeDispatch";
+import { composeSheet, type SheetRole } from "@/media/sheetCompose";
+import { randomUUID } from "node:crypto";
+import { keepResult, takeResult } from "@/imagetools/imageTools";
 
 type Planned = Extract<MakePlan, { ok: true }>;
 type CharacterRequest = Extract<StackMakeRequest, { job: "character_sheet" }>;
@@ -14,37 +17,6 @@ type Kind = CharacterRequest["kind"];
 /** A contact sheet is one engine run per tile, each taking about a minute, so the count is capped. */
 export const CONTACT_SHEET_MAX_TILES = 12;
 export const CONTACT_SHEET_TOO_MANY_LINE = `A contact sheet holds up to ${CONTACT_SHEET_MAX_TILES} tiles. Ask for fewer, or make a second sheet.`;
-
-/** The panels of a character sheet, in the order they are returned: turnaround first, then expressions, then poses. */
-const PANELS: Readonly<Record<Kind, readonly string[]>> = {
-  person: [
-    "Show the person from the front, standing straight, arms relaxed at the sides, looking at the viewer, full body",
-    "Show the person from the side, in profile, standing straight, full body",
-    "Show the person from the back, standing straight, full body",
-    "Show the same person from the chest up, smiling warmly",
-    "Show the same person from the chest up, with a serious, thoughtful face",
-    "Show the same person from the chest up, laughing with the mouth open",
-    "Show the same person, full body, walking forward in mid-stride",
-    "Show the same person, full body, sitting down with a relaxed posture",
-  ],
-  pet: [
-    "Show the animal from the front, standing, looking at the viewer, full body",
-    "Show the animal from the side, in profile, standing, full body",
-    "Show the animal from behind, standing, full body",
-    "Show the same animal's face close up, happy, mouth slightly open",
-    "Show the same animal's face close up, calm, mouth closed",
-    "Show the same animal, full body, sitting",
-    "Show the same animal, full body, lying down",
-  ],
-  object: [
-    "Show the object from the front, centered, filling the frame",
-    "Show the object from the left side",
-    "Show the object from the back",
-    "Show the object from above, looking straight down",
-    "Show the object at a three quarter angle from the front right",
-    "Show a close up of the most detailed part of the object",
-  ],
-};
 
 /** The view each contact sheet tile asks for, cycled when a sheet has more tiles than views. */
 const TILE_VIEWS: readonly string[] = [
@@ -62,7 +34,7 @@ const TILE_VIEWS: readonly string[] = [
   "a view from far away, small in the frame",
 ];
 
-const SUBJECT_WORDS: Readonly<Record<Kind, string>> = { person: "person", pet: "animal", object: "object" };
+const SUBJECT_WORDS: Readonly<Record<Kind, string>> = { person: "person", pet: "animal", object: "object", place: "place" };
 
 const refused = (line: string) => ({ status: 409, body: { code: "not_available", line } });
 const UNREADABLE = refused(PICTURE_UNREADABLE_LINE);
@@ -78,9 +50,10 @@ async function readAll(references: readonly string[], read: PictureBytes): Promi
   return { found };
 }
 
-export function characterPanelPrompts(kind: Kind, description?: string): string[] {
+export function characterPanelPrompts(kind: Kind, description?: string, angles?: Readonly<Record<string, readonly string[] | undefined>>): string[] {
   const subject = description?.trim();
-  return PANELS[kind].map((view) => (subject ? `${view}. The ${SUBJECT_WORDS[kind]} is: ${subject}` : view));
+  const views = angles?.[kind] ?? [];
+  return views.map((view) => (subject ? `${view}. The ${SUBJECT_WORDS[kind]} is: ${subject}` : view));
 }
 
 export function contactTilePrompts(count: number, description?: string): string[] {
@@ -92,7 +65,7 @@ export function contactTilePrompts(count: number, description?: string): string[
 }
 
 /** Run the edit path once per prompt, in order. A refusal from the edit path ends the sheet and is passed through; a panel still running ends it as running. */
-async function makePieces(job: "character_sheet" | "contact_sheet", request: { audience: CharacterRequest["audience"]; level: CharacterRequest["level"]; references: string[] }, prompts: string[], plan: Planned, read: PictureBytes, forward: FormForward): Promise<{ status: number; body: unknown }> {
+async function makePieces(job: "character_sheet" | "contact_sheet", request: { audience: CharacterRequest["audience"]; level: CharacterRequest["level"]; references: string[]; kind?: Kind }, prompts: string[], plan: Planned, read: PictureBytes, forward: FormForward, compose = false, makeSheet: typeof composeSheet = composeSheet): Promise<{ status: number; body: unknown }> {
   const bytes = await readAll(request.references, read);
   if (!bytes) return UNREADABLE;
   const cached: PictureBytes = async (reference) => bytes.found.get(reference) ?? null;
@@ -113,7 +86,25 @@ async function makePieces(job: "character_sheet" | "contact_sheet", request: { a
     }
     pieces.push(file);
   }
-  return { status: 200, body: sheetResult(job, lastId, "done", 100, "Done", pieces, plan, notes) };
+  let composed: string | undefined;
+  if (job === "character_sheet" && compose) {
+    const layout = plan.serving.job.sheet_layout;
+    if (!layout) return refused("A composed sheet is not available with this picture model.");
+    try {
+      const panels = await Promise.all(pieces.map(async (file, index) => {
+        const got = await read(file);
+        if (!got) throw new Error("unreadable");
+        // Place-sheet panels are views of the one place, so lay them out as a grid; max_places limits attached places in reference clips.
+        return { role: (request.kind === "place" || request.kind === "object" ? "object" : "identity") as SheetRole, label: prompts[index]!, image: got.bytes };
+      }));
+      const made = await makeSheet({ panels, layout });
+      const id = randomUUID();
+      keepResult(id, { png: made.png, width: layout.width, height: layout.height, engine: "stack", model: plan.serving.part.id, ms: 0, operation: "resize" });
+      if (!takeResult(id)) throw new Error("The composed image result could not be read.");
+      composed = `/v1/images/edits/${id}`;
+    } catch { return refused("The composed sheet could not be made. Try fewer pictures."); }
+  }
+  return { status: 200, body: { ...sheetResult(job, lastId, "done", 100, "Done", pieces, plan, notes), ...(composed ? { composed } : {}) } };
 }
 
 function sheetResult(job: "character_sheet" | "contact_sheet", id: string, state: "done" | "running", percent: number, status: string, pieces: string[], plan: Planned, notes: string[]): StackMakeResult {
@@ -124,8 +115,11 @@ function sheetResult(job: "character_sheet" | "contact_sheet", id: string, state
   return job === "character_sheet" ? { ...base, job, panels: pieces } : { ...base, job, tiles: pieces };
 }
 
-export async function dispatchCharacterSheet(request: CharacterRequest, plan: Planned, read: PictureBytes, forward: FormForward): Promise<{ status: number; body: unknown }> {
-  return makePieces("character_sheet", request, characterPanelPrompts(request.kind, request.description), plan, read, forward);
+export async function dispatchCharacterSheet(request: CharacterRequest, plan: Planned, read: PictureBytes, forward: FormForward, makeSheet: typeof composeSheet = composeSheet): Promise<{ status: number; body: unknown }> {
+  if (request.compose && !plan.serving.job.sheet_layout) return refused("A composed sheet is not available with this picture model.");
+  const angles = plan.serving.job.sheet_angles as Readonly<Record<string, readonly string[] | undefined>> | undefined;
+  if (!angles?.[request.kind]) return { status: 422, body: { code: "input_not_supported", line: request.kind === "place" ? "A place sheet is not available with this picture model." : "A sheet is not available with this picture model." } };
+  return makePieces("character_sheet", request, characterPanelPrompts(request.kind, request.description, angles), plan, read, forward, request.compose === true, makeSheet);
 }
 
 export async function dispatchContactSheet(request: ContactRequest, plan: Planned, read: PictureBytes, forward: FormForward): Promise<{ status: number; body: unknown }> {

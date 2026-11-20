@@ -6006,6 +6006,14 @@
                   },
                   "timeout_ms": {
                     "type": "string"
+                  },
+                  "route_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "route_reason": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
@@ -18109,8 +18117,12 @@
                         "enum": [
                           "person",
                           "object",
-                          "pet"
+                          "pet",
+                          "place"
                         ]
+                      },
+                      "compose": {
+                        "type": "boolean"
                       },
                       "level": {
                         "type": "string",
@@ -19012,6 +19024,10 @@
                             "type": "string",
                             "minLength": 1
                           }
+                        },
+                        "composed": {
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [
@@ -19869,6 +19885,10 @@
                             "type": "string",
                             "minLength": 1
                           }
+                        },
+                        "composed": {
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [

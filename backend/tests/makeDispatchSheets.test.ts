@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { planMake } from "@/lib/makePlan";
+import { takeResult } from "@/imagetools/imageTools";
+import golden from "./fixtures/sheet-panels-golden.json";
 import { PART_DEFS } from "@/lib/partDefs";
 import { PICTURE_UNREADABLE_LINE, WIRED_JOBS, type FormForward, type PictureBytes } from "@/lib/makeDispatch";
 import { CONTACT_SHEET_MAX_TILES, characterPanelPrompts, dispatchCharacterSheet, dispatchContactSheet } from "@/lib/makeDispatchSheets";
@@ -32,8 +34,8 @@ test("both jobs are wired through the door", () => { expect(WIRED_JOBS.has("char
 
 test("a person's character sheet makes every panel in order, one edit each", async () => {
   const { calls, forward } = fakeForward();
-  const result = await dispatchCharacterSheet(character({ description: "a tall woman in a green coat" }), plan(character()), read, forward);
-  const expected = characterPanelPrompts("person", "a tall woman in a green coat");
+  const result = await dispatchCharacterSheet(character({ description: "a tall woman in a green coat" }), plan(character({ part: "flux3-image-klein" })), read, forward);
+  const expected = characterPanelPrompts("person", "a tall woman in a green coat", plan(character({ part: "flux3-image-klein" })).serving.job.sheet_angles as Record<string, string[]>);
   expect(result.status).toBe(200);
   expect(calls.length).toBe(expected.length);
   const body = result.body as { job: string; state: string; panels: string[]; id: string };
@@ -48,12 +50,48 @@ test("a person's character sheet makes every panel in order, one edit each", asy
 
 test("the other kinds make their own panel sets, front then side then back first", () => {
   for (const kind of ["person", "pet", "object"] as const) {
-    const prompts = characterPanelPrompts(kind);
+    const angles = plan(character({ part: "flux3-image-klein" })).serving.job.sheet_angles as Record<string, string[]>;
+    const prompts = characterPanelPrompts(kind, undefined, angles);
     expect(prompts.length).toBeGreaterThanOrEqual(6);
     expect(prompts[0]).toContain("front");
     expect(prompts[1]).toContain("side");
     expect(prompts[2]).toMatch(/back|behind/);
   }
+});
+
+test("pack angles match the character panel prompt golden with and without a description", () => {
+  const p = plan(character({ part: "flux3-image-klein" }));
+  const angles = p.serving.job.sheet_angles as Record<string, string[]>;
+  for (const kind of ["person", "pet", "object"] as const) {
+    expect(characterPanelPrompts(kind, "GOLDEN DESCRIPTION", angles)).toEqual((golden as any)[kind].with_description);
+    expect(characterPanelPrompts(kind, undefined, angles)).toEqual((golden as any)[kind].without_description);
+  }
+  expect(characterPanelPrompts("place", undefined, angles)).toHaveLength(6);
+});
+
+test("a pack without place angles refuses plainly", async () => {
+  const req = character({ kind: "place" as never, part: "flux3-image-klein" });
+  const p = plan(req);
+  const planWithoutPlace = { ...p, serving: { ...p.serving, job: { ...p.serving.job, sheet_angles: { person: ["front"] } } } } as never;
+  expect(await dispatchCharacterSheet(req, planWithoutPlace, read, fakeForward().forward)).toMatchObject({ status: 422, body: { code: "input_not_supported", line: expect.any(String) } });
+});
+
+test("compose true stores one composed file in the image result store", async () => {
+  const req = character({ compose: true, kind: "place", part: "flux3-image-klein" }); const p = plan(req); const { forward } = fakeForward();
+  const result = await dispatchCharacterSheet(req, p, read, forward, async ({ panels }) => {
+    expect(panels).toHaveLength(6);
+    return { png: new Uint8Array([137, 80, 78, 71]), panels: [] };
+  });
+  const composed = (result.body as { composed: string }).composed;
+  const match = composed.match(/^\/v1\/images\/edits\/([\w-]+)$/)!;
+  expect(takeResult(match[1]!)).not.toBeNull();
+  expect(takeResult(match[1]!)?.png).toEqual(new Uint8Array([137, 80, 78, 71]));
+});
+
+test("compose true refuses when the serving pack has no layout", async () => {
+  const req = character({ compose: true, part: "flux3-image-klein" }); const p = plan(req);
+  const absent = { ...p, serving: { ...p.serving, job: { ...p.serving.job, sheet_layout: undefined } } } as never;
+  expect(await dispatchCharacterSheet(req, absent, read, fakeForward().forward)).toMatchObject({ status: 409, body: { line: expect.stringContaining("composed sheet") } });
 });
 
 test("extra references ride along; the first is the picture to change", async () => {
@@ -67,7 +105,7 @@ test("each reference is read once, however many panels are made", async () => {
   const reads: string[] = [];
   const counting: PictureBytes = async (r) => { reads.push(r); return read(r); };
   const { forward } = fakeForward();
-  await dispatchCharacterSheet(character(), plan(character()), counting, forward);
+  await dispatchCharacterSheet(character(), plan(character({ part: "flux3-image-klein" })), counting, forward);
   expect(reads.length).toBe(1);
 });
 
@@ -82,7 +120,7 @@ test("too many references is refused with the spec's too_many_references and its
 
 test("an unreadable reference is refused with a plain line before any panel is made", async () => {
   const { calls, forward } = fakeForward();
-  for (const run of [() => dispatchCharacterSheet(character({ references: ["data:image/png;base64,AAAA", "BAD"] }), plan(character()), read, forward), () => dispatchContactSheet(contact({ references: ["BAD"] }), plan(contact()), read, forward)]) {
+  for (const run of [() => dispatchCharacterSheet(character({ references: ["data:image/png;base64,AAAA", "BAD"] }), plan(character({ part: "flux3-image-klein" })), read, forward), () => dispatchContactSheet(contact({ references: ["BAD"] }), plan(contact()), read, forward)]) {
     const result = await run();
     expect(result).toEqual({ status: 409, body: { code: "not_available", line: PICTURE_UNREADABLE_LINE } });
   }
@@ -108,13 +146,13 @@ test("a contact sheet over the tile cap is refused with a plain line and makes n
 
 test("a refusal from the edit path ends the sheet and passes through", async () => {
   const forward: FormForward = async () => ({ status: 503, json: { error: "not installed", code: "not_installed" } });
-  expect(await dispatchCharacterSheet(character(), plan(character()), read, forward)).toEqual({ status: 503, body: { error: "not installed", code: "not_installed" } });
+  expect(await dispatchCharacterSheet(character(), plan(character({ part: "flux3-image-klein" })), read, forward)).toEqual({ status: 503, body: { error: "not installed", code: "not_installed" } });
 });
 
 test("a panel still running comes back as running with the panels made so far", async () => {
   let n = 0;
   const forward: FormForward = async () => { n += 1; return n < 3 ? { status: 200, json: { job: `e${n}`, data: [{}] } } : { status: 202, json: { job: "slow" } }; };
-  const result = await dispatchCharacterSheet(character(), plan(character()), read, forward);
+  const result = await dispatchCharacterSheet(character(), plan(character({ part: "flux3-image-klein" })), read, forward);
   expect(result.status).toBe(202);
   expect(result.body).toMatchObject({ job: "character_sheet", state: "running", id: "slow", panels: ["/v1/images/edits/e1", "/v1/images/edits/e2"] });
 });
