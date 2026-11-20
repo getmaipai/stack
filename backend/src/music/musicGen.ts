@@ -23,6 +23,7 @@
 // no-real-voice line live in Home, where the person is known.
 import { engineIdleMs } from "@/lib/engineIdle";
 import { lowMemoryRefusal } from "@/lib/memoryState";
+import { lowDiskRefusal } from "@/lib/diskState";
 import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
@@ -230,6 +231,8 @@ export function tierLimits(tier: string = getGovernorStatus().tier): { max_secon
 export function memoryVerdict(dit?: string, transcribe = false): { ok: true } | { ok: false; reason: string } {
   const lowMemory = lowMemoryRefusal();
   if (lowMemory) return { ok: false, reason: lowMemory };
+  const lowDisk = lowDiskRefusal();
+  if (lowDisk) return { ok: false, reason: lowDisk };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
   if (resident + musicAdmissionBytes(undefined, dit, transcribe) > status.capBytes) return { ok: false, reason: "Not enough free memory for music right now. Close other big jobs, or try again in a few minutes." };

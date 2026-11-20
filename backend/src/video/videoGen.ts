@@ -32,6 +32,7 @@ import { TreeSnapshot } from "@/lib/processTree";
 import { registerOwned } from "@/lib/ownedProcesses";
 import { forgetLoadedItem, setIdleTtlSeconds, setWarmWorkerUnload } from "@/lib/governor";
 import { lowMemoryRefusal } from "@/lib/memoryState";
+import { lowDiskRefusal } from "@/lib/diskState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { installedEnginePin, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
@@ -182,6 +183,8 @@ export function tierAvailability(tier = getGovernorStatus().tier, totalMemoryByt
 export function memoryVerdict(quality: VideoQuality = "quick", peakBytes: number = VIDEO_SPECS[quality].peakBytes): { ok: true } | { ok: false; reason: string } {
   const lowMemory = lowMemoryRefusal();
   if (lowMemory) return { ok: false, reason: lowMemory };
+  const lowDisk = lowDiskRefusal();
+  if (lowDisk) return { ok: false, reason: lowDisk };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
   if (resident + peakBytes > status.capBytes) return { ok: false, reason: "Not enough free memory for video right now. Close other big jobs, or try again in a few minutes." };

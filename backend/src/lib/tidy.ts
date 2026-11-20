@@ -14,6 +14,7 @@ import { logger } from "@/lib/log";
 import { settingValues } from "@/settings";
 import { readModelManifest, listModelManifests } from "@/lib/store/manifests";
 import { listLoras } from "@/video/loras";
+import { selectedModel } from "@/lib/supervisor";
 
 export type TidyKind = "superseded" | "orphan_folder" | "partial_download";
 export interface TidyItem { id: string; kind: TidyKind; bytes: number; reason: string; blocked: string | null; }
@@ -44,6 +45,9 @@ function successorReadySince(successor: string, componentInstalled: boolean): nu
   return since;
 }
 function blockerFor(id: string, componentId: string, componentModelIds: string[]): string | null {
+  if (componentModelIds.some((modelId) => ["chat", "coding", "embed", "vision", "stt", "tts", "wakeword"].some((role) => selectedModel(role as import("@/roles").RoleId)?.id === modelId))) return "A role slot has selected this model; select another model before tidying it.";
+  const override = Object.entries(process.env).find(([key, value]) => key.startsWith("MAIPAI_") && key.endsWith("_HOME") && value && componentModelIds.some((modelId) => resolve(value) === resolve(join(modelsDir, modelId)) || resolve(value).startsWith(resolve(join(modelsDir, modelId)) + sep)));
+  if (override) return `The ${override[0]} environment setting points to this model.`;
   const depended = listLoras().filter((lora) => id === "ltx-2-5-q8-distilled-mlx" && lora.base_model === "ltx-2.5");
   if (depended.length) return `Installed video style${depended.length === 1 ? "" : "s"} ${depended.map((lora) => lora.name).join(", ")} depend on ${id}; remove those styles first.`;
   const runningJob = listJobs().find((job) => ["running", "queued", "paused", "stalled"].includes(job.state) && componentModelIds.some((modelId) => JSON.stringify(job.input ?? {}).includes(modelId)));
@@ -61,6 +65,11 @@ function safeModelsPath(path: string): boolean {
   let cursor = root;
   for (const part of rel.split(sep)) { cursor = join(cursor, part); try { if (lstatSync(cursor).isSymbolicLink()) return false; } catch { break; } }
   return true;
+}
+function isSymlinkTarget(path: string): boolean {
+  const absolute = resolve(path);
+  for (const candidate of [...referencedPaths()]) { try { if (lstatSync(candidate).isSymbolicLink() && resolve(candidate) === absolute) return true; } catch { /* Missing references are ignored. */ } }
+  return false;
 }
 function referencedPaths(): Set<string> {
   const paths = new Set<string>();
@@ -147,7 +156,7 @@ export async function runTidy(dryRun = true, now = Date.now()): Promise<{ dry_ru
     try {
       if (item.kind === "superseded") await uninstallComponent(item.id);
       else {
-        if (!safeModelsPath(item.id)) throw new Error("The path is outside the models directory or crosses a symbolic link.");
+        if (!safeModelsPath(item.id) || isSymlinkTarget(item.id)) throw new Error("The path is outside the models directory or crosses a symbolic link.");
         if ([...referencedPaths()].some((path) => path === resolve(item.id) || path.startsWith(resolve(item.id) + sep))) throw new Error("A model record or catalog snapshot now references this path.");
         rmSync(item.id, { recursive: true, force: false });
       }

@@ -14415,6 +14415,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "The install would cross the critical free-space line.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -22179,6 +22189,105 @@
                   "required": [
                     "unloaded",
                     "freed_bytes"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/disk": {
+      "get": {
+        "tags": [
+          "Disk"
+        ],
+        "summary": "Disk space and selected model files",
+        "responses": {
+          "200": {
+            "description": "Current disk volume levels and missing files for selected models.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "normal",
+                        "warn",
+                        "critical"
+                      ]
+                    },
+                    "volumes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "free_bytes": {
+                            "type": "number"
+                          },
+                          "total_bytes": {
+                            "type": "number"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "normal",
+                              "warn",
+                              "critical"
+                            ]
+                          },
+                          "warn_bytes": {
+                            "type": "number"
+                          },
+                          "critical_bytes": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "free_bytes",
+                          "total_bytes",
+                          "level",
+                          "warn_bytes",
+                          "critical_bytes"
+                        ]
+                      }
+                    },
+                    "missing": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "missing_paths": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "model",
+                          "missing_paths"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "level",
+                    "volumes",
+                    "missing"
                   ]
                 }
               }

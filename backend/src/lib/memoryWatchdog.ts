@@ -46,6 +46,7 @@ import { folderBytes, runSweeps } from "@/lib/sweeps";
 import { descendantsOf as childPids, startTimeOf, commandLineOf } from "@/lib/processTree";
 import { ownedPids, finishedSurvivors } from "@/lib/ownedProcesses";
 import { getMemoryReader } from "@/lib/memory";
+import { __sampleDiskForTests } from "@/lib/diskState";
 import { settingValues } from "@/settings";
 import { metalHostFault } from "@/lib/hostProbe";
 
@@ -400,6 +401,7 @@ export class MemoryWatchdog {
     if (this.busy) return;
     this.busy = true;
     try {
+      __sampleDiskForTests();
       const sample = this.sampler.sample();
       const swapouts = swapoutsOf(sample);
       const swapoutsRose = swapouts !== null && this.previousSwapouts !== null && swapouts > this.previousSwapouts;

@@ -11,6 +11,9 @@ import { STACK_MODELS, STACK_STEMS_MODELS } from "@/lib/modelCatalog";
 import { modelsDir } from "@/lib/paths";
 import { restartForNewChatEngine, restartForNewProjector } from "@/lib/supervisor";
 import { warmUp } from "@/lib/warmup";
+import { diskAdmission } from "@/lib/diskState";
+import { buildDiskPlan } from "@/lib/diskPlan";
+import { PROFILE_TIERS } from "@/profiles";
 import type { RoleId } from "@/roles";
 
 type Pin = CatalogModelLike & { download: NonNullable<CatalogModelLike["download"]> };
@@ -27,6 +30,10 @@ export const MISSING_PART_CODE = (id: string): string => `model-part-missing.${i
 
 /** Starts the install job for a pin. `done` settles when the install ends. */
 export function startModelInstall(model: Pin, role: RoleId, download?: DownloadModelOptions["download"]): { job: string; done: Promise<void> } {
+  const row = buildDiskPlan(PROFILE_TIERS.find((tier) => tier.id === "p128")!).rows.find((candidate) => candidate.model_ids.includes(model.id));
+  const need = row ? row.download_bytes + row.installed_bytes + row.peak_temp_bytes : model.download.approx_bytes * 3;
+  const admission = diskAdmission(need);
+  if (!admission.ok) throw new Error(admission.reason);
   // One directory per model id: two pins whose URLs end in the same file name never share a path.
   const destination = join(modelsDir, model.id, basename(new URL(model.download.url).pathname) || `${model.id}.gguf`);
   const items = model.download.files?.map((file) => ({ id: file.path, label: file.path, completedBytes: 0, totalBytes: file.bytes, state: "queued" as const })) ?? [{ id: basename(destination), label: basename(destination), completedBytes: 0, totalBytes: model.download.approx_bytes, state: "queued" as const }];

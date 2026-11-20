@@ -24,6 +24,7 @@ import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/l
 import { TreeSnapshot } from "@/lib/processTree";
 import { registerOwned } from "@/lib/ownedProcesses";
 import { lowMemoryRefusal } from "@/lib/memoryState";
+import { lowDiskRefusal } from "@/lib/diskState";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";
@@ -387,6 +388,8 @@ export function imageEngineActive(service: ImageGenService = imageGen): boolean 
 export function memoryVerdict(peak: number): { ok: true } | { ok: false; reason: string } {
   const lowMemory = lowMemoryRefusal();
   if (lowMemory) return { ok: false, reason: lowMemory };
+  const lowDisk = lowDiskRefusal();
+  if (lowDisk) return { ok: false, reason: lowDisk };
   const status = getGovernorStatus();
   const resident = status.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
   if (resident + peak > status.capBytes) return { ok: false, reason: `Pictures need about ${Math.ceil(peak / 1e9)} GB of free memory, and there is not enough right now. Close other big jobs, or try again in a few minutes.` };
