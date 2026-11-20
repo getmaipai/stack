@@ -22542,6 +22542,12 @@
                           "model": {
                             "type": "string"
                           },
+                          "part_id": {
+                            "type": "string"
+                          },
+                          "override": {
+                            "type": "boolean"
+                          },
                           "missing_paths": {
                             "type": "array",
                             "items": {
@@ -22552,6 +22558,8 @@
                         "required": [
                           "role",
                           "model",
+                          "part_id",
+                          "override",
                           "missing_paths"
                         ]
                       }
