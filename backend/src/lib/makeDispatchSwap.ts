@@ -308,6 +308,6 @@ async function makeDonor(input: { adapter: DonorAdapter; media: Media; guide: st
 }
 
 function summary(segment: Segment, at: number, donor: Donor, report: CompositeSwapReport): SwapCheckSummary {
-  return { segment: segment.index, at, donor_psnr_db: donor.psnr === null || !Number.isFinite(donor.psnr) ? null : Math.round(donor.psnr * 10) / 10, tries: donor.tries, mouth_flicker_ratio: report.flicker_ratio === null ? null : Math.round(report.flicker_ratio * 100) / 100, caption_residue: report.caption_residue ?? null, preservation_verdict: report.preservation.verdict, changed_pixels: report.preservation.changed_pixels, persistent_blob_px: report.preservation.encoded?.largest_blob_px ?? 0, changed_map_path: report.preservation.map_path, residual_head_frames: report.residual_original_head_frames.length };
+  return { segment: segment.index, at, donor_psnr_db: donor.psnr === null || !Number.isFinite(donor.psnr) ? null : Math.round(donor.psnr * 10) / 10, tries: donor.tries, mouth_flicker_ratio: report.flicker_ratio === null ? null : Math.round(report.flicker_ratio * 100) / 100, caption_residue: report.caption_residue ?? null, preservation_verdict: report.preservation.verdict, changed_pixels: report.preservation.changed_pixels ?? 0, persistent_blob_px: report.preservation.encoded?.largest_blob_px ?? 0, changed_map_path: report.preservation.map_path, residual_head_frames: report.residual_original_head_frames.length };
 }
 

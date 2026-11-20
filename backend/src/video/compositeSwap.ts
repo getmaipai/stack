@@ -47,7 +47,7 @@ export interface CompositeSwapReport {
   residual_original_head_frames: Array<[number, number]>;
   edit_region: { source: "detected" | "supplied"; head_scale: number; margin_frac: number; frames_with_region: number };
   mask_clipped_pixels: number;
-  preservation: { verdict: "pass" | "fail"; changed_pixels: number; violating_frames: number[]; encoded: { persistent_pixels: number; largest_blob_px: number; share_gt8: number; max_diff: number } | null; map_path: string | null; reasons: string[] };
+  preservation: { verdict: "pass" | "fail"; pre_encode?: "run" | "not_run"; changed_pixels: number | null; violating_frames: number[]; encoded: { persistent_pixels: number; largest_blob_px: number; share_gt8: number; max_diff: number; drift_masked_px?: number } | null; map_path: string | null; reasons: string[] };
   /** The caption box that was erased (clamped inside the frame), and the share of its text edges that survived the erase (0 clean, 1 untouched; null when there was no text). */
   caption_box?: [number, number, number, number] | null; caption_residue?: number | null;
 }

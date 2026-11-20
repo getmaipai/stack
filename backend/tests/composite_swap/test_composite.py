@@ -102,10 +102,12 @@ class OutsideMaskCheckTest(unittest.TestCase):
             edited[k][10:80, 10:160] = (255, 0, 255)
         path = os.path.join(self.dir, "edited.mp4"); cs.write_video(edited, path, 24, W, H)
         back = cs.read_frames(path, "fps=24", W, H, N)
-        clean = cs.encoded_preservation_check(list(cs.read_frames(self.src, "fps=24", W, H, N)), list(cs.read_frames(self.src, "fps=24", W, H, N)), self.regions, self.opts.encode_halo_px)
+        clean = cs.encoded_preservation_check(list(cs.read_frames(self.src, "fps=24", W, H, N)), list(cs.read_frames(self.src, "fps=24", W, H, N)), list(cs.read_frames(self.src, "fps=24", W, H, N)), self.regions, self.opts.encode_halo_px)
         source_only = os.path.join(self.dir, "source-only.mp4"); cs.write_video(self.org, source_only, 24, W, H)
         source_back = list(cs.read_frames(source_only, "fps=24", W, H, N))
-        edited_check = cs.encoded_preservation_check(source_back, list(back), self.regions, self.opts.encode_halo_px)
+        inverted = [np.where(r[..., None], 255 - f, f).astype(np.uint8) for f, r in zip(self.org, self.regions)]
+        control = os.path.join(self.dir, "control.mp4"); cs.write_video(inverted, control, 24, W, H)
+        edited_check = cs.encoded_preservation_check(source_back, list(back), list(cs.read_frames(control, "fps=24", W, H, N)), self.regions, self.opts.encode_halo_px)
         self.assertEqual(clean["largest_blob_px"], 0)
         self.assertGreaterEqual(edited_check["largest_blob_px"], 50)
 
@@ -187,6 +189,93 @@ class SecondFaceTest(unittest.TestCase):
         for f in edited: f[cy - 10:cy + 10, cx - 10:cx + 10] = (200, 150, 140)      # a recolored patch on skin: the old check exempted this
         count, bad, _ = cs.pre_encode_check(self.org, edited, self.regions)
         self.assertGreater(count, 0); self.assertEqual(len(bad), N)
+
+
+class EncoderDriftTest(unittest.TestCase):
+    """Real footage with a hard-edged caption pill failed falsely: the encoder moves pixels along the pill's edge once an edit inside the region changes its rate
+    control, in frames nothing outside the region touched. Flat grained frames, a saturated hard-edged bar outside the region, an edit inside the region only."""
+    W, H, N, GRAIN = 360, 640, 96, 8
+    REGION = (slice(100, 340), slice(60, 300))
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = tempfile.mkdtemp()
+        base = np.random.default_rng(1).integers(-cls.GRAIN, cls.GRAIN + 1, (cls.H, cls.W, 1))
+        cls.src = []
+        for k in range(cls.N):
+            f = np.clip(np.full((cls.H, cls.W, 3), (120, 130, 125)) + base + np.random.default_rng(k).integers(-cls.GRAIN, cls.GRAIN + 1, (cls.H, cls.W, 1)), 0, 255).astype(np.uint8)
+            cv2.rectangle(f, (30, 500), (330, 540), (20, 60, 230), -1); cv2.putText(f, "CAPTION TEXT HERE", (40, 534), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            cls.src.append(f)
+        region = np.zeros((cls.H, cls.W), bool); region[cls.REGION] = True
+        cls.regions = [region] * cls.N
+        cls.edited = []
+        for k, f in enumerate(cls.src):
+            g = f.copy(); g[cls.REGION] = np.clip(g[cls.REGION].astype(int) + np.random.default_rng(7 + k).integers(-255, 256, (240, 240, 3)), 0, 255); cls.edited.append(g)
+        cls.source_back = cls.encode(cls.src, "s.mp4")
+        cls.delivered = cls.encode(cls.edited, "d.mp4")
+        cls.control = cls.encode([np.where(r[..., None], 255 - f, f).astype(np.uint8) for f, r in zip(cls.src, cls.regions)], "c.mp4")
+
+    @classmethod
+    def encode(cls, frames, name):
+        path = os.path.join(cls.dir, name); cs.write_video(frames, path, 24, cls.W, cls.H)
+        return list(cs.read_frames(path, "fps=24", cls.W, cls.H, cls.N))
+
+    def check(self, delivered, control):
+        return cs.encoded_preservation_check(self.source_back, delivered, control, self.regions, 32)
+
+    def test_without_a_drift_control_the_pill_edge_fails_falsely(self):
+        # the old rule: no control, so nothing masks the encoder's drift along the pill
+        self.assertGreaterEqual(self.check(self.delivered, self.source_back)["largest_blob_px"], 50)
+
+    def test_the_drift_control_passes_an_edit_that_touched_only_the_region(self):
+        result = self.check(self.delivered, self.control)
+        self.assertLess(result["largest_blob_px"], 50); self.assertGreater(result["drift_masked_px"], 0)
+
+    def test_a_faint_persistent_change_outside_the_region_still_fails(self):
+        changed = [f.copy() for f in self.delivered]
+        for f in changed: f[400:440, 10:60] = np.clip(f[400:440, 10:60].astype(int) + 14, 0, 255)      # 14 levels, 40 by 50 pixels, far from the pill and the region
+        self.assertGreaterEqual(self.check(self.encode(changed, "faint.mp4"), self.control)["largest_blob_px"], 50)
+
+    def test_an_altered_face_sized_patch_outside_the_region_still_fails(self):
+        changed = [f.copy() for f in self.delivered]
+        for f in changed: f[380:440, 200:260] = (200, 150, 140)
+        self.assertGreaterEqual(self.check(self.encode(changed, "face.mp4"), self.control)["largest_blob_px"], 50)
+
+    def test_a_delivered_file_is_judged_without_the_pre_encode_check(self):
+        src = os.path.join(self.dir, "src.mp4"); dl = os.path.join(self.dir, "deliv.mp4"); cs.write_video(self.src, src, 24, self.W, self.H)
+        decoded = list(cs.read_frames(src, "fps=24", self.W, self.H, self.N))      # a swap is made from the decoded source, like the file under test
+        edited = []
+        for k, f in enumerate(decoded):
+            g = f.copy(); g[self.REGION] = np.clip(g[self.REGION].astype(int) + np.random.default_rng(7 + k).integers(-255, 256, (240, 240, 3)), 0, 255); edited.append(g)
+        cs.write_video(edited, dl, 24, self.W, self.H)
+        report = cs.verify_delivered(src, dl, seconds=self.N / 24, edit_region={"box": [60, 100, 240, 240]})
+        self.assertEqual(report["preservation"]["pre_encode"], "not_run"); self.assertIsNone(report["preservation"]["changed_pixels"])
+        self.assertEqual(report["preservation"]["verdict"], "pass")
+        changed = [f.copy() for f in edited]
+        for f in changed: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
+        bad = os.path.join(self.dir, "bad.mp4"); cs.write_video(changed, bad, 24, self.W, self.H)
+        self.assertEqual(cs.verify_delivered(src, bad, seconds=self.N / 24, edit_region={"box": [60, 100, 240, 240]})["preservation"]["verdict"], "fail")
+
+
+class RegionShapeTest(unittest.TestCase):
+    FRAMES = [np.zeros((200, 300, 3), np.uint8) for _ in range(3)]
+
+    def test_null_means_the_target_is_absent_and_any_edit_in_that_frame_fails(self):
+        regions, source = cs.declare_edit_region(self.FRAMES, cs.Options(), {"boxes": [[50, 50, 40, 40], None, [50, 50, 40, 40]]})
+        self.assertFalse(regions[1].any()); self.assertTrue(regions[0].any())
+        edited = [f.copy() for f in self.FRAMES]; edited[1][10, 10] = (1, 0, 0)
+        count, bad, _ = cs.pre_encode_check(self.FRAMES, edited, regions); self.assertEqual((count, bad), (1, [1]))
+
+    def test_ellipse_and_polygon_regions_follow_the_shape_and_grow_by_the_margin(self):
+        regions, _ = cs.declare_edit_region(self.FRAMES, cs.Options(region_margin_frac=0.1), {"boxes": [{"ellipse": [150, 100, 40, 60]}, {"polygon": [[100, 50], [200, 50], [150, 150]]}, [10, 10, 20, 20]]})
+        self.assertTrue(regions[0][100, 150]); self.assertFalse(regions[0][100, 90])       # 60 px left of centre is outside an ellipse with rx 40 plus a 12 px margin
+        self.assertFalse(regions[0][100, 150 + 40 + 20])
+        self.assertTrue(regions[1][70, 150]); self.assertFalse(regions[1][140, 105])        # a polygon corner is not filled like its bounding box
+        self.assertLess(regions[0].sum(), 90 * 140)                                         # an ellipse covers less than its bounding box
+
+    def test_a_bad_region_entry_says_what_to_fix(self):
+        with self.assertRaises(ValueError): cs.declare_edit_region(self.FRAMES, cs.Options(), {"boxes": [{"circle": [1, 2, 3]}, None, None]})
+        with self.assertRaises(ValueError): cs.declare_edit_region(self.FRAMES, cs.Options(), {"boxes": [{"polygon": [[1, 2], [3, 4]]}, None, None]})
 
 
 class CaptionTest(unittest.TestCase):

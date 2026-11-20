@@ -359,15 +359,45 @@ def clamp_box(box, w, h):
 
 NO_EDIT_REGION_LINE = "No face was found to define the area the swap may change. Use a clip where the person's face is visible, then try again."
 
+def _shape_mask(entry, h, w, options: Options, grow):
+    """One frame's region from a box [x, y, w, h], {"ellipse": [cx, cy, rx, ry]} or {"polygon": [[x, y], ...]}, grown by the margin. None (the target is absent
+    in this frame) gives an empty region: any edit in that frame fails."""
+    mask = np.zeros((h, w), np.uint8)
+    if entry is None:
+        return mask.astype(bool)
+    if isinstance(entry, dict):
+        if "ellipse" in entry:
+            cx, cy, rx, ry = [float(v) for v in entry["ellipse"]]
+            cv2.ellipse(mask, (int(round(cx)), int(round(cy))), (max(1, int(round(rx))), max(1, int(round(ry)))), 0, 0, 360, 1, -1); extent = 2 * max(rx, ry)
+        elif "polygon" in entry:
+            pts = np.array([[int(round(float(px))), int(round(float(py)))] for px, py in entry["polygon"]], np.int32)
+            if len(pts) < 3: raise ValueError("A polygon in the edit region file needs at least three points.")
+            cv2.fillPoly(mask, [pts], 1); extent = float(max(pts[:, 0].max() - pts[:, 0].min(), pts[:, 1].max() - pts[:, 1].min()))
+        else:
+            raise ValueError("An edit region entry must be a box [x, y, w, h], an ellipse, a polygon or null.")
+        margin = int(round(options.region_margin_frac * extent))
+        if margin > 0: mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * margin + 1, 2 * margin + 1)))
+        return mask.astype(bool)
+    x, y, fw, fh = [float(v) for v in entry]; side = max(fw, fh)
+    bw, bh = fw * grow, fh * grow
+    mx = my = options.region_margin_frac * side
+    x0, y0 = max(0, int(np.floor(x + fw / 2 - bw / 2 - mx))), max(0, int(np.floor(y + fh / 2 - bh / 2 - my)))
+    x1, y1 = min(w, int(np.ceil(x + fw / 2 + bw / 2 + mx))), min(h, int(np.ceil(y + fh / 2 + bh / 2 + my)))
+    if x1 > x0 and y1 > y0: mask[y0:y1, x0:x1] = 1
+    return mask.astype(bool)
+
+
 def declare_edit_region(org_frames, options: Options, supplied=None):
-    """Build independent per-frame allowed-change regions from boxes or source face detections."""
+    """Build independent per-frame allowed-change regions from supplied shapes or source face detections. A supplied file is {"box": [x, y, w, h]} for every
+    frame, or {"boxes": [...]} with one entry per frame; each entry is a box [x, y, w, h], {"ellipse": [cx, cy, rx, ry]}, {"polygon": [[x, y], ...]} or null.
+    null means the target is absent in that frame: the region is empty and any edit in that frame fails."""
     n = len(org_frames)
     if supplied is not None:
         if isinstance(supplied, dict):
             boxes = [supplied["box"]] * n if "box" in supplied else supplied.get("boxes", [])
         else: boxes = supplied
         if isinstance(boxes, (list, tuple)) and len(boxes) == 4 and all(isinstance(v, (int, float)) for v in boxes): boxes = [boxes] * n
-        if len(boxes) != n: raise ValueError("The edit region file must provide one box per frame or one static box.")
+        if len(boxes) != n: raise ValueError("The edit region file must provide one entry per frame or one static box.")
         source = "supplied"
     else:
         boxes = []; last = None; first = None; source = "detected"
@@ -382,18 +412,8 @@ def declare_edit_region(org_frames, options: Options, supplied=None):
         if first is None: raise ReferenceError("no_edit_region", NO_EDIT_REGION_LINE)
         first_index = next(i for i, b in enumerate(boxes) if b is not None)
         boxes[:first_index] = [first] * first_index
-    regions = []
-    for frame, box in zip(org_frames, boxes):
-        h, w = frame.shape[:2]; mask = np.zeros((h, w), np.uint8)
-        if box is not None:
-            x, y, fw, fh = [float(v) for v in box]; side = max(fw, fh)
-            grow = options.region_head_scale if source == "detected" else 1.0   # a face box is grown to a head; a supplied box is already the caller's head area
-            bw, bh = fw * grow, fh * grow
-            mx = my = options.region_margin_frac * side
-            x0, y0 = max(0, int(np.floor(x + fw / 2 - bw / 2 - mx))), max(0, int(np.floor(y + fh / 2 - bh / 2 - my)))
-            x1, y1 = min(w, int(np.ceil(x + fw / 2 + bw / 2 + mx))), min(h, int(np.ceil(y + fh / 2 + bh / 2 + my)))
-            if x1 > x0 and y1 > y0: mask[y0:y1, x0:x1] = 1
-        regions.append(mask.astype(bool))
+    grow = options.region_head_scale if source == "detected" else 1.0   # a face box is grown to a head; a supplied shape is already the caller's head area
+    regions = [_shape_mask(box, *frame.shape[:2], options, grow) for frame, box in zip(org_frames, boxes)]
     return regions, source
 
 def pre_encode_check(org, out, regions):
@@ -408,19 +428,37 @@ def halo_outside(region, halo):
     """Pixels farther than `halo` px from the declared region (the encoder spreads an edit a few macroblocks)."""
     return cv2.dilate(region.astype(np.uint8), np.ones((2 * halo + 1, 2 * halo + 1), np.uint8)) == 0
 
-def encoded_preservation_check(source_encoded, delivered, regions, halo):
+def drift_map(source_encoded, control_encoded, regions, halo):
+    """Where the encoder persistently moves pixels that no edit touched. The control is the source with a violent edit inside the region only, encoded with the
+    same settings: a pixel outside the region plus halo that differs from the source-only encode by more than 8 levels in at least max(3, 3 percent of the
+    frames) frames is encoder drift caused by the rate control reacting to an edit, not by the edit. A hard-edged caption or logo drifts this way even in frames
+    nothing touched. Scattered drift on grain does not persist at one place, so it does not widen the map. The map is grown by 4 px so a drifting edge covers
+    its neighbors."""
+    height, width = source_encoded[0].shape[:2]
+    votes = np.zeros((height, width), np.int32)
+    for a, c, region in zip(source_encoded, control_encoded, regions):
+        votes += ((np.abs(a.astype(np.int16) - c.astype(np.int16)).max(2) > 8) & halo_outside(region, halo)).astype(np.int32)
+    drift = votes >= max(3, int(np.ceil(0.03 * len(source_encoded))))
+    return cv2.dilate(drift.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
+
+def encoded_preservation_check(source_encoded, delivered, control_encoded, regions, halo):
     """Delivered file against a source-only encode made with the same settings, outside the region plus a halo. A pixel is persistent when it differs by more
-    than 8 levels in at least max(5, 10 percent of the frames) frames at the same place (a real edit stays put, encoder drift flickers); a persistent area of
-    50 pixels or more fails the clip."""
+    than 8 levels in at least max(5, 10 percent of the frames) frames at the same place (a real edit stays put, encoder drift flickers), and it counts only
+    where the control encode (an edit inside the region only) did not also move pixels: drift the encoder produces without any outside edit cannot fail the
+    clip. A persistent area of 50 pixels or more fails. Not a tolerance: a faint change outside the region, or an altered second face, is not where the
+    control drifts and still fails."""
     outside = [halo_outside(r, halo) for r in regions]
     diffs = [np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) for a, b in zip(source_encoded, delivered)]
-    if not diffs: return dict(persistent_pixels=0, largest_blob_px=0, share_gt8=0.0, max_diff=0)
+    if not diffs: return dict(persistent_pixels=0, largest_blob_px=0, share_gt8=0.0, max_diff=0, drift_masked_px=0)
+    drift = drift_map(source_encoded, control_encoded, regions, halo)
     votes = np.sum(np.stack([(d > 8) & o for d, o in zip(diffs, outside)]), axis=0) >= max(5, int(np.ceil(0.1 * len(diffs))))
-    count, _, stats, _ = cv2.connectedComponentsWithStats(votes.astype(np.uint8), 8)
+    counted = votes & ~drift
+    count, _, stats, _ = cv2.connectedComponentsWithStats(counted.astype(np.uint8), 8)
     sizes = stats[1:, cv2.CC_STAT_AREA] if count > 1 else []
     total = sum(int(o.sum()) for o in outside)
     changed = sum(int(((d > 8) & o).sum()) for d, o in zip(diffs, outside))
-    return dict(persistent_pixels=int(votes.sum()), largest_blob_px=int(max(sizes) if len(sizes) else 0), share_gt8=changed / max(1, total), max_diff=int(max(d.max() for d in diffs)))
+    return dict(persistent_pixels=int(counted.sum()), largest_blob_px=int(max(sizes) if len(sizes) else 0), share_gt8=changed / max(1, total), max_diff=int(max(d.max() for d in diffs)),
+                drift_masked_px=int((votes & drift).sum()))
 
 
 def caption_edge_count(frame, box, o: Options):
@@ -438,6 +476,53 @@ def caption_residue(before, after, box, o: Options):
         if eb >= 20:
             ratios.append(min(1.0, caption_edge_count(a, box, o) / eb))
     return float(np.mean(ratios)) if ratios else None
+
+
+def encoded_check_on_file(org, back, regions, o: Options, base, w, h):
+    """The post-encode check for a delivered file read back as `back`: a source-only encode and a drift control with the same encoder settings, the persistence
+    rule, and a changed-pixel map written beside `base`. Returns (encoded numbers, map path)."""
+    n = len(org)
+    srcenc, ctl = base + ".srcenc.mp4", base + ".ctl.mp4"
+    try:
+        write_video(org, srcenc, o.fps, w, h)       # the same encoder settings on the untouched source: the delivered file is judged against this, not against a fixed tolerance
+        inverted = [np.where(r[..., None], 255 - f, f).astype(np.uint8) for f, r in zip(org, regions)]
+        write_video(inverted, ctl, o.fps, w, h)     # the drift control: a violent edit inside the region only, to see where the encoder moves untouched pixels
+        srcback = list(read_frames(srcenc, f"fps={o.fps}", w, h, n)); ctlback = list(read_frames(ctl, f"fps={o.fps}", w, h, n))
+    finally:
+        for path in (srcenc, ctl):
+            try: os.unlink(path)
+            except OSError: pass
+    encoded = encoded_preservation_check(srcback, back, ctlback, regions[:len(back)], o.encode_halo_px)
+    map_path = base + ".changedmap.png"
+    original = org[0].copy(); overlay = original.copy()
+    for a, b, region in zip(srcback, back, regions):
+        d = (np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > 8) & halo_outside(region, o.encode_halo_px)   # the same pixels the verdict counts
+        overlay[d] = (255, 0, 0)
+    contours, _ = cv2.findContours(regions[0].astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2)
+    cv2.imwrite(map_path, cv2.cvtColor(np.hstack([original, overlay]), cv2.COLOR_RGB2BGR))
+    return encoded, map_path
+
+
+def verify_delivered(source, delivered, start=0.0, seconds=2.3333, caption_box=None, edit_region=None, options: Options | None = None, base=None):
+    """Judge a delivered file that this worker did not make (a swap from another tool). The pre-encode exact check cannot run on a file, so the report says
+    `pre_encode: not_run`; the verdict rests on the post-encode check alone."""
+    o = options or Options()
+    w, h = probe_size(delivered)
+    n = int(round(seconds * o.fps))
+    vf = (f"delogo=x={caption_box[0]}:y={caption_box[1]}:w={caption_box[2]}:h={caption_box[3]}," if caption_box else "") + f"fps={o.fps},scale={w}:{h}"
+    org = read_frames(source, vf, w, h, n, ss=start, t=seconds)
+    back = read_frames(delivered, f"fps={o.fps}", w, h, len(org))
+    org, back = org[:len(back)], back[:len(org)]
+    regions, region_source = declare_edit_region(list(org), o, edit_region)
+    if caption_box:
+        x, y, bw, bh = caption_box
+        for r in regions: r[y:y + bh, x:x + bw] = True
+    encoded, map_path = encoded_check_on_file(list(org), list(back), regions, o, base or delivered, w, h)
+    fail = encoded["largest_blob_px"] >= 50
+    return {"frames": len(org), "size": [w, h], "edit_region": {"source": region_source, "head_scale": o.region_head_scale, "margin_frac": o.region_margin_frac, "frames_with_region": sum(bool(r.any()) for r in regions)},
+            "preservation": {"verdict": "fail" if fail else "pass", "pre_encode": "not_run", "changed_pixels": None, "violating_frames": [], "encoded": encoded, "map_path": map_path,
+                             "reasons": ["A persistent changed area was found outside the declared edit region."] if fail else []}}
 
 
 def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None, caption_box=None, reference_crops=(), options: Options | None = None, report_path=None, edit_region=None):
@@ -479,7 +564,7 @@ def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None
             if share > o.flag_share:
                 flagged.append([k, round(share, 3)])
     changed, violating, _ = pre_encode_check(org, outf, regions)
-    preservation = {"verdict": "fail" if changed else "pass", "changed_pixels": changed, "violating_frames": violating,
+    preservation = {"verdict": "fail" if changed else "pass", "pre_encode": "run", "changed_pixels": changed, "violating_frames": violating,
                     "encoded": None, "map_path": None, "reasons": (["Pixels outside the declared edit region changed before encoding."] if changed else [])}
     report = {"frames": n, "size": [w, h], "mouth_flicker_original": fo, "mouth_flicker_raw": fr, "mouth_flicker_filtered": fa,
               "flicker_ratio": (fa / fo) if fo else None, "flicker_ok": (fa <= o.max_flicker_ratio * fo) if fo else True,
@@ -490,25 +575,10 @@ def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None
     if out:
         write_video(outf, out, o.fps, w, h)
         back = read_frames(out, f"fps={o.fps}", w, h, n)
-        srcenc = out + ".srcenc.mp4"
-        write_video(org, srcenc, o.fps, w, h)       # the same encoder settings on the untouched source: the delivered file is judged against this, not against a fixed tolerance
-        srcback = read_frames(srcenc, f"fps={o.fps}", w, h, n)
-        encoded = encoded_preservation_check(list(srcback), list(back), regions[:len(back)], o.encode_halo_px)
-        preservation["encoded"] = encoded
+        encoded, map_path = encoded_check_on_file(org, list(back), regions, o, out, w, h)
+        preservation["encoded"] = encoded; preservation["map_path"] = map_path
         if encoded["largest_blob_px"] >= 50:
             preservation["verdict"] = "fail"; preservation["reasons"].append("A persistent changed area was found outside the declared edit region.")
-        map_path = out + ".changedmap.png"
-        map_img = np.zeros((h, w * 2, 3), np.uint8)
-        original = org[0].copy(); overlay = original.copy()
-        for k, (a, b, region) in enumerate(zip(srcback, back, regions)):
-            d = (np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > 8) & halo_outside(region, o.encode_halo_px)   # the same pixels the verdict counts
-            overlay[d] = (255, 0, 0)
-        contours, _ = cv2.findContours(regions[0].astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2)
-        map_img[:, :w] = original; map_img[:, w:] = overlay
-        cv2.imwrite(map_path, cv2.cvtColor(map_img, cv2.COLOR_RGB2BGR)); preservation["map_path"] = map_path
-        try: os.unlink(srcenc)
-        except OSError: pass
     if report_path:
         with open(report_path, "w") as handle:
             json.dump(report, handle, indent=1)
@@ -517,8 +587,8 @@ def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--mode", choices=("composite", "analyze", "crops"), default="composite")
-    ap.add_argument("--source"); ap.add_argument("--donor"); ap.add_argument("--out")
+    ap.add_argument("--mode", choices=("composite", "analyze", "crops", "verify"), default="composite")
+    ap.add_argument("--source"); ap.add_argument("--donor"); ap.add_argument("--out"); ap.add_argument("--delivered", help="verify: the delivered clip to judge")
     ap.add_argument("--start", type=float, default=0.0); ap.add_argument("--seconds", type=float, default=2.3333)
     ap.add_argument("--caption-box", default=None, help="x,y,w,h of burned-in text to erase first"); ap.add_argument("--report", default=None)
     ap.add_argument("--flow-alpha", type=float, default=0.4); ap.add_argument("--mask-smooth-frames", type=int, default=2); ap.add_argument("--fps", type=float, default=FPS)
@@ -531,6 +601,13 @@ def main(argv=None) -> int:
             if not a.references or not a.out_dir:
                 raise ValueError("The crops step needs --references and --out-dir.")
             result = {"crops": make_reference_crops([x for x in a.references.split(",") if x], a.out_dir)}
+        elif a.mode == "verify":
+            for label, path in (("source clip", a.source), ("delivered clip", a.delivered)):
+                if not path or not os.path.exists(path):
+                    raise FileNotFoundError(f"The {label} was not found. Check the path, then try again.")
+            box = tuple(int(x) for x in a.caption_box.split(",")) if a.caption_box else None
+            supplied = json.load(open(a.edit_region_file)) if a.edit_region_file else None
+            result = verify_delivered(a.source, a.delivered, a.start, a.seconds, box, supplied, Options(fps=a.fps))
         elif a.mode == "analyze":
             if not a.source or not os.path.exists(a.source):
                 raise FileNotFoundError("The source clip was not found. Check that the swap produced it, then try again.")
