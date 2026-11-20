@@ -70,13 +70,26 @@ test("a plain request without take_of sends no take_of and no source fields (the
   expect(body.extend_seconds).toBeUndefined();
 });
 
-test("a film shot is planned on a Max pack with a film-shot row, refused with a plain line elsewhere, and carries no size field in the request", () => {
+test("a film shot is valid on every pack that makes the clip: Max has its full-HD film-shot row, Standard, Boost and the private-testing pack use their ordinary recipe; the request carries no size field", () => {
   expect(planClipRoute(clip({ operation: "clip_film_shot" }), max)).toMatchObject({ ok: true, filmShot: true });
-  for (const [part, level] of [["ltx-2-5-q8-distilled-mlx", "standard"], ["minimax-h3", "standard"]] as const) {
-    expect(planClipRoute(clip({ level, operation: "clip_film_shot" }), rowsForJob(part, "clip")), part).toMatchObject({ ok: false, refusal: { code: "input_not_supported" } });
+  for (const [part, level] of [["ltx-2-5-q8-distilled-mlx", "standard"], ["ltx-2-5-q8-distilled-mlx", "boost"], ["minimax-h3", "standard"], ["minimax-h3", "boost"]] as const) {
+    expect(planClipRoute(clip({ level, shape: "landscape", seconds: 4, operation: "clip_film_shot" }), rowsForJob(part, "clip")), `${part} ${level}`).toMatchObject({ ok: true, filmShot: true, route: "words" });
   }
   expect(StackMakeRequest.safeParse(clip({ operation: "clip_film_shot" })).success).toBe(true);
   expect(StackMakeRequest.safeParse(clip({ operation: "clip_film_shot", size: "1920x1088" })).success).toBe(false);
+});
+
+test("a film shot on a pack with no film-shot recipe is made at that level's ordinary size and the reason says so in plain words", async () => {
+  for (const [part, level] of [["ltx-2-5-q8-distilled-mlx", "standard"], ["ltx-2-5-q8-distilled-mlx", "boost"], ["minimax-h3", "standard"]] as const) {
+    const request = clip({ operation: "clip_film_shot", level, seconds: 4, part });
+    const plan = planMake(request, [ready(part)]);
+    if (!plan.ok) throw new Error(`not planned: ${part} ${level}`);
+    let body: Record<string, unknown> = {};
+    const result = await dispatchClip(request, plan, async (_path, sent) => { body = sent as Record<string, unknown>; return { status: 200, json: { job: "j", data: [] } }; }, async () => null);
+    expect(result.status, `${part} ${level}`).toBe(200);
+    expect((body as { route?: { reason: string } }).route?.reason, `${part} ${level}`).toBe("A film shot, made at this home's usual size.");
+    expect((body as { size?: string }).size, `${part} ${level}`).not.toBe("1920x1088");
+  }
 });
 
 test("a film shot goes to the legacy door at full HD only when the Max room holds it and the clip is within full HD's seconds; otherwise at the standard Max size, and the route reason says which", async () => {

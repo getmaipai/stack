@@ -137,6 +137,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     const hdRow = rowsForJob(plan.serving.part.id, "clip").find((row) => row.operation === "clip_film_shot" && row.available);
     const picked = engine ? videoRecipe(engine, "max", "clip_film_shot", undefined, tierRoomBytes("max")) : null;
     if (picked?.recipe.size && hdRow && request.seconds <= hdRow.seconds.max) { filmSize = `${picked.recipe.size.width}x${picked.recipe.size.height}`; filmReason = "A film shot, made in full HD because this computer can hold it."; }
+    else if (!hdRow) filmReason = "A film shot, made at this home's usual size.";
     else filmReason = picked?.recipe.size ? `A film shot at the standard Max size: full HD makes at most ${hdRow?.seconds.max ?? 5} seconds.` : "A film shot at the standard Max size, because this computer cannot hold full HD right now.";
   }
   const route = request.operation === "retake_from" || request.operation === "extend" ? { name: request.operation, reason: chosen.reason } : { name: savedTake?.route ?? chosen.route, reason: savedTake ? "Another take from the saved clip route." : filmReason };

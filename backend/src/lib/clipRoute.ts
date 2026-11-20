@@ -16,7 +16,6 @@ export function planClipRoute(request: ClipRequest, rows: readonly StackOperatio
   const hasWardrobe = request.inputs?.some((input) => input.role === "wardrobe") ?? false;
   const hasEditSource = request.inputs?.some((input) => input.role === "edit_source") ?? false;
   if (request.operation === "enhance") return refuse("Enhancing a clip has its own request.");
-  if (request.operation === "clip_film_shot" && !rows.some((candidate) => candidate.operation === "clip_film_shot" && candidate.available)) return refuse("This model does not make film shots in full HD. Ask for a plain clip, or use a model that does.");
   if (request.operation === "retake_from" || request.operation === "extend") {
     if (request.start_picture || request.end_picture || identityCount || hasVoice || hasWardrobe || (request.inputs ?? []).some((input) => input.role !== "edit_source")) return refuse("Retaking or extending a clip cannot be combined with pictures or other inputs.");
     if (!hasEditSource) return refuse("Send an edit_source clip to retake or extend.");
