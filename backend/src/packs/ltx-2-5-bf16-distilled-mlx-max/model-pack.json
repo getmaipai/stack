@@ -139,6 +139,49 @@
       ]
     }
   ],
+  "style_bases": [
+    {
+      "id": "ltx-2.5",
+      "label": "LTX 2.5",
+      "short": "LTX-2.5",
+      "media": "video",
+      "civitai_labels": [
+        "LTXV 2.5"
+      ],
+      "text_patterns": [
+        "ltx[\\s_-]*(?:v|video)?[\\s_-]*2[._-]?5"
+      ],
+      "browse": [
+        "ltx-2.5"
+      ],
+      "generic_labels": [
+        "LTXV2"
+      ]
+    },
+    {
+      "id": "ltx-2.3",
+      "label": "retired video base",
+      "short": "retired video base",
+      "media": "video",
+      "text_patterns": [
+        "ltx[\\s_-]*(?:v|video)?[\\s_-]*2[._-]?3"
+      ],
+      "browse": [
+        "ltx-2.3"
+      ],
+      "generic_labels": [
+        "LTXV2"
+      ],
+      "retired": {
+        "mark": "tested_on_25",
+        "tested_on": "ltx-2.5",
+        "marks": {
+          "tested": "A bench clip on LTX 2.5 changed cleanly; the style still runs there, with a warning.",
+          "no_effect": "A bench clip on LTX 2.5 showed it did nothing; a clip naming it is refused."
+        }
+      }
+    }
+  ],
   "notes": [
     "A sheet clip runs 4 to 8 seconds at 768x448."
   ]

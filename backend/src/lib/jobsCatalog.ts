@@ -126,7 +126,7 @@ export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): P
       capabilities: capabilities ?? { text: false, end_picture: false, sound: false, keeps_likeness: false },
       ...(requestFieldsOf(name).length > 0 ? { request_fields: requestFieldsOf(name) } : {}),
       ...(rows.length > 0 ? { operations: catalogOperations(rows, shown!.part, { editSupported: ltx25MaxEditSupported(), audience }) } : {}),
-      styles: { bases: shown?.pack.pack.style_bases?.filter((b) => !b.retired).map((b) => ({ id: b.id, label: b.label })) ?? [], max: 0 },
+      styles: { bases: shown?.pack.pack.style_bases?.filter((b) => !b.retired).map(({ browse: _browse, retired: _retired, ...served }) => served) ?? [], max: 0 },
       restyles: [] as Array<{ name: string; label: string }>,
     };
     if (audience === "minor") return [entry];
