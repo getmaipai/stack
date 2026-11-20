@@ -26,7 +26,7 @@ const swapRecipe = () => { const pack = packFor(PART)!; return pack.recipes[pack
 const ready = (fits: Partial<StackPartView["fits"]> = {}): StackPartView => { const d = PART_DEFS.find((p) => p.id === PART)!; return { id: PART, kind: d.kind, category: d.category, priority: d.priority, label: d.label, description: "", enabled: true, state: "ready", size_bytes: 1, download_bytes: 1, percent: null, fits: { standard: true, boost: true, max: true, reason: null, ...fits }, can_install: false, install_block: null, can_uninstall: true, uninstall_block: null, licence_needed: false, required_by: [], update: { available: false, version: null } } as StackPartView; };
 const request = (over: Partial<Extract<StackMakeRequest, { job: "swap" }>> = {}): Extract<StackMakeRequest, { job: "swap" }> => ({ job: "swap", audience: "adult", clip: "data:video/mp4;base64,AAAA", references: ["data:image/png;base64,AAAA"], seconds: 6, level: "boost", ...over });
 const plan = (req = request(), fits: Partial<StackPartView["fits"]> = {}) => { const p = planMake(req, [ready(fits)]); if (!p.ok) throw new Error("not planned"); return p; };
-const report = (over: Partial<CompositeSwapReport> = {}): CompositeSwapReport => ({ frames: 45, size: [1080, 1920], mouth_flicker_original: 2, mouth_flicker_raw: 3, mouth_flicker_filtered: 2.2, flicker_ratio: 1.1, flicker_ok: true, residual_original_head_frames: [], outside_mask_pixels_changed: 0, recoloured_leftover_skin_pixels: 0, caption_box: null, caption_residue: null, encoded_outside_changed_share: 0.0002, encoded_outside_bad_frames: [], ...over });
+const report = (over: Partial<CompositeSwapReport> = {}): CompositeSwapReport => ({ frames: 45, size: [1080, 1920], mouth_flicker_original: 2, mouth_flicker_raw: 3, mouth_flicker_filtered: 2.2, flicker_ratio: 1.1, flicker_ok: true, residual_original_head_frames: [], edit_region: { source: "supplied", head_scale: 2.4, margin_frac: 0.25, frames_with_region: 45 }, mask_clipped_pixels: 0, preservation: { verdict: "pass", changed_pixels: 0, violating_frames: [], encoded: { persistent_pixels: 0, largest_blob_px: 0, share_gt8: 0, max_diff: 0 }, map_path: "/map.png", reasons: [] }, caption_box: null, caption_residue: null, ...over });
 const noWords = (line: string) => { expect(line).not.toContain("\u2014"); expect(line.toLowerCase()).not.toMatch(/\b(memory|ram|gb|db|psnr|seed)\b/); expect(line.length).toBeGreaterThan(20); };
 
 describe("the numbers a pack hands over", () => {
@@ -120,12 +120,11 @@ describe("the checks that fail a job, each with one plain line", () => {
     noWords(donorCopiedLine(65, 3)); expect(donorCopiedLine(65, 3)).toContain("1:05"); expect(donorCopiedLine(5, 1)).toContain("1 try.");
   });
   test("a clean report has no failures", () => { expect(segmentFailures(report(), 0)).toEqual([]); });
-  test("pixels changed outside the head fail, before the encode and after it", () => {
-    for (const bad of [report({ outside_mask_pixels_changed: 500_000 }), report({ encoded_outside_bad_frames: [3, 4] })]) {
+  test("a failed preservation verdict or a missing old-worker check fails", () => {
+    for (const bad of [report({ preservation: { ...report().preservation, verdict: "fail" } }), (() => { const r = report() as unknown as Record<string, unknown>; delete r.preservation; return r as unknown as CompositeSwapReport; })()]) {
       const lines = segmentFailures(bad, 12); expect(lines).toHaveLength(1); expect(lines[0]).toContain("outside the head"); expect(lines[0]).toContain("0:12"); noWords(lines[0]!);
     }
   });
-  test("a handful of changed pixels (rounding, under 0.01 percent) is tolerated", () => { expect(segmentFailures(report({ outside_mask_pixels_changed: 100 }), 0)).toEqual([]); });
   test("the original head still showing in more than a tenth of the frames fails", () => {
     expect(segmentFailures(report({ residual_original_head_frames: [[1, 0.3], [2, 0.3]] }), 0)).toEqual([]);
     const lines = segmentFailures(report({ residual_original_head_frames: Array.from({ length: 6 }, (_, i) => [i, 0.4] as [number, number]) }), 7);
@@ -139,7 +138,7 @@ describe("the checks that fail a job, each with one plain line", () => {
     const lines = segmentFailures(report({ flicker_ok: false, flicker_ratio: 1.9 }), 3); expect(lines).toHaveLength(1); expect(lines[0]).toContain("mouth flickers"); noWords(lines[0]!);
   });
   test("several failures are listed, the outside-the-head one first", () => {
-    const lines = segmentFailures(report({ outside_mask_pixels_changed: 1e6, flicker_ok: false }), 0); expect(lines).toHaveLength(2); expect(lines[0]).toContain("outside the head");
+    const lines = segmentFailures(report({ preservation: { ...report().preservation, verdict: "fail" }, flicker_ok: false }), 0); expect(lines).toHaveLength(2); expect(lines[0]).toContain("outside the head");
   });
   test("too many people in the clip is a vote over frames, never one frame", () => {
     expect(clipHasTooManyPeople({ people_max: 2, many_people_share: 0.6 })).toBe(true);
@@ -251,7 +250,7 @@ describe("the runner", () => {
     const staged = await runStaged(request({ seconds: 6 }));
     h.analysis.edge = [true, false, false, false];
     const result = await staged.run() as { segments: number; checks: unknown[]; caption_erased: boolean; files: string[] };
-    expect(result.segments).toBe(4); expect(result.checks).toHaveLength(4); expect(result.caption_erased).toBe(true);
+    expect(result.segments).toBe(4); expect(result.checks).toHaveLength(4); expect(result.caption_erased).toBe(true); expect(result.checks[0]).toMatchObject({ preservation_verdict: "pass", changed_pixels: 0 });
     expect(h.composites.map((c) => [c.start, c.seconds, c.fps])).toEqual([[0, 1.5, 30], [1.5, 1.5, 30], [3, 1.5, 30], [4.5, 1.5, 30]]);
     expect(h.composites.every((c) => c.captionBox !== undefined)).toBe(true);
     expect(h.seeds).toEqual([42, 42, 42, 42]);
@@ -283,7 +282,7 @@ describe("the runner", () => {
   });
   test("pixels changed outside the head fail the job at the first segment, before more model time is spent", async () => {
     h.cuts = [3];
-    h.reports = [report({ outside_mask_pixels_changed: 250_000 })];
+    h.reports = [report({ preservation: { ...report().preservation, verdict: "fail", changed_pixels: 250_000 } })];
     const staged = await runStaged(request({ seconds: 6 }));
     const failure = await staged.run().catch((e) => e) as JobFailure;
     expect(failure.message).toContain("outside the head"); expect(h.composites).toHaveLength(1); expect(h.seeds).toHaveLength(1);

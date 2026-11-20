@@ -1,4 +1,4 @@
-"""composite_swap_worker (COMPOSITE-SWAP-01): put a donor head into REAL footage and change nothing else. Model-independent; no network.
+"""composite_swap_worker: put donor pixels inside a declared head region and preserve every source pixel outside it. Model-independent; no network.
 
 A guided head-swap generator redraws the whole frame, so its clip is only a donor. This module keeps every original pixel outside a head mask and takes
 colour-matched donor pixels inside it. Method, numbers and known imperfections: docs/design/swap-composite-lessons-2026-11-17.md in the Home repo.
@@ -43,8 +43,9 @@ class Options:
     skin_blue_minus_red: float = 11.0     # below this and red above 20 counts as skin in the original
     flag_share: float = 0.15          # a frame is flagged when more than this share of the original's skin pixels is unchanged
     max_flicker_ratio: float = 1.25   # composite mouth flicker must stay at or below this times the original's
-    encode_tolerance: int = 24        # after the lossy encode, a pixel far from the mask counts as changed above this per-channel difference
-    max_encoded_changed_share: float = 0.01   # share of far-from-mask pixels allowed above the tolerance in any frame (encode noise, not edits)
+    region_head_scale: float = 2.4
+    region_margin_frac: float = 0.25
+    encode_halo_px: int = 32
     caption_edge_threshold: float = 120.0     # Sobel strength that counts as a text edge when judging caption residue
     max_caption_residue: float = 0.5  # the share of the caption's edges that may survive the erase
     reference_crops: list = field(default_factory=list)
@@ -162,7 +163,7 @@ def composite_frame(org, don_small, m, o: Options, state: dict):
     return (org * (1 - mm) + dm * mm).clip(0, 255).astype(np.uint8)
 
 
-def recolour_leftover(raw, org, masks, o: Options):
+def recolour_leftover(raw, org, masks, o: Options, regions=None):
     """Original skin the donor did not cover takes the donor's skin tone and keeps the original's light and shadow."""
     tone = None
     for k in range(len(raw)):
@@ -171,7 +172,8 @@ def recolour_leftover(raw, org, masks, o: Options):
             tone = lab(raw[k])[sel].mean(0)
         if tone is None:
             continue
-        res = ((original_skin(org[k], o) > 0) & (masks[k] < 0.5)).astype(np.uint8)
+        region = regions[k] if regions is not None else np.ones(org[k].shape[:2], bool)
+        res = ((original_skin(org[k], o) > 0) & (masks[k] < 0.5) & region).astype(np.uint8)
         res = cv2.dilate(res, np.ones((5, 5), np.uint8))
         if res.sum() < 300:
             continue
@@ -179,7 +181,7 @@ def recolour_leftover(raw, org, masks, o: Options):
         lo[..., 0] = np.where(r, np.clip((lo[..., 0] - lo[..., 0][r].mean()) * 0.8 + tone[0], 0, 255), lo[..., 0])
         lo[..., 1] = np.where(r, tone[1], lo[..., 1]); lo[..., 2] = np.where(r, tone[2], lo[..., 2])
         fill = cv2.cvtColor(np.clip(lo, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB).astype(np.float32)
-        a = cv2.GaussianBlur(res.astype(np.float32), (0, 0), 1.5)[..., None]
+        a = (cv2.GaussianBlur(res.astype(np.float32), (0, 0), 1.5) * region.astype(np.float32))[..., None]   # the feather never reaches outside the declared region
         raw[k] = (raw[k].astype(np.float32) * (1 - a) + fill * a).clip(0, 255).astype(np.uint8)
 
 
@@ -355,25 +357,70 @@ def clamp_box(box, w, h):
     return x, y, bw, bh
 
 
-def outside_mask_changes(org, out, masks, o: Options, tolerance=0):
-    """Per frame, pixels farther than 12 px from the mask that differ from the original by more than `tolerance`, in three counts: changed and not skin (must be 0
-    before the encode), changed original skin (recoloured on purpose), and the far-from-mask pixels checked. After the lossy encode the tolerance absorbs
-    compression noise; a real edit is far above it."""
-    outside, recoloured, checked = [], [], []
-    for k in range(min(len(org), len(out))):
-        far = cv2.dilate((masks[k] > 0.001).astype(np.uint8), np.ones((25, 25), np.uint8)) == 0
-        skin = cv2.dilate(original_skin(org[k], o), np.ones((15, 15), np.uint8)) > 0
-        d = np.abs(org[k].astype(int) - out[k].astype(int)).max(2) > tolerance
-        outside.append(int((d & far & ~skin).sum())); recoloured.append(int((d & far & skin).sum())); checked.append(int((far & ~skin).sum()))
-    return outside, recoloured, checked
+NO_EDIT_REGION_LINE = "No face was found to define the area the swap may change. Use a clip where the person's face is visible, then try again."
 
+def declare_edit_region(org_frames, options: Options, supplied=None):
+    """Build independent per-frame allowed-change regions from boxes or source face detections."""
+    n = len(org_frames)
+    if supplied is not None:
+        if isinstance(supplied, dict):
+            boxes = [supplied["box"]] * n if "box" in supplied else supplied.get("boxes", [])
+        else: boxes = supplied
+        if isinstance(boxes, (list, tuple)) and len(boxes) == 4 and all(isinstance(v, (int, float)) for v in boxes): boxes = [boxes] * n
+        if len(boxes) != n: raise ValueError("The edit region file must provide one box per frame or one static box.")
+        source = "supplied"
+    else:
+        boxes = []; last = None; first = None; source = "detected"
+        for frame in org_frames:
+            h, w = frame.shape[:2]; scale = min(1.0, 480.0 / max(w, h))
+            small = cv2.resize(frame, (max(1, round(w * scale)), max(1, round(h * scale))), interpolation=cv2.INTER_AREA) if scale < 1 else frame
+            faces = find_faces(small)
+            face = max(faces, key=lambda b: b[2] * b[3]) if faces else None
+            if face:
+                last = tuple(int(round(v / scale)) for v in face); first = first or last
+            boxes.append(last)
+        if first is None: raise ReferenceError("no_edit_region", NO_EDIT_REGION_LINE)
+        first_index = next(i for i, b in enumerate(boxes) if b is not None)
+        boxes[:first_index] = [first] * first_index
+    regions = []
+    for frame, box in zip(org_frames, boxes):
+        h, w = frame.shape[:2]; mask = np.zeros((h, w), np.uint8)
+        if box is not None:
+            x, y, fw, fh = [float(v) for v in box]; side = max(fw, fh)
+            grow = options.region_head_scale if source == "detected" else 1.0   # a face box is grown to a head; a supplied box is already the caller's head area
+            bw, bh = fw * grow, fh * grow
+            mx = my = options.region_margin_frac * side
+            x0, y0 = max(0, int(np.floor(x + fw / 2 - bw / 2 - mx))), max(0, int(np.floor(y + fh / 2 - bh / 2 - my)))
+            x1, y1 = min(w, int(np.ceil(x + fw / 2 + bw / 2 + mx))), min(h, int(np.ceil(y + fh / 2 + bh / 2 + my)))
+            if x1 > x0 and y1 > y0: mask[y0:y1, x0:x1] = 1
+        regions.append(mask.astype(bool))
+    return regions, source
 
-def encoded_outside_check(org, out_frames, masks, o: Options):
-    """The same check on the frames read back from the finished file: [worst share of far pixels changed in any frame, frames above the allowed share]."""
-    changed, _, checked = outside_mask_changes(org, out_frames, masks, o, o.encode_tolerance)
-    shares = [c / max(1, n) for c, n in zip(changed, checked)]
-    bad = [k for k, v in enumerate(shares) if v > o.max_encoded_changed_share]
-    return (max(shares) if shares else 0.0), bad
+def pre_encode_check(org, out, regions):
+    counts, frames = [], []
+    for i, (a, b, region) in enumerate(zip(org, out, regions)):
+        changed = np.any(a != b, axis=2) & ~region
+        count = int(changed.sum()); counts.append(count)
+        if count: frames.append(i)
+    return int(sum(counts)), frames, counts
+
+def halo_outside(region, halo):
+    """Pixels farther than `halo` px from the declared region (the encoder spreads an edit a few macroblocks)."""
+    return cv2.dilate(region.astype(np.uint8), np.ones((2 * halo + 1, 2 * halo + 1), np.uint8)) == 0
+
+def encoded_preservation_check(source_encoded, delivered, regions, halo):
+    """Delivered file against a source-only encode made with the same settings, outside the region plus a halo. A pixel is persistent when it differs by more
+    than 8 levels in at least max(5, 10 percent of the frames) frames at the same place (a real edit stays put, encoder drift flickers); a persistent area of
+    50 pixels or more fails the clip."""
+    outside = [halo_outside(r, halo) for r in regions]
+    diffs = [np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) for a, b in zip(source_encoded, delivered)]
+    if not diffs: return dict(persistent_pixels=0, largest_blob_px=0, share_gt8=0.0, max_diff=0)
+    votes = np.sum(np.stack([(d > 8) & o for d, o in zip(diffs, outside)]), axis=0) >= max(5, int(np.ceil(0.1 * len(diffs))))
+    count, _, stats, _ = cv2.connectedComponentsWithStats(votes.astype(np.uint8), 8)
+    sizes = stats[1:, cv2.CC_STAT_AREA] if count > 1 else []
+    total = sum(int(o.sum()) for o in outside)
+    changed = sum(int(((d > 8) & o).sum()) for d, o in zip(diffs, outside))
+    return dict(persistent_pixels=int(votes.sum()), largest_blob_px=int(max(sizes) if len(sizes) else 0), share_gt8=changed / max(1, total), max_diff=int(max(d.max() for d in diffs)))
 
 
 def caption_edge_count(frame, box, o: Options):
@@ -393,7 +440,7 @@ def caption_residue(before, after, box, o: Options):
     return float(np.mean(ratios)) if ratios else None
 
 
-def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None, caption_box=None, reference_crops=(), options: Options | None = None, report_path=None):
+def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None, caption_box=None, reference_crops=(), options: Options | None = None, report_path=None, edit_region=None):
     """Returns (frames, report). Writes `out` when given."""
     o = options or Options()
     o.reference_crops = list(reference_crops)
@@ -409,9 +456,14 @@ def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None
     dw, dh = int(dprobe[0]), int(dprobe[1])
     don = read_frames(donor, f"fps={o.fps}", dw, dh, n)
     n = min(len(org), len(don)); org, don = org[:n], don[:n]
-    masks = frame_masks(org, don, o); state: dict = {}
+    regions, region_source = declare_edit_region(org, o, edit_region)
+    if caption_box:
+        x, y, bw, bh = caption_box
+        for r in regions: r[y:y + bh, x:x + bw] = True
+    masks = frame_masks(org, don, o); clipped = sum(int(np.count_nonzero((m > 0) & ~r)) for m, r in zip(masks, regions))
+    masks = [m * r.astype(np.float32) for m, r in zip(masks, regions)]; state: dict = {}
     raw = [composite_frame(org[k], don[k], masks[k], o, state) for k in range(n)]
-    recolour_leftover(raw, org, masks, o)
+    recolour_leftover(raw, org, masks, o, regions)
     outf = [raw[0]]
     for t in range(1, n):   # flow measured on the ORIGINAL carries the filtered donor texture, so the donor's own jitter cannot show
         fl = flow_back(cv2.cvtColor(org[t], cv2.COLOR_RGB2GRAY), cv2.cvtColor(org[t - 1], cv2.COLOR_RGB2GRAY))
@@ -426,18 +478,37 @@ def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None
             share = float(((np.abs(org[k].astype(int) - outf[k].astype(int)).max(2) <= 4) & head).sum() / head.sum())
             if share > o.flag_share:
                 flagged.append([k, round(share, 3)])
-    outside, recoloured, _ = outside_mask_changes(org, outf, masks, o)   # farther than 12 px from the mask must be identical to the original, except original skin recoloured on purpose
+    changed, violating, _ = pre_encode_check(org, outf, regions)
+    preservation = {"verdict": "fail" if changed else "pass", "changed_pixels": changed, "violating_frames": violating,
+                    "encoded": None, "map_path": None, "reasons": (["Pixels outside the declared edit region changed before encoding."] if changed else [])}
     report = {"frames": n, "size": [w, h], "mouth_flicker_original": fo, "mouth_flicker_raw": fr, "mouth_flicker_filtered": fa,
               "flicker_ratio": (fa / fo) if fo else None, "flicker_ok": (fa <= o.max_flicker_ratio * fo) if fo else True,
-              "residual_original_head_frames": flagged, "outside_mask_pixels_changed": int(sum(outside)), "recoloured_leftover_skin_pixels": int(sum(recoloured)),
+              "residual_original_head_frames": flagged, "edit_region": {"source": region_source, "head_scale": o.region_head_scale, "margin_frac": o.region_margin_frac, "frames_with_region": sum(bool(r.any()) for r in regions)}, "mask_clipped_pixels": clipped, "preservation": preservation,
               "caption_box": list(caption_box) if caption_box else None,
               "caption_residue": caption_residue(with_text, outf, caption_box, o) if caption_box else None,
-              "encoded_outside_changed_share": None, "encoded_outside_bad_frames": [], "options": asdict(o)}
+              "options": asdict(o)}
     if out:
         write_video(outf, out, o.fps, w, h)
-        back = read_frames(out, f"fps={o.fps}", w, h, n)    # read the finished file back: the encode must not have changed anything outside the head either
-        worst, bad = encoded_outside_check(org[:len(back)], list(back), masks[:len(back)], o)
-        report["encoded_outside_changed_share"], report["encoded_outside_bad_frames"] = worst, bad
+        back = read_frames(out, f"fps={o.fps}", w, h, n)
+        srcenc = out + ".srcenc.mp4"
+        write_video(org, srcenc, o.fps, w, h)       # the same encoder settings on the untouched source: the delivered file is judged against this, not against a fixed tolerance
+        srcback = read_frames(srcenc, f"fps={o.fps}", w, h, n)
+        encoded = encoded_preservation_check(list(srcback), list(back), regions[:len(back)], o.encode_halo_px)
+        preservation["encoded"] = encoded
+        if encoded["largest_blob_px"] >= 50:
+            preservation["verdict"] = "fail"; preservation["reasons"].append("A persistent changed area was found outside the declared edit region.")
+        map_path = out + ".changedmap.png"
+        map_img = np.zeros((h, w * 2, 3), np.uint8)
+        original = org[0].copy(); overlay = original.copy()
+        for k, (a, b, region) in enumerate(zip(srcback, back, regions)):
+            d = (np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > 8) & halo_outside(region, o.encode_halo_px)   # the same pixels the verdict counts
+            overlay[d] = (255, 0, 0)
+        contours, _ = cv2.findContours(regions[0].astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2)
+        map_img[:, :w] = original; map_img[:, w:] = overlay
+        cv2.imwrite(map_path, cv2.cvtColor(map_img, cv2.COLOR_RGB2BGR)); preservation["map_path"] = map_path
+        try: os.unlink(srcenc)
+        except OSError: pass
     if report_path:
         with open(report_path, "w") as handle:
             json.dump(report, handle, indent=1)
@@ -451,6 +522,7 @@ def main(argv=None) -> int:
     ap.add_argument("--start", type=float, default=0.0); ap.add_argument("--seconds", type=float, default=2.3333)
     ap.add_argument("--caption-box", default=None, help="x,y,w,h of burned-in text to erase first"); ap.add_argument("--report", default=None)
     ap.add_argument("--flow-alpha", type=float, default=0.4); ap.add_argument("--mask-smooth-frames", type=int, default=2); ap.add_argument("--fps", type=float, default=FPS)
+    ap.add_argument("--edit-region-file", default=None)
     ap.add_argument("--segments", default=None, help="analyze: start:seconds pairs in source time, comma separated")
     ap.add_argument("--references", default=None, help="crops: reference picture paths, comma separated"); ap.add_argument("--out-dir", default=None)
     a = ap.parse_args(argv)
@@ -472,7 +544,8 @@ def main(argv=None) -> int:
                 raise ValueError("The composite step needs --out.")
             opt = Options(flow_alpha=a.flow_alpha, mask_smooth_frames=a.mask_smooth_frames, fps=a.fps)
             box = tuple(int(x) for x in a.caption_box.split(",")) if a.caption_box else None
-            _, rep = composite_swap(a.source, a.donor, a.out, a.start, a.seconds, caption_box=box, options=opt, report_path=a.report)
+            supplied = json.load(open(a.edit_region_file)) if a.edit_region_file else None
+            _, rep = composite_swap(a.source, a.donor, a.out, a.start, a.seconds, caption_box=box, options=opt, report_path=a.report, edit_region=supplied)
             result = {k: v for k, v in rep.items() if k != "options"}
     except ReferenceError as e:
         print(json.dumps({"error": e.line, "code": e.code}))

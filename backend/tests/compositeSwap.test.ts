@@ -13,7 +13,7 @@ describe("composite swap caller (fake runner)", () => {
   });
   test("returns the worker's report on success", async () => {
     process.env.COMPOSITE_SWAP_PYTHON = process.execPath;
-    const report = { frames: 56, size: [1080, 1920], mouth_flicker_original: 2.5, mouth_flicker_raw: 3, mouth_flicker_filtered: 1.5, flicker_ratio: 0.6, flicker_ok: true, residual_original_head_frames: [[3, 0.2]], outside_mask_pixels_changed: 0, recoloured_leftover_skin_pixels: 10 };
+    const report = { frames: 56, size: [1080, 1920], mouth_flicker_original: 2.5, mouth_flicker_raw: 3, mouth_flicker_filtered: 1.5, flicker_ratio: 0.6, flicker_ok: true, residual_original_head_frames: [[3, 0.2]], edit_region: { source: "supplied", head_scale: 2.4, margin_frac: 0.25, frames_with_region: 56 }, mask_clipped_pixels: 0, preservation: { verdict: "pass", changed_pixels: 0, violating_frames: [], encoded: null, map_path: null, reasons: [] } };
     __setCompositeSwapRunnerForTests(async () => ({ code: 0, stdout: `warm-up line\n${JSON.stringify(report)}\n`, stderr: "" }));
     const result = await compositeSwap(input); expect(result.ok).toBe(true); if (result.ok) expect(result.report).toEqual(report as never);
   });

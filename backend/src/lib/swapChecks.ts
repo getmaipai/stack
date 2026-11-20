@@ -128,7 +128,6 @@ export function pickSwapShape(input: {
 /** A donor whose picture is this close to its guide did not change the head: the model copied the original. Above it, the segment is retaken with another seed. */
 export const DONOR_COPY_PSNR_DB = 30;
 /** Share of far-from-head pixels allowed to differ before the encode (a handful of rounding cases; a real edit is far above it). */
-export const OUTSIDE_PIXEL_SHARE_TOLERANCE = 1e-4;
 /** Share of a segment's frames that may still show the original head before the job fails (the detector reads skin and is an upper bound on dark footage). */
 export const RESIDUAL_FRAME_SHARE_TOLERANCE = 0.1;
 /** Caption edges that survive the erase, as a share of the edges that were there. */
@@ -153,8 +152,7 @@ export function donorCopiedLine(at: number, tries: number): string {
 /** The checks on one segment's composite report. Each failing check is one plain line; an empty list means the segment passed. */
 export function segmentFailures(report: CompositeSwapReport, at: number): string[] {
   const lines: string[] = [];
-  const pixels = report.frames * report.size[0] * report.size[1];
-  if (report.outside_mask_pixels_changed > pixels * OUTSIDE_PIXEL_SHARE_TOLERANCE || (report.encoded_outside_bad_frames?.length ?? 0) > 0) {
+  if (!report.preservation || report.preservation.verdict === "fail") {
     lines.push(`The swap changed parts of the picture outside the head at ${clock(at)}, which it must never do, so the clip was thrown away. Try again, and if it happens again send this clip in to be looked at.`);
   }
   const residual = report.residual_original_head_frames.length;

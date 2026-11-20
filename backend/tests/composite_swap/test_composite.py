@@ -36,17 +36,17 @@ class CompositeSwapTest(unittest.TestCase):
     def setUpClass(cls):
         cls.dir = tempfile.mkdtemp(); cls.src = os.path.join(cls.dir, "src.mp4"); cls.don = os.path.join(cls.dir, "don.mp4"); cls.out = os.path.join(cls.dir, "out.mp4")
         make(cls.src, False); make(cls.don, True)
-        cls.frames, cls.report = cs.composite_swap(cls.src, cls.don, cls.out, start=0, seconds=1.0)
+        cls.frames, cls.report = cs.composite_swap(cls.src, cls.don, cls.out, start=0, seconds=1.0, edit_region={"box": [80, 180, 140, 180]})
         cls.org = cs.read_frames(cls.src, "fps=24", W, H, N)
 
     def test_report_has_the_checks(self):
         r = self.report
-        for key in ("frames", "mouth_flicker_original", "mouth_flicker_filtered", "flicker_ok", "residual_original_head_frames", "outside_mask_pixels_changed"):
+        for key in ("frames", "mouth_flicker_original", "mouth_flicker_filtered", "flicker_ok", "residual_original_head_frames", "preservation", "edit_region"):
             self.assertIn(key, r)
         self.assertEqual(r["frames"], N)
 
     def test_nothing_outside_the_mask_changes(self):
-        self.assertEqual(self.report["outside_mask_pixels_changed"], 0)
+        self.assertEqual(self.report["preservation"]["changed_pixels"], 0)
 
     def test_cowl_pixels_stay_original_and_face_takes_donor_tones(self):
         k = 10; o, c = self.org[k].astype(int), self.frames[k].astype(int); cx, cy = 150 + k, 300
@@ -80,22 +80,21 @@ class OutsideMaskCheckTest(unittest.TestCase):
         cls.dir = tempfile.mkdtemp(); cls.src = os.path.join(cls.dir, "src.mp4"); cls.don = os.path.join(cls.dir, "don.mp4"); cls.out = os.path.join(cls.dir, "out.mp4")
         make(cls.src, False); make(cls.don, True)
         cls.opts = cs.Options()
-        cls.frames, cls.report = cs.composite_swap(cls.src, cls.don, cls.out, start=0, seconds=1.0, options=cls.opts)
+        cls.frames, cls.report = cs.composite_swap(cls.src, cls.don, cls.out, start=0, seconds=1.0, options=cls.opts, edit_region={"box": [80, 180, 140, 180]})
         cls.org = cs.read_frames(cls.src, "fps=24", W, H, N)
-        cls.masks = cs.frame_masks(cls.org, cs.read_frames(cls.don, "fps=24", 96, 144, N), cls.opts)
+        cls.regions, _ = cs.declare_edit_region(cls.org, cls.opts, {"box": [80, 180, 140, 180]})
 
     def test_a_clean_composite_passes_both_checks(self):
-        self.assertEqual(self.report["outside_mask_pixels_changed"], 0)
-        self.assertLess(self.report["encoded_outside_changed_share"], self.opts.max_encoded_changed_share)
-        self.assertEqual(self.report["encoded_outside_bad_frames"], [])
+        self.assertEqual(self.report["preservation"]["changed_pixels"], 0)
+        self.assertEqual(self.report["preservation"]["verdict"], "pass")
+        self.assertIsNotNone(self.report["preservation"]["encoded"])
 
     def test_changing_pixels_outside_the_mask_is_caught_before_the_encode(self):
         edited = [f.copy() for f in self.frames]
         for k in (3, 9):
             edited[k][10:60, 10:120] = (255, 0, 255)          # a patch in the corner, far from the head
-        outside, _, _ = cs.outside_mask_changes(self.org, edited, self.masks, self.opts)
-        self.assertEqual(outside[0], 0)
-        self.assertGreater(outside[3], 50 * 110 - 1); self.assertGreater(outside[9], 50 * 110 - 1)
+        count, bad, _ = cs.pre_encode_check(self.org, edited, self.regions)
+        self.assertGreater(count, 0); self.assertEqual(bad, [3, 9])
 
     def test_changing_pixels_outside_the_mask_is_caught_after_the_encode(self):
         edited = [f.copy() for f in self.frames]
@@ -103,15 +102,91 @@ class OutsideMaskCheckTest(unittest.TestCase):
             edited[k][10:80, 10:160] = (255, 0, 255)
         path = os.path.join(self.dir, "edited.mp4"); cs.write_video(edited, path, 24, W, H)
         back = cs.read_frames(path, "fps=24", W, H, N)
-        worst, bad = cs.encoded_outside_check(self.org, list(back), self.masks, self.opts)
-        self.assertGreater(worst, self.opts.max_encoded_changed_share); self.assertEqual(len(bad), N)
+        clean = cs.encoded_preservation_check(list(cs.read_frames(self.src, "fps=24", W, H, N)), list(cs.read_frames(self.src, "fps=24", W, H, N)), self.regions, self.opts.encode_halo_px)
+        source_only = os.path.join(self.dir, "source-only.mp4"); cs.write_video(self.org, source_only, 24, W, H)
+        source_back = list(cs.read_frames(source_only, "fps=24", W, H, N))
+        edited_check = cs.encoded_preservation_check(source_back, list(back), self.regions, self.opts.encode_halo_px)
+        self.assertEqual(clean["largest_blob_px"], 0)
+        self.assertGreaterEqual(edited_check["largest_blob_px"], 50)
 
     def test_pixels_inside_the_mask_may_change_without_failing(self):
         k = 10; cx, cy = 150 + k, 300
         edited = [f.copy() for f in self.frames]
         edited[k][cy + 20:cy + 40, cx - 30:cx + 30] = (200, 150, 140)      # inside the face, where the donor goes
-        outside, _, _ = cs.outside_mask_changes(self.org, edited, self.masks, self.opts)
-        self.assertEqual(outside[k], 0)
+        count, _, _ = cs.pre_encode_check(self.org, edited, self.regions)
+        self.assertEqual(count, 0)
+
+    def test_one_pixel_change_fails_and_skin_has_no_exemption(self):
+        edited = [f.copy() for f in self.org]; edited[0][0, 0] = (15, 18, 25)
+        count, bad, _ = cs.pre_encode_check(self.org, edited, self.regions)
+        self.assertEqual(bad, [0]); self.assertEqual(count, 1)
+        edited = [f.copy() for f in self.org]; edited[0][40, 40] = (11, 18, 25)
+        count, _, _ = cs.pre_encode_check(self.org, edited, self.regions)
+        self.assertEqual(count, 1)
+
+    def test_region_is_independent_and_supplied_boxes_grow_and_hold(self):
+        original = cs.find_faces
+        try:
+            cs.find_faces = lambda frame, *a, **k: ([(30, 30, 20, 20)] if frame[0, 0, 0] else [])
+            frames = [np.zeros((100, 100, 3), np.uint8) for _ in range(3)]; frames[1][0, 0, 0] = 1
+            regions, source = cs.declare_edit_region(frames, cs.Options())
+            self.assertEqual(source, "detected"); self.assertTrue(all(r.any() for r in regions))
+        finally: cs.find_faces = original
+        regions, source = cs.declare_edit_region(frames, cs.Options(), {"boxes": [[5, 5, 10, 10], None, [40, 40, 10, 10]]})
+        self.assertEqual(source, "supplied"); self.assertTrue(regions[0][8, 8]); self.assertFalse(regions[0][0, 0]); self.assertFalse(regions[1].any()); self.assertTrue(regions[2][45, 45])
+        original = cs.find_faces
+        try:
+            cs.find_faces = lambda *a, **k: []
+            with self.assertRaises(cs.ReferenceError) as caught: cs.declare_edit_region([np.zeros((50, 50, 3), np.uint8)], cs.Options())
+        finally: cs.find_faces = original
+        self.assertEqual(caught.exception.code, "no_edit_region"); self.assertEqual(caught.exception.line, cs.NO_EDIT_REGION_LINE)
+
+    def test_recolour_leftover_does_not_touch_outside_region(self):
+        frame = np.full((H, W, 3), 40, np.uint8); cv2.ellipse(frame, (150, 280), (55, 70), 0, 0, 360, (90, 70, 65), -1)
+        raw = [frame.copy()]; mask = [np.zeros((H, W), np.float32)]; region = [np.zeros((H, W), bool)]; region[0][200:360, 90:210] = True
+        cs.recolour_leftover(raw, [frame], mask, cs.Options(), region)
+        self.assertTrue(np.array_equal(raw[0][~region[0]], frame[~region[0]]))
+
+
+class SecondFaceTest(unittest.TestCase):
+    """A second warm face outside the declared region: the swap must leave it exactly as it was, and an altered copy of it must fail the check
+    (the old check exempted every skin-coloured pixel and compared against the worker's own mask, so it passed this)."""
+    SECOND = ((60, 60), (30, 30))
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = tempfile.mkdtemp(); cls.src = os.path.join(cls.dir, "src.mp4"); cls.don = os.path.join(cls.dir, "don.mp4"); cls.out = os.path.join(cls.dir, "out.mp4")
+        cls.second_src, cls.second_don = [], []
+        for path, donor in ((cls.src, False), (cls.don, True)):
+            p = subprocess.Popen([os.environ.get("STACK_MEDIA_FFMPEG", "ffmpeg"), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{96 if donor else W}x{144 if donor else H}", "-r", "24", "-i", "-",
+                                  "-c:v", "libx264", "-crf", "8", "-pix_fmt", "yuv420p", path], stdin=subprocess.PIPE)
+            for k in range(N):
+                img = scene(donor, k); sc = (96 / W) if donor else 1.0
+                cv2.ellipse(img, (int(cls.SECOND[0][0] * sc), int(cls.SECOND[0][1] * sc)), (int(cls.SECOND[1][0] * sc), int(cls.SECOND[1][1] * sc)), 0, 0, 360, (210, 165, 150) if donor else (70, 55, 62), -1)
+                p.stdin.write(img.tobytes())
+            p.stdin.close(); p.wait()
+        cls.org = cs.read_frames(cls.src, "fps=24", W, H, N)
+        cls.frames, cls.report = cs.composite_swap(cls.src, cls.don, cls.out, start=0, seconds=1.0, edit_region={"box": [80, 180, 140, 180]})
+        cls.regions, _ = cs.declare_edit_region(cls.org, cs.Options(), {"box": [80, 180, 140, 180]})
+
+    def test_the_second_face_is_left_exactly_as_it_was(self):
+        (cx, cy), (rx, ry) = self.SECOND
+        for k in range(N):
+            self.assertTrue(np.array_equal(self.frames[k][cy - ry:cy + ry, cx - rx:cx + rx], self.org[k][cy - ry:cy + ry, cx - rx:cx + rx]), k)
+        self.assertEqual(self.report["preservation"]["changed_pixels"], 0); self.assertEqual(self.report["preservation"]["verdict"], "pass")
+
+    def test_a_head_larger_than_the_region_is_clipped_and_the_rest_stays_exact(self):
+        frames, report = cs.composite_swap(self.src, self.don, None, start=0, seconds=1.0, edit_region={"box": [120, 250, 60, 60]})
+        self.assertGreater(report["mask_clipped_pixels"], 0)
+        regions, _ = cs.declare_edit_region(self.org, cs.Options(), {"box": [120, 250, 60, 60]})
+        self.assertEqual(cs.pre_encode_check(self.org, frames, regions)[0], 0); self.assertEqual(report["preservation"]["verdict"], "pass")
+
+    def test_an_altered_second_face_fails(self):
+        (cx, cy), (rx, ry) = self.SECOND
+        edited = [f.copy() for f in self.org]
+        for f in edited: f[cy - 10:cy + 10, cx - 10:cx + 10] = (200, 150, 140)      # a recolored patch on skin: the old check exempted this
+        count, bad, _ = cs.pre_encode_check(self.org, edited, self.regions)
+        self.assertGreater(count, 0); self.assertEqual(len(bad), N)
 
 
 class CaptionTest(unittest.TestCase):
@@ -145,7 +220,7 @@ class CaptionTest(unittest.TestCase):
         for f in frames:
             cv2.putText(f, "CAPTION TEXT", (10, 440), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 0, 0), 7, cv2.LINE_AA); cv2.putText(f, "CAPTION TEXT", (10, 440), cv2.FONT_HERSHEY_DUPLEX, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
         cs.write_video(frames, src, 24, W, H)
-        _, rep = cs.composite_swap(src, don, os.path.join(d, "o.mp4"), seconds=1.0, caption_box=(1, 405, 300, 50))
+        _, rep = cs.composite_swap(src, don, os.path.join(d, "o.mp4"), seconds=1.0, caption_box=(1, 405, 300, 50), edit_region={"box": [80, 180, 140, 180]})
         self.assertIsNotNone(rep["caption_residue"]); self.assertLess(rep["caption_residue"], cs.Options().max_caption_residue)
 
 
@@ -215,10 +290,11 @@ class MathTest(unittest.TestCase):
 
     def test_command_line_writes_a_report_with_the_listed_fields(self):
         d = tempfile.mkdtemp(); src, don, out, rep = (os.path.join(d, n) for n in ("s.mp4", "d.mp4", "o.mp4", "r.json")); make(src, False); make(don, True)
-        r = subprocess.run([sys.executable, cs.__file__, "--source", src, "--donor", don, "--out", out, "--seconds", "1", "--report", rep], capture_output=True, text=True)
+        region = os.path.join(d, "region.json"); Path(region).write_text(json.dumps({"box": [80, 180, 140, 180]}))
+        r = subprocess.run([sys.executable, cs.__file__, "--source", src, "--donor", don, "--out", out, "--seconds", "1", "--report", rep, "--edit-region-file", region], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
         data = json.loads(Path(rep).read_text())
-        for k in ("mouth_flicker_original", "mouth_flicker_filtered", "residual_original_head_frames", "outside_mask_pixels_changed", "recoloured_leftover_skin_pixels"): self.assertIn(k, data)
+        for k in ("mouth_flicker_original", "mouth_flicker_filtered", "residual_original_head_frames", "preservation", "edit_region", "mask_clipped_pixels"): self.assertIn(k, data)
 
 
 if __name__ == "__main__":

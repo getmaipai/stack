@@ -37,6 +37,7 @@ export interface CompositeSwapInput {
   flowAlpha?: number; maskSmoothFrames?: number;
   /** The source's own frame rate (24 when absent); the donor is resampled to it and the composite is written at it. */
   fps?: number;
+  editRegionFile?: string;
   ffmpeg?: string; ffprobe?: string; signal?: AbortSignal;
 }
 export interface CompositeSwapReport {
@@ -44,12 +45,11 @@ export interface CompositeSwapReport {
   mouth_flicker_original: number; mouth_flicker_raw: number; mouth_flicker_filtered: number; flicker_ratio: number | null; flicker_ok: boolean;
   /** [frame, share of the original's skin pixels left unchanged] for frames above the flag share (an upper bound on dark footage). */
   residual_original_head_frames: Array<[number, number]>;
-  /** Pixels more than 12 px from the mask that differ from the original (must be 0), and original skin recoloured on purpose, counted apart. */
-  outside_mask_pixels_changed: number; recoloured_leftover_skin_pixels: number;
+  edit_region: { source: "detected" | "supplied"; head_scale: number; margin_frac: number; frames_with_region: number };
+  mask_clipped_pixels: number;
+  preservation: { verdict: "pass" | "fail"; changed_pixels: number; violating_frames: number[]; encoded: { persistent_pixels: number; largest_blob_px: number; share_gt8: number; max_diff: number } | null; map_path: string | null; reasons: string[] };
   /** The caption box that was erased (clamped inside the frame), and the share of its text edges that survived the erase (0 clean, 1 untouched; null when there was no text). */
   caption_box?: [number, number, number, number] | null; caption_residue?: number | null;
-  /** After the encode, read back from the finished file: the worst share of far-from-head pixels that changed in any frame, and the frames above the allowed share. */
-  encoded_outside_changed_share?: number | null; encoded_outside_bad_frames?: number[];
 }
 export type CompositeSwapResult = { ok: true; report: CompositeSwapReport } | { ok: false; line: string; code?: string };
 export type CompositeSwapRunner = (command: string[], env: Record<string, string>, signal?: AbortSignal) => Promise<{ code: number; stdout: string; stderr: string }>;
@@ -74,6 +74,7 @@ export function compositeSwapEnv(tools: { ffmpeg?: string; ffprobe?: string } = 
 export function compositeSwapArgs(input: CompositeSwapInput, workerPath: string): string[] {
   const args = [compositeSwapPython(), workerPath, "--source", input.source, "--donor", input.donor, "--out", input.out, "--start", String(input.start ?? 0), "--seconds", String(input.seconds ?? 2.3333)];
   if (input.captionBox) args.push("--caption-box", input.captionBox.join(","));
+  if (input.editRegionFile) args.push("--edit-region-file", input.editRegionFile);
   if (input.reportPath) args.push("--report", input.reportPath);
   if (input.flowAlpha !== undefined) args.push("--flow-alpha", String(input.flowAlpha));
   if (input.maskSmoothFrames !== undefined) args.push("--mask-smooth-frames", String(input.maskSmoothFrames));

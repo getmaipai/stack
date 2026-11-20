@@ -150,7 +150,7 @@ export async function dispatchSwap(request: SwapRequest, plan: Planned, read: Pi
 const cancelled = (signal: AbortSignal): void => { if (signal.aborted) throw new Error("Cancelled."); };
 const VIDEO = ["-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"] as const;
 
-export interface SwapCheckSummary { segment: number; at: number; donor_psnr_db: number | null; tries: number; mouth_flicker_ratio: number | null; caption_residue: number | null; outside_pixels_changed: number; residual_head_frames: number }
+export interface SwapCheckSummary { segment: number; at: number; donor_psnr_db: number | null; tries: number; mouth_flicker_ratio: number | null; caption_residue: number | null; preservation_verdict: "pass" | "fail"; changed_pixels: number; persistent_blob_px: number; changed_map_path: string | null; residual_head_frames: number }
 
 export function registerSwapMakeJobs(): void {
   registerJobRunner(SWAP_MAKE_JOB_KIND, runSwap, { generator: { role: "video", memory: (job) => { const peak = Number((job.input as { peakBytes?: number } | null)?.peakBytes ?? 0); return { requestedBytes: peak, measuredPeakBytes: peak, engine: "swap" }; } } });
@@ -298,6 +298,6 @@ async function makeDonor(input: { adapter: DonorAdapter; media: Media; guide: st
 }
 
 function summary(segment: Segment, at: number, donor: Donor, report: CompositeSwapReport): SwapCheckSummary {
-  return { segment: segment.index, at, donor_psnr_db: donor.psnr === null || !Number.isFinite(donor.psnr) ? null : Math.round(donor.psnr * 10) / 10, tries: donor.tries, mouth_flicker_ratio: report.flicker_ratio === null ? null : Math.round(report.flicker_ratio * 100) / 100, caption_residue: report.caption_residue ?? null, outside_pixels_changed: report.outside_mask_pixels_changed, residual_head_frames: report.residual_original_head_frames.length };
+  return { segment: segment.index, at, donor_psnr_db: donor.psnr === null || !Number.isFinite(donor.psnr) ? null : Math.round(donor.psnr * 10) / 10, tries: donor.tries, mouth_flicker_ratio: report.flicker_ratio === null ? null : Math.round(report.flicker_ratio * 100) / 100, caption_residue: report.caption_residue ?? null, preservation_verdict: report.preservation.verdict, changed_pixels: report.preservation.changed_pixels, persistent_blob_px: report.preservation.encoded?.largest_blob_px ?? 0, changed_map_path: report.preservation.map_path, residual_head_frames: report.residual_original_head_frames.length };
 }
 
