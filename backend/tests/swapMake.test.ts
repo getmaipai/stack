@@ -120,6 +120,7 @@ describe("the checks that fail a job, each with one plain line", () => {
     noWords(donorCopiedLine(65, 3)); expect(donorCopiedLine(65, 3)).toContain("1:05"); expect(donorCopiedLine(5, 1)).toContain("1 try.");
   });
   test("a clean report has no failures", () => { expect(segmentFailures(report(), 0)).toEqual([]); });
+  test("an inconclusive preservation verdict fails closed like a failed one", () => { expect(segmentFailures(report({ preservation: { ...report().preservation, verdict: "inconclusive" } }), 0)).toHaveLength(1); });
   test("a failed preservation verdict or a missing old-worker check fails", () => {
     for (const bad of [report({ preservation: { ...report().preservation, verdict: "fail" } }), (() => { const r = report() as unknown as Record<string, unknown>; delete r.preservation; return r as unknown as CompositeSwapReport; })()]) {
       const lines = segmentFailures(bad, 12); expect(lines).toHaveLength(1); expect(lines[0]).toContain("outside the head"); expect(lines[0]).toContain("0:12"); noWords(lines[0]!);

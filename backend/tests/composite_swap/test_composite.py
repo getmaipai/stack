@@ -246,15 +246,85 @@ class EncoderDriftTest(unittest.TestCase):
         decoded = list(cs.read_frames(src, "fps=24", self.W, self.H, self.N))      # a swap is made from the decoded source, like the file under test
         edited = []
         for k, f in enumerate(decoded):
-            g = f.copy(); g[self.REGION] = np.clip(g[self.REGION].astype(int) + np.random.default_rng(7 + k).integers(-255, 256, (240, 240, 3)), 0, 255); edited.append(g)
+            g = f.copy()
+            if k < 60: g[self.REGION] = np.clip(g[self.REGION].astype(int) + np.random.default_rng(7 + k).integers(-255, 256, (240, 240, 3)), 0, 255)
+            edited.append(g)
         cs.write_video(edited, dl, 24, self.W, self.H)
-        report = cs.verify_delivered(src, dl, seconds=self.N / 24, edit_region={"box": [60, 100, 240, 240]})
+        region = {"boxes": [[60, 100, 240, 240]] * 60 + [None] * (self.N - 60)}       # the target is absent in the last 36 frames: nothing was edited there
+        report = cs.verify_delivered(src, dl, seconds=self.N / 24, edit_region=region)
         self.assertEqual(report["preservation"]["pre_encode"], "not_run"); self.assertIsNone(report["preservation"]["changed_pixels"])
         self.assertEqual(report["preservation"]["verdict"], "pass")
         changed = [f.copy() for f in edited]
-        for f in changed: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
+        for f in changed[:60]: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
         bad = os.path.join(self.dir, "bad.mp4"); cs.write_video(changed, bad, 24, self.W, self.H)
-        self.assertEqual(cs.verify_delivered(src, bad, seconds=self.N / 24, edit_region={"box": [60, 100, 240, 240]})["preservation"]["verdict"], "fail")
+        self.assertEqual(cs.verify_delivered(src, bad, seconds=self.N / 24, edit_region=region)["preservation"]["verdict"], "fail")
+
+
+class ForeignEncoderTest(unittest.TestCase):
+    """A delivered file made by another pipeline (here a bt709 conversion and a light blur, where the worker's own encode is plain) differs from the decoded
+    source at saturated hard edges such as a caption pill, in every frame, including frames nothing touched. The worker's own source-only encode cannot predict
+    it; the delivered file's own unedited frames can. Each place's ceiling there is how far the file's untouched frames differ from the source."""
+    W, H, N, EDITED = 360, 640, 96, 40
+    BOX = [60, 100, 240, 240]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = tempfile.mkdtemp()
+        base = np.random.default_rng(1).integers(-4, 5, (cls.H, cls.W, 1))
+        frames = []
+        for k in range(cls.N):
+            f = np.clip(np.full((cls.H, cls.W, 3), (120, 130, 125)) + base + np.random.default_rng(k).integers(-4, 5, (cls.H, cls.W, 1)), 0, 255).astype(np.uint8)
+            cv2.rectangle(f, (30, 500), (330, 540), (20, 60, 230), -1); cv2.putText(f, "CAPTION TEXT HERE", (40, 534), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            frames.append(f)
+        cls.src = os.path.join(cls.dir, "src.mp4"); cs.write_video(frames, cls.src, 24, cls.W, cls.H)
+        cls.decoded = list(cs.read_frames(cls.src, "fps=24", cls.W, cls.H, cls.N))
+
+    @classmethod
+    def foreign(cls, frames, name):
+        path = os.path.join(cls.dir, name)
+        p = subprocess.Popen([os.environ.get("STACK_MEDIA_FFMPEG", "ffmpeg"), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{cls.W}x{cls.H}", "-r", "24", "-i", "-",
+                              "-vf", "scale=out_color_matrix=bt709:out_range=tv,gblur=sigma=0.6", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", path], stdin=subprocess.PIPE)
+        for f in frames: p.stdin.write(f.tobytes())
+        p.stdin.close(); p.wait()
+        return path
+
+    def edited_frames(self, edited):
+        out = []
+        for k, f in enumerate(self.decoded):
+            g = f.copy()
+            if k < edited: g[100:340, 60:300] = np.clip(g[100:340, 60:300].astype(int) + np.random.default_rng(7 + k).integers(-255, 256, (240, 240, 3)), 0, 255)
+            out.append(g)
+        return out
+
+    def verify(self, delivered, edited):
+        return cs.verify_delivered(self.src, delivered, seconds=self.N / 24, edit_region={"boxes": [self.BOX] * edited + [None] * (self.N - edited)})
+
+    def test_the_worker_encode_as_control_fails_this_clean_file_falsely(self):
+        # what the first drift control did: judge a foreign file against the worker's own source-only encode
+        frames = self.edited_frames(self.EDITED)
+        path = self.foreign(frames, "old.mp4"); back = list(cs.read_frames(path, "fps=24", self.W, self.H, self.N))
+        regions, _ = cs.declare_edit_region(self.decoded, cs.Options(), {"boxes": [self.BOX] * self.EDITED + [None] * (self.N - self.EDITED)})
+        source_only = os.path.join(self.dir, "so.mp4"); cs.write_video(self.decoded, source_only, 24, self.W, self.H)
+        so = list(cs.read_frames(source_only, "fps=24", self.W, self.H, self.N))
+        inverted = [np.where(r[..., None], 255 - f, f).astype(np.uint8) for f, r in zip(self.decoded, regions)]
+        control = os.path.join(self.dir, "ctl.mp4"); cs.write_video(inverted, control, 24, self.W, self.H)
+        self.assertGreaterEqual(cs.encoded_preservation_check(so, back, list(cs.read_frames(control, "fps=24", self.W, self.H, self.N)), regions, 32)["largest_blob_px"], 50)
+
+    def test_unedited_frames_of_the_delivered_file_measure_its_own_drift(self):
+        report = self.verify(self.foreign(self.edited_frames(self.EDITED), "clean.mp4"), self.EDITED)
+        self.assertEqual(report["preservation"]["verdict"], "pass"); self.assertEqual(report["preservation"]["baseline"]["source"], "unedited_frames")
+        self.assertEqual(report["preservation"]["pre_encode"], "not_run")
+
+    def test_an_edit_outside_the_region_still_fails_with_that_baseline(self):
+        frames = self.edited_frames(self.EDITED)
+        for f in frames[:self.EDITED]: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
+        report = self.verify(self.foreign(frames, "patch.mp4"), self.EDITED)
+        self.assertEqual(report["preservation"]["verdict"], "fail"); self.assertGreaterEqual(report["preservation"]["encoded"]["largest_blob_px"], 1500)
+
+    def test_without_unedited_frames_a_hard_edge_difference_is_inconclusive_not_a_pass_or_a_fail(self):
+        report = self.verify(self.foreign(self.edited_frames(self.N), "all.mp4"), self.N)
+        self.assertEqual(report["preservation"]["verdict"], "inconclusive"); self.assertEqual(report["preservation"]["baseline"]["source"], "none")
+        self.assertTrue(any("unknown_encoder" in r for r in report["preservation"]["reasons"]))
 
 
 class RegionShapeTest(unittest.TestCase):

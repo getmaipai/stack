@@ -429,6 +429,7 @@ def halo_outside(region, halo):
     return cv2.dilate(region.astype(np.uint8), np.ones((2 * halo + 1, 2 * halo + 1), np.uint8)) == 0
 
 DRIFT_REACH_PX = 15        # how far from the control's persistent drift a delivered area may sit and still count as the same drifting edge
+FOREIGN_MARGIN = 8          # levels above the most the delivered file's own untouched frames differ from the source at a place before a difference counts
 DRIFT_OVERLAP = 0.5        # share of a persistent area that must lie on the control's drift for the whole area to be called encoder drift
 
 
@@ -438,6 +439,22 @@ def persistent_votes(a_frames, b_frames, outside, minimum):
     for a, b, o in zip(a_frames, b_frames, outside):
         votes += ((np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > 8) & o).astype(np.int32)
     return votes >= minimum
+
+
+def judge_areas(delivered_votes, control_votes):
+    """Splits the delivered file's persistent areas into those a control explains (at least half of the area lies within 15 px of where the control is
+    persistently moved too: encoder drift) and those it does not. Returns (the mask that counts, the number of pixels explained)."""
+    near_drift = cv2.dilate(control_votes.astype(np.uint8), np.ones((2 * DRIFT_REACH_PX + 1, 2 * DRIFT_REACH_PX + 1), np.uint8)) > 0
+    joined = cv2.dilate(delivered_votes.astype(np.uint8), np.ones((5, 5), np.uint8))
+    count, labels, _, _ = cv2.connectedComponentsWithStats(joined, 8)
+    counted = np.zeros_like(delivered_votes); masked = 0
+    for c in range(1, count):
+        area = (labels == c) & delivered_votes
+        pixels = int(area.sum())
+        if pixels == 0: continue
+        if int((area & near_drift).sum()) >= DRIFT_OVERLAP * pixels: masked += pixels
+        else: counted |= area
+    return counted, masked
 
 
 def encoded_preservation_check(source_encoded, delivered, control_encoded, regions, halo):
@@ -453,16 +470,7 @@ def encoded_preservation_check(source_encoded, delivered, control_encoded, regio
     minimum = max(5, int(np.ceil(0.1 * len(source_encoded))))
     delivered_votes = persistent_votes(source_encoded, delivered, outside, minimum)
     control_votes = persistent_votes(source_encoded, control_encoded, outside, minimum)
-    near_drift = cv2.dilate(control_votes.astype(np.uint8), np.ones((2 * DRIFT_REACH_PX + 1, 2 * DRIFT_REACH_PX + 1), np.uint8)) > 0
-    joined = cv2.dilate(delivered_votes.astype(np.uint8), np.ones((5, 5), np.uint8))
-    count, labels, _, _ = cv2.connectedComponentsWithStats(joined, 8)
-    counted = np.zeros_like(delivered_votes); masked = 0
-    for c in range(1, count):
-        area = (labels == c) & delivered_votes
-        pixels = int(area.sum())
-        if pixels == 0: continue
-        if int((area & near_drift).sum()) >= DRIFT_OVERLAP * pixels: masked += pixels
-        else: counted |= area
+    counted, masked = judge_areas(delivered_votes, control_votes)
     n2, _, stats, _ = cv2.connectedComponentsWithStats(counted.astype(np.uint8), 8)
     sizes = stats[1:, cv2.CC_STAT_AREA] if n2 > 1 else []
     diffs = [np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) for a, b in zip(source_encoded, delivered)]
@@ -515,9 +523,52 @@ def encoded_check_on_file(org, back, regions, o: Options, base, w, h):
     return encoded, map_path
 
 
+def foreign_check(org, back, regions, o: Options, base, w, h):
+    """The post-encode check for a delivered file another tool encoded. Its encoder, color conversion and frame handling are unknown, so a source-only encode
+    made here cannot predict where it moves untouched pixels. The delivered file's own frames in which the declared region is empty (the target was absent, so
+    nothing was edited) are the control: they show exactly what that pipeline does to untouched pixels, at every place. Without enough of them the check cannot
+    tell a hard-edge difference from an edit and says so (`unknown_encoder`) instead of passing or failing. Returns (encoded numbers, baseline, verdict, reasons, map path)."""
+    n = len(org)
+    outside = [halo_outside(r, o.encode_halo_px) for r in regions]
+    unedited = [k for k, r in enumerate(regions) if not r.any()]
+    enough = len(unedited) >= max(20, int(np.ceil(0.1 * n)))
+    diffs = [np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) for a, b in zip(org, back)]
+    if enough:
+        # the most that pipeline moved each place in frames it did not edit, spread 4 px each way for sub-pixel shifts: a difference only counts above it by a margin
+        ceiling = cv2.dilate(np.max(np.stack([diffs[k] for k in unedited]), axis=0).astype(np.uint8), np.ones((2 * DRIFT_REACH_PX // 3 + 1, 2 * DRIFT_REACH_PX // 3 + 1), np.uint8)).astype(np.int16)
+        baseline = {"source": "unedited_frames", "frames": len(unedited)}
+        flagged = [(d > ceiling + FOREIGN_MARGIN) & x for d, x in zip(diffs, outside)]
+    else:
+        baseline = {"source": "none", "frames": len(unedited)}
+        flagged = [(d > 8) & x for d, x in zip(diffs, outside)]
+    counted = np.sum(np.stack(flagged), axis=0) >= max(5, int(np.ceil(0.1 * n)))
+    masked = 0
+    count, _, stats, _ = cv2.connectedComponentsWithStats(counted.astype(np.uint8), 8)
+    largest = int(stats[1:, cv2.CC_STAT_AREA].max()) if count > 1 else 0
+    total = sum(int(x.sum()) for x in outside)
+    encoded = dict(persistent_pixels=int(counted.sum()), largest_blob_px=largest, share_gt8=sum(int(((d > 8) & x).sum()) for d, x in zip(diffs, outside)) / max(1, total),
+                   max_diff=int(max(d.max() for d in diffs)), drift_masked_px=int(masked))
+    reasons = []
+    if largest < 50: verdict = "pass"
+    elif enough: verdict = "fail"; reasons.append("A persistent changed area was found outside the declared edit region.")
+    else:
+        verdict = "inconclusive"
+        reasons.append("unknown_encoder: this clip was encoded by another tool and fewer than 20 of its frames are free of the target, so its own drift at hard edges cannot be measured. A persistent difference of "
+                       f"{largest} pixels was found outside the region and cannot be told from an edit. Check it by eye, or give the swap tool's own unedited output of the same clip.")
+    overlay = org[0].copy()
+    for a, b, x in zip(org, back, outside):
+        overlay[(np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > 8) & x] = (255, 0, 0)
+    map_path = base + ".changedmap.png"
+    contours, _ = cv2.findContours(regions[0].astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2)
+    cv2.imwrite(map_path, cv2.cvtColor(np.hstack([org[0], overlay]), cv2.COLOR_RGB2BGR))
+    return encoded, baseline, verdict, reasons, map_path
+
+
 def verify_delivered(source, delivered, start=0.0, seconds=2.3333, caption_box=None, edit_region=None, options: Options | None = None, base=None):
     """Judge a delivered file that this worker did not make (a swap from another tool). The pre-encode exact check cannot run on a file, so the report says
-    `pre_encode: not_run`; the verdict rests on the post-encode check alone."""
+    `pre_encode: not_run`. The delivered file is compared with the decoded source, and the file's own frames that the swap did not touch measure its encoder's
+    drift (see foreign_check); the verdict is pass, fail or inconclusive."""
     o = options or Options()
     w, h = probe_size(delivered)
     n = int(round(seconds * o.fps))
@@ -530,11 +581,12 @@ def verify_delivered(source, delivered, start=0.0, seconds=2.3333, caption_box=N
     if caption_box:
         x, y, bw, bh = caption_box
         for r in regions: r[y:y + bh, x:x + bw] = True
-    encoded, map_path = encoded_check_on_file(list(org), list(back), regions, o, base or delivered, w, h)
-    fail = encoded["largest_blob_px"] >= 50
-    return {"frames": len(org), "size": [w, h], "edit_region": {"source": region_source, "head_scale": o.region_head_scale, "margin_frac": o.region_margin_frac, "frames_with_region": sum(bool(r.any()) for r in regions)},
-            "frames_compared": compared, "preservation": {"verdict": "fail" if fail or mismatch else "pass", "pre_encode": "not_run", "changed_pixels": None, "violating_frames": [], "encoded": encoded, "map_path": map_path,
-                             "reasons": (["A persistent changed area was found outside the declared edit region."] if fail else []) + (["The delivered clip and the source differ in length by more than one frame, so they cannot be compared."] if mismatch else [])}}
+    encoded, baseline, verdict, reasons, map_path = foreign_check(list(org), list(back), regions, o, base or delivered, w, h)
+    if mismatch:
+        verdict = "fail"; reasons.append("The delivered clip and the source differ in length by more than one frame, so they cannot be compared.")
+    return {"frames": len(org), "size": [w, h], "frames_compared": compared,
+            "edit_region": {"source": region_source, "head_scale": o.region_head_scale, "margin_frac": o.region_margin_frac, "frames_with_region": sum(bool(r.any()) for r in regions)},
+            "preservation": {"verdict": verdict, "pre_encode": "not_run", "changed_pixels": None, "violating_frames": [], "baseline": baseline, "encoded": encoded, "map_path": map_path, "reasons": reasons}}
 
 
 def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None, caption_box=None, reference_crops=(), options: Options | None = None, report_path=None, edit_region=None):

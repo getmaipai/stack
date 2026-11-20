@@ -153,7 +153,7 @@ export async function dispatchSwap(request: SwapRequest, plan: Planned, read: Pi
 const cancelled = (signal: AbortSignal): void => { if (signal.aborted) throw new Error("Cancelled."); };
 const VIDEO = ["-an", "-c:v", "libx264", "-pix_fmt", "yuv420p"] as const;
 
-export interface SwapCheckSummary { segment: number; at: number; donor_psnr_db: number | null; tries: number; mouth_flicker_ratio: number | null; caption_residue: number | null; preservation_verdict: "pass" | "fail"; pre_encode: "run" | "not_run"; changed_pixels: number; persistent_blob_px: number; changed_map_path: string | null; residual_head_frames: number }
+export interface SwapCheckSummary { segment: number; at: number; donor_psnr_db: number | null; tries: number; mouth_flicker_ratio: number | null; caption_residue: number | null; preservation_verdict: "pass" | "fail" | "inconclusive"; pre_encode: "run" | "not_run"; changed_pixels: number; persistent_blob_px: number; changed_map_path: string | null; residual_head_frames: number }
 
 export function registerSwapMakeJobs(): void {
   registerJobRunner(SWAP_MAKE_JOB_KIND, runSwap, { generator: { role: "video", memory: (job) => { const peak = Number((job.input as { peakBytes?: number } | null)?.peakBytes ?? 0); return { requestedBytes: peak, measuredPeakBytes: peak, engine: "swap" }; } } });
