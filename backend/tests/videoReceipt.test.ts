@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StackVideoReceipt } from "@maipai/spec/stack/ts/stack-video-receipt.js";
 import { deliverClip } from "@/video/deliver";
+import { RecipeFinishFailure } from "@/video/recipeFinish";
 import { buildReceipt, phaseDurations, setReceiptProbeForTests, sha256Hex, type ReceiptFile } from "@/video/receipt";
 import { commitResult, nativePath, readReceipt, readResult, receiptPath, resultsRoot, sweepResults, videoPath, workDir, type VideoResultMeta } from "@/video/results";
 import { deriveDelivered } from "@/video/videoGen";
@@ -70,7 +71,7 @@ test("an H3 finish works on a copy: native.mp4 keeps the model's bytes, video.mp
   let poster = "";
   const made = await deliverClip({
     outputDir: dir, derivedByGenerator: false, reported: { width: 864, height: 480, frames: 121, fps: 24, audio: true },
-    finish: async (path) => { writeFileSync(path, "H3-FINISHED"); },
+    finish: async (path) => { writeFileSync(path, "H3-FINISHED"); return [{ operation: "model_upscale", from: { width: 864, height: 480 }, to: { width: 1728, height: 960 }, ok: true, code: null }]; },
     recutPoster: async (video, target) => { poster = readFileSync(video, "utf8"); writeFileSync(target, "NEW-POSTER"); },
   });
   expect(readFileSync(join(dir, "native.mp4"), "utf8")).toBe("H3-NATIVE");
@@ -86,7 +87,7 @@ test("a failed H3 finish leaves the native file delivered, says so in the receip
   sizes({ "native.mp4": file(864, 480), "video.mp4": file(864, 480) });
   const made = await deliverClip({
     outputDir: dir, derivedByGenerator: false, reported: { width: 864, height: 480, frames: 121, fps: 24, audio: true },
-    finish: async () => { throw new Error("upscale failed"); }, recutPoster: async () => { throw new Error("must not be called"); },
+    finish: async () => { throw new RecipeFinishFailure("model_upscale", [], new Error("upscale failed")); }, recutPoster: async () => { throw new Error("must not be called"); },
   });
   expect(readFileSync(join(dir, "video.mp4"), "utf8")).toBe("H3-NATIVE"); expect(readFileSync(join(dir, "poster.jpg"), "utf8")).toBe("OLD-POSTER");
   expect(made).toMatchObject({ deliveredIs: "native", keptNative: true });

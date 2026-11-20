@@ -31,6 +31,12 @@ test("a silent H.264 clip keeps its picture and gains a silent AAC track, moov f
   expect(args).toContain("title=paper boat");
 });
 
+test("-shortest only ends the silent track the clip did not have, never the picture of a clip with its own sound (121 frames became 118)", () => {
+  expect(messagesArgs("in.mp4", "out.mp4", parseProbe(PROBE_SILENT), "t")).toContain("-shortest");
+  expect(messagesArgs("in.mp4", "out.mp4", parseProbe(PROBE_SOUND), "t")).not.toContain("-shortest");
+  expect(messagesArgs("in.mp4", "out.mp4", parseProbe(PROBE_SOUND), "t", true)).not.toContain("-shortest");
+});
+
 test("a sound track the model made (AAC) is copied untouched, in both the picture-copy and the re-encode case", () => {
   const withSound = messagesArgs("in.mp4", "out.mp4", parseProbe(PROBE_SOUND), "t").join(" ");
   expect(withSound).toContain("-c:a copy");

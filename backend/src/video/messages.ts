@@ -51,7 +51,9 @@ export function messagesArgs(input: string, output: string, facts: ClipFacts, ti
   args.push("-tag:v", "avc1");
   if (facts.hasAudio && facts.audioCodec === "aac") args.push("-c:a", "copy");
   else args.push("-c:a", "aac", "-b:a", facts.hasAudio ? "192k" : "96k", "-ar", facts.hasAudio ? "48000" : "44100");
-  args.push("-shortest", "-movflags", "+faststart", "-map_metadata", "-1", "-metadata", `title=${title}`, "-f", "mp4", output);
+  // -shortest only ends the silent track the clip did not have; with the model's own sound it cut the picture to the sound's length (121 frames became 118).
+  if (!facts.hasAudio) args.push("-shortest");
+  args.push("-movflags", "+faststart", "-map_metadata", "-1", "-metadata", `title=${title}`, "-f", "mp4", output);
   return args;
 }
 

@@ -17,6 +17,7 @@ import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@
 import { overallPercent, VideoError, videoGen, VIDEO_SPECS, type VideoQuality, type VideoRunInput } from "./videoGen";
 import { engineOfQuality } from "./caps";
 import { videoRecipe } from "./recipes";
+import { applyRecipeFinish } from "./recipeFinish";
 import { ltx25MaxPeakBytes, ltx25PeakBytes, LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES } from "./ltx25";
 import { checkEdit, EditSourceError, editRuntime, extendLatentFrames, extendPixelFrames, fitArgs, ltx25EditAdmitBytes, planSource, probeSource, retakeStartLatent, type Ltx25EditKind } from "./ltx25Edit";
 import { resolveReadable } from "@/media/paths";
@@ -211,19 +212,20 @@ export function registerVideoJobs(): void {
       // VF-RECEIPT-01: the model's own file is kept; see deliver.ts. A failed finish tells the person (the clip is kept as made) and still delivers the native file.
       const video = join(outputDir, "video.mp4");
       const poster = join(outputDir, "poster.jpg");
-      const isH3 = quality === "h3" || quality === "h3stream";
+      // The finish comes from the recipe the pack declared for this level and size (VF-FINISH-01); a recipe without one leaves the file as the engine made it.
+      const finishSteps = chosenRecipe?.finish ?? [];
       const delivery = await deliverClip({
         outputDir, derivedByGenerator: result.derived === "messaging_copy", signal,
         reported: { width: result.width, height: result.height, frames: result.frames, fps: result.fps, audio: result.audio },
-        finish: isH3 ? async (path) => {
+        finish: finishSteps.length ? async (path) => {
           try {
             const ffmpeg = await defaultToolbox.path("ffmpeg", (status) => update({ status }), signal);
             const ffprobe = await defaultToolbox.path("ffprobe", (status) => update({ status }), signal);
-            const probe = await probeFile(spawnRunner, ffprobe, path, signal);
-            const target = join(outputDir, "video-upscaled.mp4");
-            await upscaleClip({ ffmpeg, run: spawnRunner, input: path, target, work: outputDir, probe, signal, progress: (next) => update(next), basePercent: 95, percentSpan: 4 });
-            copyFileSync(target, path);
-          } catch (error) { if (!signal.aborted) update({ status: "The clip is kept as made: the sharpening step could not run, so it is not sharpened." }); throw error; }
+            return await applyRecipeFinish({
+              steps: finishSteps, path, workDir: outputDir, ffmpeg, ffprobe, run: spawnRunner, ...(signal ? { signal } : {}),
+              upscale: async (from, target) => { const probe = await probeFile(spawnRunner, ffprobe, from, signal); await upscaleClip({ ffmpeg, run: spawnRunner, input: from, target, work: outputDir, probe, signal, progress: (next) => update(next), basePercent: 95, percentSpan: 4 }); },
+            });
+          } catch (error) { if (!signal.aborted) update({ status: "The clip is kept as made: the finishing step could not run, so it is not finished." }); throw error; }
         } : null,
         recutPoster: async (file, target) => { const ffmpeg = await defaultToolbox.path("ffmpeg", () => {}, signal); await spawnRunner([ffmpeg, "-y", "-i", file, "-frames:v", "1", "-q:v", "2", target], { signal }); },
       });
