@@ -6,7 +6,7 @@ import { getModel } from "@/lib/modelStore";
 import { STACK_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_H3_ID, STACK_VIDEO_H3_MODELS, STACK_VIDEO_H3_MODEL_ID, STACK_VIDEO_MODEL_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
 import { H3_LAYOUT } from "@/images/h3Layout";
 
-export interface MissingModelFiles { role: string; model: string; missing_paths: string[]; }
+export interface MissingModelFiles { role: string; model: string; part_id: string; override: boolean; missing_paths: string[]; }
 /** Files the selected role model actually reads, following its pinned install layout. */
 export function missingModelFiles(): MissingModelFiles[] {
   const result: MissingModelFiles[] = [];
@@ -14,8 +14,10 @@ export function missingModelFiles(): MissingModelFiles[] {
     const model = selectedModel(role);
     if (!model) continue;
     let required: string[];
+    let override = false;
     if (role === "video" && process.env.MAIPAI_H3_VIDEO_HOME && model.id === STACK_VIDEO_H3_MODEL_ID) {
       const home = process.env.MAIPAI_H3_VIDEO_HOME;
+      override = true;
       const models = join(home, "models/minimax_h3");
       required = [join(home, "node/scripts/generate_staged.py"), join(home, ".venv/bin/python"), join(models, "upstream/FL2VA"), join(models, "qwen/8-bit"), join(models, "transformers/8-bit")];
     } else {
@@ -31,7 +33,7 @@ export function missingModelFiles(): MissingModelFiles[] {
       } else required = [];
     }
     const missing = required.filter((path) => !existsSync(path));
-    if (missing.length) result.push({ role, model: model.id, missing_paths: missing });
+    if (missing.length) result.push({ role, model: model.id, part_id: model.id, override, missing_paths: missing });
   }
   return result;
 }

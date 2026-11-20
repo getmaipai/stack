@@ -38,7 +38,7 @@ test("GET /stack/v1/disk includes volumes and selected-model missing list", asyn
   __setDiskReaderForTests(() => ({ free: 50_000_000_000, total: 100_000_000_000, device: 9 }));
   const response = await app.request("/stack/v1/disk");
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ level: expect.any(String), volumes: [expect.objectContaining({ path: expect.any(String), free_bytes: expect.any(Number), total_bytes: expect.any(Number), warn_bytes: expect.any(Number), critical_bytes: expect.any(Number) })], missing: expect.arrayContaining([expect.objectContaining({ role: "chat", model: STACK_CHAT_8B_MODEL.id, missing_paths: [missingPath] })]) });
+  expect(await response.json()).toMatchObject({ level: expect.any(String), volumes: [expect.objectContaining({ path: expect.any(String), free_bytes: expect.any(Number), total_bytes: expect.any(Number), warn_bytes: expect.any(Number), critical_bytes: expect.any(Number) })], missing: expect.arrayContaining([expect.objectContaining({ role: "chat", model: STACK_CHAT_8B_MODEL.id, part_id: STACK_CHAT_8B_MODEL.id, override: false, missing_paths: [missingPath] })]) });
   __setPreferredModelForTests("chat", null);
 });
 

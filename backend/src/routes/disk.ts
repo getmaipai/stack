@@ -4,7 +4,7 @@ import type { AppEnv } from "@/types";
 import { getDiskConfig, latestDisk, setDiskConfig } from "@/lib/diskState";
 import { missingModelFiles } from "@/lib/missingModels";
 const Volume = z.object({ path: z.string(), free_bytes: z.number(), total_bytes: z.number(), level: z.enum(["normal", "warn", "critical"]), warn_bytes: z.number(), critical_bytes: z.number() });
-const route = createRoute({ method: "get", path: "/", tags: ["Disk"], summary: "Disk space and selected model files", responses: { 200: { content: { "application/json": { schema: z.object({ level: z.enum(["normal", "warn", "critical"]), volumes: z.array(Volume), missing: z.array(z.object({ role: z.string(), model: z.string(), missing_paths: z.array(z.string()) })) }) } }, description: "Current disk volume levels and missing files for selected models." } } });
+const route = createRoute({ method: "get", path: "/", tags: ["Disk"], summary: "Disk space and selected model files", responses: { 200: { content: { "application/json": { schema: z.object({ level: z.enum(["normal", "warn", "critical"]), volumes: z.array(Volume), missing: z.array(z.object({ role: z.string(), model: z.string(), part_id: z.string(), override: z.boolean(), missing_paths: z.array(z.string()) })) }) } }, description: "Current disk volume levels and missing files for selected models." } } });
 const configRoute = createRoute({
   method: "post", path: "/config", tags: ["Disk"], summary: "Set runtime disk thresholds",
   request: { body: { content: { "application/json": { schema: z.object({ warn_free_gb: z.number().min(0), critical_free_gb: z.number().min(0) }) } } } },
