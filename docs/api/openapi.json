@@ -4543,6 +4543,14 @@
                     "description": "Which video model: `video` or `quick` (default, Wan, silent up to 5 s), `ltx25-q8` (LTX-2.5 Standard and Boost), or `ltx25-max` (LTX-2.5 Max). A model id names it too. The retired `detailed` value and the retired LTX-2.3 model id answer 422: use `ltx25-q8` or `ltx25-max`. Unknown names answer 422; an uninstalled model answers 503.",
                     "example": "quick"
                   },
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "boost",
+                      "max"
+                    ]
+                  },
                   "prompt": {
                     "type": "string",
                     "minLength": 1,
@@ -16009,6 +16017,14 @@
                                       "type": "string",
                                       "minLength": 1
                                     },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "description": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
                                     "inputs": {
                                       "type": "object",
                                       "properties": {
@@ -16641,6 +16657,14 @@
                                       "type": "boolean"
                                     },
                                     "unavailable_reason": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "description": {
                                       "type": "string",
                                       "minLength": 1
                                     },
@@ -28864,7 +28888,7 @@
                                       "retake"
                                     ]
                                   },
-                                  "description": "One row: `max`, 1024x576, up to 10 s (241 frames). `peak_gb` is the measured OS footprint of that clip (48.6 GB, `footprint`; the MLX peak reads lower and is not the figure); `admit_gb` is what admission reserves (the measured footprint plus 5 percent headroom), under the 64 GB per-clip cap. `peak_gb_picture` (58.6) and `admit_gb_picture` (61.5, the same 5 percent) are the figures for a clip that starts from a picture, with or without an end picture: the picture encoder adds about 10 GB, and admission uses them when the request carries `image` (VIDEO-PICTURE-ADMIT-01). Home maps its Max slot to this row."
+                                  "description": "Measured Max rows: 1024x576 up to 10 seconds and 1920x1088 up to 5 seconds. HD was measured in a proof of concept outside the Stack (74 GB); admission reserves its 74 GB measured footprint plus 5 percent (77.7 GB). Picture HD admission is estimated using the 1024x576 additive picture delta."
                                 },
                                 "extend": {
                                   "type": "boolean",
