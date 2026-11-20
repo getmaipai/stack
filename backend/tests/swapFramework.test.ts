@@ -109,10 +109,19 @@ describe("likeness frames", () => {
 });
 
 describe("the verdict", () => {
+  test("the numbers come from one rules object a pack can override", () => {
+    const l = { scores: [0.3, 0.3, 0.3, 0.3, 0.3] };
+    expect(swapVerdict({ kind: "head", preservation: "pass", likeness: l }).verdict).toBe("fail");
+    expect(swapVerdict({ kind: "head", preservation: "pass", likeness: l, rules: { line: 0.25, minFrames: 5, minShare: 0.75 } }).verdict).toBe("pass");
+  });
+  test("a back view (no scored frames) is inconclusive, never a fail", () => {
+    const v = swapVerdict({ kind: "person", preservation: "pass", likeness: { scores: [] } });
+    expect(v.verdict).toBe("inconclusive"); expect(v.likenessChecked).toBe(false);
+  });
   const good = { scores: [0.5, 0.55, 0.6, 0.48, 0.52, 0.58], actorScores: [0.01, -0.02, 0.03] };
   test("pass needs the preservation pass and enough matching frames", () => {
     const v = swapVerdict({ kind: "head", preservation: "pass", likeness: good });
-    expect(v).toEqual({ verdict: "pass", lines: [], likenessFrames: 6, likenessPassing: 6 });
+    expect(v).toEqual({ verdict: "pass", lines: [], likenessFrames: 6, likenessPassing: 6, likenessChecked: true });
   });
   test("a preservation fail fails whatever the likeness", () => { expect(swapVerdict({ kind: "head", preservation: "fail", likeness: good }).verdict).toBe("fail"); });
   test("inconclusive preservation and missing evidence are never a pass", () => {
@@ -122,7 +131,7 @@ describe("the verdict", () => {
   });
   test("fewer than five scored frames is inconclusive and the line says so plainly", () => {
     const v = swapVerdict({ kind: "face", preservation: "pass", likeness: { scores: [0.5, 0.5, 0.5] } });
-    expect(v.verdict).toBe("inconclusive"); expect(v.lines[0]).toContain("Only 3 frames");
+    expect(v.verdict).toBe("inconclusive"); expect(v.lines[0]).toContain("The swap was made"); expect(v.lines[0]).toContain("only 3 frames"); expect(v.likenessChecked).toBe(false); expect(v.lines.join(" ")).not.toMatch(/fail|bad|wrong/i);
   });
   test("a weak match fails", () => {
     const v = swapVerdict({ kind: "person", preservation: "pass", likeness: { scores: [0.5, 0.2, 0.1, 0.3, 0.4, 0.1] } });

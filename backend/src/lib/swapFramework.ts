@@ -155,19 +155,24 @@ export function likenessFrames(track: RegionTrack, count: number): number[] {
   return Array.from({ length: count }, (_, i) => present[Math.floor(((i + 0.5) * present.length) / count)]!);
 }
 
-export const LIKENESS_LINE = 0.36;
-export const LIKENESS_MIN_FRAMES = 5;
-export const LIKENESS_MIN_SHARE = 0.75;
+/** The likeness numbers in ONE place. FIRST VALUES FROM A SINGLE CASE: the swap bench (one 10 s two-person clip, one target, 12 to 18 scored frames,
+ *  head swap mean 0.55, character swap mean 0.45, source actor near 0). They are not calibrated; a pack may override them in its swap recipe
+ *  (`likeness_line`, `likeness_min_frames`, `likeness_min_share`) once more cases exist. */
+export interface LikenessRules { line: number; minFrames: number; minShare: number }
+export const DEFAULT_LIKENESS_RULES: LikenessRules = { line: 0.36, minFrames: 5, minShare: 0.75 };
 
 /** What the likeness part reports: the match score of each scored frame against the person's own photos, and the same for the source actor as the negative. */
 export interface LikenessResult { scores: readonly number[]; actorScores?: readonly number[] | undefined }
 export type PreservationVerdict = "pass" | "fail" | "inconclusive";
-export type SwapVerdict = { verdict: "pass" | "fail" | "inconclusive"; lines: string[]; likenessFrames: number; likenessPassing: number };
+export type SwapVerdict = { verdict: "pass" | "fail" | "inconclusive"; lines: string[]; likenessFrames: number; likenessPassing: number; likenessChecked: boolean };
 
 const mean = (values: readonly number[]): number => values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
 
-/** The job's own verdict. Preservation must pass and likeness must clear the line; a missing piece of evidence is never a pass. */
-export function swapVerdict(input: { kind: SwapKind; preservation: PreservationVerdict | null; likeness: LikenessResult | null }): SwapVerdict {
+/** The job's own verdict. Preservation must pass and likeness must clear the line; a missing piece of evidence is never a pass. A likeness that could not
+ *  be checked for lack of scored frames (the face never in view, a back view) is `inconclusive` with `likenessChecked: false`: the swap was made, and it is
+ *  never described as a bad one. */
+export function swapVerdict(input: { kind: SwapKind; preservation: PreservationVerdict | null; likeness: LikenessResult | null; rules?: LikenessRules }): SwapVerdict {
+  const rules = input.rules ?? DEFAULT_LIKENESS_RULES;
   const lines: string[] = [];
   let verdict: SwapVerdict["verdict"] = "pass";
   const worsen = (to: "fail" | "inconclusive"): void => { if (verdict !== "fail") verdict = to; };
@@ -175,15 +180,17 @@ export function swapVerdict(input: { kind: SwapKind; preservation: PreservationV
   else if (input.preservation === "fail") { lines.push("The swap changed parts of the picture outside the person, which it must never do, so the clip was thrown away. Try again, and if it happens again send this clip in to be looked at."); worsen("fail"); }
   else if (input.preservation === "inconclusive") { lines.push("The swap could not be checked against the original footage, so the clip was thrown away. Try again with a clip that has no other edits."); worsen("inconclusive"); }
   const scores = input.likeness?.scores ?? [];
-  const passing = scores.filter((s) => s >= LIKENESS_LINE).length;
-  if (scores.length < LIKENESS_MIN_FRAMES) {
-    lines.push(`Only ${scores.length} ${scores.length === 1 ? "frame was" : "frames were"} clear enough to compare the new ${input.kind === "face" ? "face" : input.kind === "head" ? "head" : "person"} with the pictures you gave. Try again with a clip where the person faces the camera for longer.`);
+  const passing = scores.filter((s) => s >= rules.line).length;
+  const who = input.kind === "face" ? "face" : input.kind === "head" ? "head" : "person";
+  const likenessChecked = scores.length >= rules.minFrames;
+  if (!likenessChecked) {
+    lines.push(`The swap was made, but how well the new ${who} matches your pictures could not be checked, because the face was clearly in view in only ${scores.length} ${scores.length === 1 ? "frame" : "frames"}. Look at the result yourself, or try a clip where the person faces the camera for longer.`);
     worsen("inconclusive");
-  } else if (passing / scores.length < LIKENESS_MIN_SHARE) {
-    lines.push(`The new ${input.kind === "face" ? "face" : input.kind === "head" ? "head" : "person"} matches your pictures in ${passing} of ${scores.length} checked frames, which is too few. Try again with clearer pictures that face the camera.`);
+  } else if (passing / scores.length < rules.minShare) {
+    lines.push(`The new ${who} matches your pictures in ${passing} of ${scores.length} checked frames, which is too few. Try again with clearer pictures that face the camera.`);
     worsen("fail");
   }
   const actor = input.likeness?.actorScores;
-  if (actor && actor.length && mean(actor) >= LIKENESS_LINE) { lines.push("The original person still shows in the result. Try again with clearer pictures that face the camera."); worsen("fail"); }
-  return { verdict, lines, likenessFrames: scores.length, likenessPassing: passing };
+  if (likenessChecked && actor && actor.length && mean(actor) >= rules.line) { lines.push("The original person still shows in the result. Try again with clearer pictures that face the camera."); worsen("fail"); }
+  return { verdict, lines, likenessFrames: scores.length, likenessPassing: passing, likenessChecked };
 }
