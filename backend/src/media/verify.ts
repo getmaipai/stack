@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import type { Job, JobProgress } from "@/lib/jobs";
+import { StackClipDialogue } from "@maipai/spec/stack/ts/stack-make.js";
 import { JobFailure } from "@/lib/jobs";
 import { decodeWave } from "@/speech/audio";
 import { resolveReadable } from "./paths";
@@ -27,8 +28,8 @@ export const VerifyShot = z.object({
   kind: z.enum(["moving", "held_still"]).default("moving"),
   /** The exact line spoken in this shot. Its presence means the shot must have sound and the line must be heard in this shot. */
   line: z.string().min(1).max(2000).optional(),
-  /** The same, in the shape of the spec's `StackClipDialogue` (spec 0.1.431: speaker, text, language). Takes the place of `line` when both are sent. This Stack still pins an older spec, so the shape is mirrored here and becomes the spec import when the pin is bumped. */
-  dialogue: z.object({ speaker: z.string().min(1), text: z.string().min(1).max(2000), language: z.string().min(1).optional() }).strict().optional(),
+  /** The same, in the shape of the spec's `StackClipDialogue` (speaker, text, language). Takes the place of `line` when both are sent. */
+  dialogue: StackClipDialogue.optional(),
   /** Sound expected in this shot. Default: true when there is a line, false otherwise. */
   sound: z.boolean().optional(),
 }).strict().refine((shot) => shot.end_s > shot.start_s, "A shot's end must be after its start.");
