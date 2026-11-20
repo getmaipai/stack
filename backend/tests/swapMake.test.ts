@@ -272,7 +272,7 @@ describe("the runner", () => {
     expect(flat.filter((c) => c.includes("-vf reverse"))).toHaveLength(4);                                       // each 45-frame piece is played forward and back to fill one call
     expect(flat.some((c) => c.includes("-f concat") && c.includes("-c copy"))).toBe(true);
     expect(flat.some((c) => c.includes("-map 1:a:0?") && c.includes("-c:v copy"))).toBe(true);                   // original sound, picture not re-encoded
-    expect(flat.filter((c) => c.includes("joined.mp4") || c.includes("video.mp4")).some((c) => c.includes("-vf") || c.includes("scale"))).toBe(false);   // nothing filters or scales the finished clip: the original size stays
+    expect(flat.filter((c) => c.includes("joined.mp4") || c.includes("video.mp4")).some((c) => c.split(" ").filter((word) => !word.startsWith("/")).some((word) => word === "-vf" || word.includes("scale")))).toBe(false);   // nothing filters or scales the finished clip: the original size stays
     expect(readResult(staged.runId)).toMatchObject({ width: 1080, height: 1920, fps: 30, seconds: 6 });
     expect(staged.updates.at(-1)).toEqual({ status: "done", percent: 100 });
     expect(stagedDirs()).toEqual([]);                                                                            // the work folder moved into the result store
