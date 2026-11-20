@@ -62,3 +62,17 @@ export function fillCompanionRecipe(text: string, inputs: CompanionRecipeInputs)
   if (!promptTemplate || !negative) throw new Error("The companion recipe is incomplete.");
   return { prompt: promptTemplate.replaceAll("{description}", inputs.description).replaceAll("{key_colour}", inputs.key_colour), negative };
 }
+
+export interface MinorRecipe { id: string; version: string; body: string }
+/** Minor clip wording is selected only from the serving pack's rated recipe. */
+export function parseMinorRecipe(text: string): MinorRecipe {
+  const [idLine, versionLine, ...body] = text.trim().split("\n");
+  const id = idLine?.match(/^id: (.+)$/)?.[1];
+  const version = versionLine?.match(/^version: (.+)$/)?.[1];
+  if (!id || !version || !body.length) throw new Error("The minor clip recipe is incomplete.");
+  return { id, version, body: body.join("\n").trim() };
+}
+export function fillMinorRecipe(text: string, _rating: "G" | "PG-13", description: string): { prompt: string; id: string; version: string } {
+  const recipe = parseMinorRecipe(text);
+  return { prompt: recipe.body.replaceAll("{description}", description), id: recipe.id, version: recipe.version };
+}

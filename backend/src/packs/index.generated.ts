@@ -20,8 +20,10 @@ import recipe5_1 from "./ltx-2-5-bf16-distilled-mlx-max/recipes/clip_from_sheet.
 import recipe5_2 from "./ltx-2-5-bf16-distilled-mlx-max/recipes/companion_take.md" with { type: "text" };
 import recipe5_3 from "./ltx-2-5-bf16-distilled-mlx-max/recipes/restyle.md" with { type: "text" };
 import pack6 from "./ltx-2-5-q8-distilled-mlx/model-pack.json" with { type: "json" };
-import recipe6_0 from "./ltx-2-5-q8-distilled-mlx/recipes/clip.md" with { type: "text" };
-import recipe6_1 from "./ltx-2-5-q8-distilled-mlx/recipes/companion_take.md" with { type: "text" };
+import recipe6_0 from "./ltx-2-5-q8-distilled-mlx/recipes/clip.child-g.md" with { type: "text" };
+import recipe6_1 from "./ltx-2-5-q8-distilled-mlx/recipes/clip.md" with { type: "text" };
+import recipe6_2 from "./ltx-2-5-q8-distilled-mlx/recipes/clip.teen-pg13.md" with { type: "text" };
+import recipe6_3 from "./ltx-2-5-q8-distilled-mlx/recipes/companion_take.md" with { type: "text" };
 import pack7 from "./minimax-h3/model-pack.json" with { type: "json" };
 import recipe7_0 from "./minimax-h3/recipes/clip.md" with { type: "text" };
 import recipe7_1 from "./minimax-h3/recipes/companion_take.md" with { type: "text" };
@@ -39,7 +41,7 @@ export const PACK_SOURCES: ReadonlyArray<{ dir: string; pack: unknown; recipes: 
   { dir: "flux3-image-klein", pack: pack3, recipes: { "recipes/character-sheet.md": recipe3_0, "recipes/contact-sheet.md": recipe3_1, "recipes/picture.md": recipe3_2, "recipes/picture_edit.md": recipe3_3 } },
   { dir: "htdemucs", pack: pack4, recipes: { "recipes/stems.md": recipe4_0 } },
   { dir: "ltx-2-5-bf16-distilled-mlx-max", pack: pack5, recipes: { "recipes/clip.md": recipe5_0, "recipes/clip_from_sheet.md": recipe5_1, "recipes/companion_take.md": recipe5_2, "recipes/restyle.md": recipe5_3 } },
-  { dir: "ltx-2-5-q8-distilled-mlx", pack: pack6, recipes: { "recipes/clip.md": recipe6_0, "recipes/companion_take.md": recipe6_1 } },
+  { dir: "ltx-2-5-q8-distilled-mlx", pack: pack6, recipes: { "recipes/clip.child-g.md": recipe6_0, "recipes/clip.md": recipe6_1, "recipes/clip.teen-pg13.md": recipe6_2, "recipes/companion_take.md": recipe6_3 } },
   { dir: "minimax-h3", pack: pack7, recipes: { "recipes/clip.md": recipe7_0, "recipes/companion_take.md": recipe7_1, "recipes/swap.md": recipe7_2 } },
   { dir: "minimax-h3-image", pack: pack8, recipes: { "recipes/character-sheet.md": recipe8_0, "recipes/contact-sheet.md": recipe8_1, "recipes/picture.md": recipe8_2, "recipes/picture_edit.md": recipe8_3 } },
 ];

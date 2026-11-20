@@ -6,7 +6,7 @@ import type { StackPartView } from "@maipai/spec/stack/ts/stack-part-view.js";
 import { JOB_PHRASE, isRunnable, servingFor, type Serving } from "@/lib/jobsCatalog";
 
 export type MakePlan =
-  | { ok: true; serving: Serving; level: "standard" | "boost" | "max"; shape: "landscape" | "portrait" | "square" | null; seconds: number | null }
+  | { ok: true; serving: Serving; level: "standard" | "boost" | "max"; shape: "landscape" | "portrait" | "square" | null; seconds: number | null; minorRecipe?: { id: string; version: string } }
   | { ok: false; refusal: StackMakeRefusal }
   | { ok: false; unavailable: string };
 
@@ -20,6 +20,16 @@ const levelsServedBy = (limits: Serving["job"]["limits"]): Set<string> => {
 
 export function planMake(request: StackMakeRequest, parts: readonly StackPartView[]): MakePlan {
   const audience = request.audience;
+  const minorRefusal: MakePlan = { ok: false, refusal: { code: "not_on_this_model", line: "That is not available right now.", alternatives: [] } };
+  if (audience === "minor" && request.job === "clip") {
+    const loose = request as typeof request & Record<string, unknown>;
+    const refuse = (code: "input_not_supported" | "not_on_this_model" = "input_not_supported"): MakePlan => ({ ok: false, refusal: { code, line: "That is not available right now.", alternatives: [] } });
+    if (request.rating !== "G" && request.rating !== "PG-13") return refuse();
+    if (loose.words !== undefined || loose.negative_prompt !== undefined || loose.negative_words !== undefined || (request.level !== undefined && request.level !== "standard") || request.dialogue !== undefined || loose.sound !== undefined || !!request.inputs?.length || request.start_picture !== undefined || request.end_picture !== undefined || !!request.styles?.length || request.look !== undefined || request.take_of !== undefined || (request.operation !== undefined && request.operation !== "companion_take")) return refuse();
+    // Companion takes remain unavailable until their recipes carry rating wording.
+    if (request.operation === "companion_take") return refuse();
+    if (!servingFor("clip", "minor", parts).some((s) => isRunnable(s.part) && !!s.job.minor_recipes?.[request.rating as "G" | "PG-13"])) return minorRefusal;
+  }
   const all = servingFor(request.job, audience, parts);
   const wantsWords = (request.job === "picture" || request.job === "picture_edit") && !!request.words;
   const fit = wantsWords ? all.filter((s) => s.job.capabilities.text) : all;
@@ -48,6 +58,16 @@ export function planMake(request: StackMakeRequest, parts: readonly StackPartVie
     if (!chosen) return { ok: false, unavailable: wantsWords ? "No model that can spell words in a picture is turned on and ready." : `No model that can ${JOB_PHRASE[request.job]} is turned on and ready.` };
   }
 
+  let minorRecipe: { id: string; version: string } | undefined;
+  if (audience === "minor" && request.job === "clip") {
+    const rating = request.rating as "G" | "PG-13";
+    const path = chosen.job.minor_recipes?.[rating];
+    const recipeText = path ? chosen.pack.recipes[path] : undefined;
+    if (!recipeText) return { ok: false, refusal: { code: "not_on_this_model", line: "That is not available right now.", alternatives: [] } };
+    const [idLine, versionLine] = recipeText.trim().split("\n");
+    minorRecipe = { id: (idLine ?? "").replace(/^id: /, ""), version: (versionLine ?? "").replace(/^version: /, "") };
+  }
+
   const limits = chosen.job.limits;
   const levelsServed = new Set<string>([...Object.keys(limits.max_seconds ?? {}), ...Object.values(limits.shapes ?? {}).flatMap((s) => Object.keys(s ?? {}))]);
   // A request that names no level (a song may leave it out) gets Standard where the model serves it, else the first level it does serve.
@@ -63,5 +83,5 @@ export function planMake(request: StackMakeRequest, parts: readonly StackPartVie
   if (seconds !== null && maxSeconds !== undefined && seconds > maxSeconds) return { ok: false, refusal: { code: "too_long", line: `This model makes ${request.job === "song" || request.job === "song_edit" ? "songs" : "clips"} up to ${maxSeconds} seconds at ${level} quality. Choose a shorter one.`, limit: maxSeconds } };
   const references = "references" in request && request.references ? request.references.length : 0;
   if (limits.max_references !== undefined && references > limits.max_references) return { ok: false, refusal: { code: "too_many_references", line: `This model takes up to ${limits.max_references} reference pictures. Use fewer.`, limit: limits.max_references } };
-  return { ok: true, serving: chosen, level, shape, seconds };
+  return { ok: true, serving: chosen, level, shape, seconds, ...(minorRecipe ? { minorRecipe } : {}) };
 }

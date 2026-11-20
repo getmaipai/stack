@@ -1,0 +1,55 @@
+{
+  "description": "A friendly dragon eats an ice cream",
+  "outputs": {
+    "G": "A friendly, colourful children's cartoon illustration, flat shapes and soft outlines, clearly drawn and not a photograph, safe for young children: A friendly dragon eats an ice cream. A hand-drawn cartoon look with simple illustrated shapes. The scene shows original unmarked objects with no lettering, made from plain colours and patterns. Everyone is kind and friendly, fully dressed in ordinary clothes, in a cheerful family-friendly moment. The scene is calm and cheerful with gentle actions, soft light, and safe everyday objects. There are no dangerous items in view, only toys, flowers, books with blank covers, and friendly animals. There are no frightening moments, only smiling faces and a cozy setting. The scene shows healthy everyday activities, fresh fruit, water, and people enjoying a bright day outdoors.",
+    "PG-13": "A friendly dragon eats an ice cream. The scene shows original unmarked objects with no lettering, made from plain colours and patterns. Everyone is kind and friendly, fully dressed in ordinary clothes, in a thoughtful and respectful moment. The action is calm and nonviolent, with no injury or harm, and safe everyday objects. There are no frightening moments, only steady expressions and a composed setting. The scene shows healthy everyday activities, fresh fruit, water, and people enjoying an ordinary day."
+  },
+  "term_phrases": {
+    "G": {
+      "photograph": "A hand-drawn cartoon look with simple illustrated shapes",
+      "photorealistic": "A hand-drawn cartoon look with simple illustrated shapes",
+      "realistic": "A hand-drawn cartoon look with simple illustrated shapes",
+      "logo": "original unmarked objects with no lettering",
+      "brand": "original unmarked objects with no lettering",
+      "text": "original unmarked objects with no lettering",
+      "watermark": "original unmarked objects with no lettering",
+      "nude": "fully dressed in ordinary clothes",
+      "naked": "fully dressed in ordinary clothes",
+      "nsfw": "a cheerful family-friendly moment",
+      "sexual": "a cheerful family-friendly moment",
+      "violence": "calm and cheerful with gentle actions",
+      "blood": "safe everyday objects",
+      "gore": "safe everyday objects",
+      "weapon": "toys, flowers, books with blank covers, and friendly animals",
+      "scary": "smiling faces and a cozy setting",
+      "horror": "smiling faces and a cozy setting",
+      "drugs": "healthy everyday activities, fresh fruit, water",
+      "alcohol": "healthy everyday activities, fresh fruit, water",
+      "cigarette": "healthy everyday activities, fresh fruit, water"
+    },
+    "PG-13": {
+      "photograph": "healthy everyday activities, fresh fruit, water",
+      "photorealistic": "healthy everyday activities, fresh fruit, water",
+      "realistic": "healthy everyday activities, fresh fruit, water",
+      "logo": "original unmarked objects with no lettering",
+      "brand": "original unmarked objects with no lettering",
+      "text": "original unmarked objects with no lettering",
+      "watermark": "original unmarked objects with no lettering",
+      "nude": "fully dressed in ordinary clothes",
+      "naked": "fully dressed in ordinary clothes",
+      "nsfw": "a thoughtful and respectful moment",
+      "sexual": "a thoughtful and respectful moment",
+      "violence": "calm and nonviolent, with no injury or harm",
+      "blood": "calm and nonviolent, with no injury or harm",
+      "gore": "calm and nonviolent, with no injury or harm",
+      "weapon": "calm and nonviolent, with no injury or harm",
+      "scary": "steady expressions and a composed setting",
+      "horror": "steady expressions and a composed setting",
+      "drugs": "healthy everyday activities, fresh fruit, water",
+      "alcohol": "healthy everyday activities, fresh fruit, water",
+      "cigarette": "healthy everyday activities, fresh fruit, water"
+    }
+  },
+  "recipe_files_sha256": "fc95abdc28413ac01839ab140bb8adcdd186200660ef6090305734ad241f5944",
+  "outputs_sha256": "801e80d58a8c514ab7a64b43cf08b7220b2d9b20bd6751fcd6afa019b91cea8f"
+}

@@ -4,7 +4,7 @@
 import { sha256Hex } from "@/video/receipt";
 import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
 import type { MakePlan } from "@/lib/makePlan";
-import { fillRecipe, fillStyleRecipe, fillCompanionRecipe } from "@/lib/recipe";
+import { fillRecipe, fillStyleRecipe, fillCompanionRecipe, fillMinorRecipe } from "@/lib/recipe";
 import { writePrompt, writerData } from "@/video/promptWriter";
 import { planClipRoute } from "@/lib/clipRoute";
 import { engineOfPart, rowsForJob } from "@/video/caps";
@@ -109,12 +109,16 @@ export async function pictureDataUrl(reference: string, read: PictureBytes): Pro
 export function clipBody(request: ClipRequest, plan: Planned, route?: { name: string; reason: string }): Record<string, unknown> {
   const pixels = (plan.serving.job.limits.shapes as Record<string, Record<string, { width: number; height: number } | undefined> | undefined> | undefined)?.[request.shape]?.[plan.level];
   const recipe = plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";
+  const minorTextPath = request.audience === "minor" && request.rating ? plan.serving.job.minor_recipes?.[request.rating] : undefined;
+  const minorText = minorTextPath ? plan.serving.pack.recipes[minorTextPath] : undefined;
+  const minorFilled = minorText && request.rating ? fillMinorRecipe(minorText, request.rating, request.description) : undefined;
   // VF-PROMPT-01: a pack whose clip recipe declares a prompt writer gets the prompt in its engine's own format, written from the typed request (the person's
   // words, structured dialogue, pictures, the film's look); a pack without one keeps the plain recipe. The writer and its hints go to the receipt, never the text.
   const data = writerData(recipe);
   const written = data ? writePrompt({ description: request.description, ...(request.dialogue ? { dialogue: request.dialogue } : {}), seconds: request.seconds, startPicture: request.start_picture !== undefined, endPicture: request.end_picture !== undefined, ...(request.look !== undefined ? { look: request.look } : {}) }, data) : null;
   return {
-    model: plan.serving.part.id, prompt: written ? written.text : fillRecipe(recipe, { description: request.description }),
+    model: plan.serving.part.id, prompt: minorFilled?.prompt ?? (written ? written.text : fillRecipe(recipe, { description: request.description })),
+    ...(request.audience === "minor" && plan.serving.job.negative_prompt ? { negative_prompt: [...plan.serving.job.negative_prompt] } : {}),
     ...(written ? { prompt_writer: written.writer, prompt_hints: written.hints } : {}),
     ...(pixels ? { size: `${pixels.width}x${pixels.height}` } : {}), seconds: Math.round(request.seconds), ...(request.seed !== undefined ? { seed: request.seed } : {}),
     audience: request.audience === "adult" ? "adult" : "all-ages", ...stylesAsLoras(request.styles),
@@ -127,6 +131,7 @@ export function clipBody(request: ClipRequest, plan: Planned, route?: { name: st
     ...(request.wait !== undefined ? { timeout_ms: Math.max(1, request.wait * 1000) } : {}),
     ...(request.take_of ? { take_of: request.take_of } : {}),
     ...(route ? { route } : {}),
+    ...(minorFilled ? { recipe: { id: minorFilled.id, version: minorFilled.version } } : {}),
   };
 }
 
@@ -193,6 +198,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
   let body: Record<string, unknown>;
   try {
     body = clipBody(request, plan, route);
+    if (plan.minorRecipe) body.receiptRecipe = plan.minorRecipe;
     if (chosen.companionTake && companionRecipe) {
       const filled = fillCompanionRecipe(companionRecipe, { description: request.description, key_colour: request.key_colour ?? "green", frame: request.take_frame ?? "state" });
       body.prompt = filled.prompt;
@@ -237,7 +243,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
   const result: StackMakeResult = {
     id: reply.job, job: "clip", state: first ? "done" : "running", percent: first ? 100 : 0, status: first ? "Done" : "Making your clip",
     files: (reply.data ?? []).map((d) => d.url), poster: first?.poster_url ?? null,
-    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job, ...(chosen.operation === "retake" || chosen.operation === "extend" ? { route_reason: chosen.reason } : { route: chosen.route, route_reason: recipeChanged ? "The recipe was updated since the first take, so the current one was used." : chosen.reason }) },
+    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job, ...(plan.minorRecipe ? { recipe: plan.minorRecipe } : {}), ...(chosen.operation === "retake" || chosen.operation === "extend" ? { route_reason: chosen.reason } : { route: chosen.route, route_reason: recipeChanged ? "The recipe was updated since the first take, so the current one was used." : chosen.reason }) },
   };
   return { status: sent.status, body: result };
 }

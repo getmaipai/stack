@@ -81,7 +81,11 @@
           "label": "Boost",
           "description": "Sharper picture, a little slower"
         }
-      ]
+      ],
+      "minor_recipes": {
+        "G": "recipes/clip.child-g.md",
+        "PG-13": "recipes/clip.teen-pg13.md"
+      }
     }
   ],
   "style_bases": [
