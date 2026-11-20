@@ -280,10 +280,10 @@ class ForeignEncoderTest(unittest.TestCase):
         cls.decoded = list(cs.read_frames(cls.src, "fps=24", cls.W, cls.H, cls.N))
 
     @classmethod
-    def foreign(cls, frames, name, vf="scale=out_color_matrix=bt709:out_range=tv"):
+    def foreign(cls, frames, name, vf="scale=out_color_matrix=bt709:out_range=tv", sws="bicubic"):
         path = os.path.join(cls.dir, name)
         p = subprocess.Popen([os.environ.get("STACK_MEDIA_FFMPEG", "ffmpeg"), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{cls.W}x{cls.H}", "-r", "24", "-i", "-",
-                              "-vf", vf, "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", path], stdin=subprocess.PIPE)
+                              "-vf", vf, "-sws_flags", sws, "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", path], stdin=subprocess.PIPE)
         for f in frames: p.stdin.write(f.tobytes())
         p.stdin.close(); p.wait()
         return path
@@ -326,6 +326,48 @@ class ForeignEncoderTest(unittest.TestCase):
         frames = self.patched(self.edited_frames(self.EDITED), slice(400, 440), slice(10, 60), 14)
         self.assertEqual(self.verify(self.foreign(frames, "faint.mp4"), self.EDITED)["preservation"]["verdict"], "fail")
 
+    def test_a_standard_range_conversion_is_recognized_by_name_not_by_widening_the_bound(self):
+        std = cs.STANDARD_TRANSFORMS["limited_to_full_range"]
+        frames = [cs.apply_color_transform(f, *std) for f in self.edited_frames(self.EDITED)]
+        report = self.verify(self.foreign(frames, "range.mp4", vf="null"), self.EDITED)
+        self.assertEqual(report["preservation"]["verdict"], "pass"); self.assertEqual(report["preservation"]["baseline"]["standard"], "limited_to_full_range")
+        # without the named conversion the same file is out of bounds (the identity bound stays at 10 levels)
+        saved = dict(cs.STANDARD_TRANSFORMS); cs.STANDARD_TRANSFORMS.clear()
+        try: self.assertEqual(self.verify(self.foreign(frames, "range2.mp4", vf="null"), self.EDITED)["preservation"]["verdict"], "inconclusive")
+        finally: cs.STANDARD_TRANSFORMS.update(saved)
+
+    def test_an_edit_still_fails_inside_a_standard_range_conversion(self):
+        std = cs.STANDARD_TRANSFORMS["limited_to_full_range"]
+        frames = [cs.apply_color_transform(f, *std) for f in self.patched(self.edited_frames(self.EDITED), slice(570, 610), slice(10, 60), 40)]
+        self.assertEqual(self.verify(self.foreign(frames, "range_patch.mp4", vf="null"), self.EDITED)["preservation"]["verdict"], "fail")
+
+    def test_a_tool_that_resamples_chroma_its_own_way_is_judged_against_that_way_not_called_an_edit(self):
+        frames = self.edited_frames(self.EDITED)
+        for sws in ("bilinear", "area"):
+            path = self.foreign(frames, f"sws_{sws}.mp4", vf="null", sws=sws)
+            saved = cs.CHROMA_VARIANTS; cs.CHROMA_VARIANTS = (None,)
+            try: default_only = self.verify(path, self.EDITED)["preservation"]
+            finally: cs.CHROMA_VARIANTS = saved
+            report = self.verify(path, self.EDITED)["preservation"]
+            self.assertNotEqual(default_only["verdict"], "pass")                               # the default encode alone calls the tool's own edge handling a change
+            self.assertEqual(report["verdict"], "pass"); self.assertEqual(report["baseline"]["chroma"], sws)
+            self.assertLess(report["encoded"]["largest_blob_px"], default_only["encoded"]["largest_blob_px"])
+
+    def test_a_real_patch_fails_under_every_single_chroma_variant(self):
+        # each variant is one more way an edit could be explained away, so each is tried alone against a patched file made with a different resampling
+        frames = self.patched(self.edited_frames(self.EDITED), slice(570, 610), slice(10, 60), 40)
+        path = self.foreign(frames, "sws_all_patch.mp4", vf="null", sws="area")
+        saved = cs.CHROMA_VARIANTS
+        try:
+            for variant in saved:
+                cs.CHROMA_VARIANTS = (variant,)
+                self.assertEqual(self.verify(path, self.EDITED)["preservation"]["verdict"], "fail", f"variant {variant}")
+        finally: cs.CHROMA_VARIANTS = saved
+
+    def test_an_edit_still_fails_whatever_chroma_resampling_the_tool_used(self):
+        frames = self.patched(self.edited_frames(self.EDITED), slice(570, 610), slice(10, 60), 40)
+        self.assertEqual(self.verify(self.foreign(frames, "sws_patch.mp4", vf="null", sws="bilinear"), self.EDITED)["preservation"]["verdict"], "fail")
+
     def test_a_color_difference_larger_than_a_color_path_is_inconclusive(self):
         frames = self.edited_frames(self.EDITED)
         report = self.verify(self.foreign(frames, "dark.mp4", vf="eq=brightness=-0.12"), self.EDITED)
@@ -335,6 +377,31 @@ class ForeignEncoderTest(unittest.TestCase):
         frames = self.edited_frames(self.EDITED)
         report = self.verify(self.foreign(frames, "blur.mp4", vf="scale=out_color_matrix=bt709:out_range=tv,gblur=sigma=0.6"), self.EDITED)
         self.assertNotEqual(report["preservation"]["verdict"], "pass")
+
+
+class MemoryBoundTest(unittest.TestCase):
+    """A long tall clip is judged one frame at a time: the memory bound is a few frames, not the clip (400 frames of 360x640 are 276 MB as one array)."""
+    W, H, N, BOUND_MB = 360, 640, 400, 90
+
+    def test_verifying_a_long_tall_clip_stays_under_the_bound(self):
+        import tracemalloc
+        d = tempfile.mkdtemp(); src = os.path.join(d, "src.mp4"); dl = os.path.join(d, "deliv.mp4")
+        def frames(edit):
+            for k in range(self.N):
+                f = np.full((self.H, self.W, 3), (120 + k % 20, 130, 125), np.uint8); f[:, ::7] = (90, 100, 110)
+                cv2.rectangle(f, (30, 500), (330, 540), (20, 60, 230), -1)
+                if edit and k < 100: f[100:300, 80:280] = np.random.default_rng(k).integers(0, 255, (200, 200, 3))
+                yield f
+        cs.write_video(frames(False), src, 24, self.W, self.H); cs.write_video(frames(True), dl, 24, self.W, self.H)
+        region = {"boxes": [[80, 100, 200, 200]] * 100 + [None] * (self.N - 100)}
+        tracemalloc.start()
+        try:
+            report = cs.verify_delivered(src, dl, seconds=self.N / 24, edit_region=region)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally: tracemalloc.stop()
+        self.assertEqual(report["frames_compared"], self.N)
+        self.assertLess(peak / 1e6, self.BOUND_MB, f"peak {peak / 1e6:.0f} MB")
+        self.assertIn(report["preservation"]["verdict"], ("pass", "inconclusive", "fail"))
 
 
 class RegionShapeTest(unittest.TestCase):

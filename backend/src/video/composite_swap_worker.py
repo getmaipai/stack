@@ -63,9 +63,33 @@ def read_frames(path, vf, w, h, n, ss=None, t=None):
     return np.frombuffer(raw, np.uint8).reshape(-1, h, w, 3)
 
 
-def write_video(frames, out, fps, w, h):
+def iter_frames(path, vf, w, h, n, ss=None, t=None):
+    """The same frames as read_frames, one at a time: only the frame being used is in memory, so a long tall clip costs a few frames, not the clip."""
+    cmd = [FFMPEG, "-v", "error"]
+    if ss is not None: cmd += ["-ss", str(ss)]
+    if t is not None: cmd += ["-t", str(t)]
+    cmd += ["-i", path, "-vf", vf, "-frames:v", str(n), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    size = w * h * 3
+    try:
+        while True:
+            raw = proc.stdout.read(size)
+            while raw and len(raw) < size:
+                more = proc.stdout.read(size - len(raw))
+                if not more: break
+                raw += more
+            if len(raw) < size: break
+            yield np.frombuffer(raw, np.uint8).reshape(h, w, 3)
+    finally:
+        proc.stdout.close()
+        if proc.poll() is None: proc.terminate()
+        proc.wait()
+
+
+def write_video(frames, out, fps, w, h, sws=None):
+    """The one encoder setting of this worker (libx264 crf 18, yuv420p). `sws` names the chroma resampling (swscale flags); None is ffmpeg's default."""
     p = subprocess.Popen([FFMPEG, "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}", "-r", str(fps), "-i", "-",
-                          "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", out], stdin=subprocess.PIPE)
+                          *(["-sws_flags", sws] if sws else []), "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", out], stdin=subprocess.PIPE)
     for f in frames:
         p.stdin.write(f.tobytes())
     p.stdin.close()
@@ -376,7 +400,7 @@ def _shape_mask(entry, h, w, options: Options, grow):
         else:
             raise ValueError("An edit region entry must be a box [x, y, w, h], an ellipse, a polygon or null.")
         margin = int(round(options.region_margin_frac * extent))
-        if margin > 0: mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * margin + 1, 2 * margin + 1)))
+        if margin > 0: mask = (cv2.distanceTransform((mask == 0).astype(np.uint8), cv2.DIST_L2, 5) <= margin).astype(np.uint8)   # growth by the margin in one pass, however large it is
         return mask.astype(bool)
     x, y, fw, fh = [float(v) for v in entry]; side = max(fw, fh)
     bw, bh = fw * grow, fh * grow
@@ -387,34 +411,58 @@ def _shape_mask(entry, h, w, options: Options, grow):
     return mask.astype(bool)
 
 
-def declare_edit_region(org_frames, options: Options, supplied=None):
-    """Build independent per-frame allowed-change regions from supplied shapes or source face detections. A supplied file is {"box": [x, y, w, h]} for every
-    frame, or {"boxes": [...]} with one entry per frame; each entry is a box [x, y, w, h], {"ellipse": [cx, cy, rx, ry]}, {"polygon": [[x, y], ...]} or null.
-    null means the target is absent in that frame: the region is empty and any edit in that frame fails."""
-    n = len(org_frames)
+def region_entries(frames, count, options: Options, supplied=None):
+    """The per-frame region entries (box, ellipse, polygon or None) and where they came from. `frames` is only read for detection (any iterable of frames);
+    `count` is how many frames the clip has. A supplied file is {"box": [x, y, w, h]} for every frame, or {"boxes": [...]} with one entry per frame; each entry
+    is a box [x, y, w, h], {"ellipse": [cx, cy, rx, ry]}, {"polygon": [[x, y], ...]} or null. null means the target is absent in that frame: the region is empty
+    and any edit in that frame fails."""
+    n = count
     if supplied is not None:
         if isinstance(supplied, dict):
             boxes = [supplied["box"]] * n if "box" in supplied else supplied.get("boxes", [])
         else: boxes = supplied
         if isinstance(boxes, (list, tuple)) and len(boxes) == 4 and all(isinstance(v, (int, float)) for v in boxes): boxes = [boxes] * n
         if len(boxes) != n: raise ValueError("The edit region file must provide one entry per frame or one static box.")
-        source = "supplied"
-    else:
-        boxes = []; last = None; first = None; source = "detected"
-        for frame in org_frames:
-            h, w = frame.shape[:2]; scale = min(1.0, 480.0 / max(w, h))
-            small = cv2.resize(frame, (max(1, round(w * scale)), max(1, round(h * scale))), interpolation=cv2.INTER_AREA) if scale < 1 else frame
-            faces = find_faces(small)
-            face = max(faces, key=lambda b: b[2] * b[3]) if faces else None
-            if face:
-                last = tuple(int(round(v / scale)) for v in face); first = first or last
-            boxes.append(last)
-        if first is None: raise ReferenceError("no_edit_region", NO_EDIT_REGION_LINE)
-        first_index = next(i for i, b in enumerate(boxes) if b is not None)
-        boxes[:first_index] = [first] * first_index
-    grow = options.region_head_scale if source == "detected" else 1.0   # a face box is grown to a head; a supplied shape is already the caller's head area
-    regions = [_shape_mask(box, *frame.shape[:2], options, grow) for frame, box in zip(org_frames, boxes)]
-    return regions, source
+        return list(boxes), "supplied"
+    boxes = []; last = None; first = None
+    for frame in frames:
+        h, w = frame.shape[:2]; scale = min(1.0, 480.0 / max(w, h))
+        small = cv2.resize(frame, (max(1, round(w * scale)), max(1, round(h * scale))), interpolation=cv2.INTER_AREA) if scale < 1 else frame
+        faces = find_faces(small)
+        face = max(faces, key=lambda b: b[2] * b[3]) if faces else None
+        if face:
+            last = tuple(int(round(v / scale)) for v in face); first = first or last
+        boxes.append(last)
+    if first is None: raise ReferenceError("no_edit_region", NO_EDIT_REGION_LINE)
+    first_index = next(i for i, b in enumerate(boxes) if b is not None)
+    boxes[:first_index] = [first] * first_index
+    return boxes, "detected"
+
+
+class RegionTrack:
+    """The declared edit region of every frame, built on demand so a long tall clip never holds a mask per frame. `extra` rectangles (an erased caption) are added."""
+    def __init__(self, entries, source, shape, options: Options, extra=()):
+        self.entries, self.source, self.shape, self.options, self.extra = entries, source, shape, options, list(extra)
+        self.grow = options.region_head_scale if source == "detected" else 1.0   # a face box is grown to a head; a supplied shape is already the caller's head area
+        self._cache = (None, None)
+    def __len__(self): return len(self.entries)
+    def active(self, k): return self.entries[k] is not None or bool(self.extra)
+    def mask(self, k):
+        entry = self.entries[k]
+        key = json.dumps(entry) if entry is not None else None
+        if self._cache[0] == key and key is not None: return self._cache[1]
+        m = _shape_mask(entry, *self.shape, self.options, self.grow)
+        for x, y, bw, bh in self.extra: m[y:y + bh, x:x + bw] = True
+        self._cache = (key, m)
+        return m
+
+
+def declare_edit_region(org_frames, options: Options, supplied=None):
+    """Per-frame allowed-change regions as one boolean mask per frame (see region_entries for the supplied file's shapes)."""
+    frames = list(org_frames) if supplied is None else org_frames
+    entries, source = region_entries(frames, len(org_frames), options, supplied)
+    grow = options.region_head_scale if source == "detected" else 1.0
+    return [_shape_mask(box, *frame.shape[:2], options, grow) for frame, box in zip(org_frames, entries)], source
 
 def pre_encode_check(org, out, regions):
     counts, frames = [], []
@@ -500,14 +548,16 @@ STRONG_LEVELS = 24      # a change this strong, in one frame, in a compact blob 
 STRONG_BLOB_PX = 100    # compact: survives a 3x3 opening, at least this many pixels
 
 
+def strong_blob_frame(a, b, outside):
+    """The largest compact blob of strong change (more than 24 levels, after a 3x3 opening) outside the region in one frame."""
+    mask = cv2.morphologyEx(((np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > STRONG_LEVELS) & outside).astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    count, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+    return int(stats[1:, cv2.CC_STAT_AREA].max()) if count > 1 else 0
+
+
 def strong_blob(source_encoded, delivered, outside):
-    """The largest compact blob of strong change (more than 24 levels, after a 3x3 opening) outside the region in any single frame, against the source-only encode."""
-    kernel = np.ones((3, 3), np.uint8); largest = 0
-    for a, b, x in zip(source_encoded, delivered, outside):
-        mask = cv2.morphologyEx((((np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > STRONG_LEVELS) & x)).astype(np.uint8), cv2.MORPH_OPEN, kernel)
-        count, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
-        if count > 1: largest = max(largest, int(stats[1:, cv2.CC_STAT_AREA].max()))
-    return largest
+    """The largest strong compact blob outside the region in any single frame, against the source-only encode."""
+    return max((strong_blob_frame(a, b, x) for a, b, x in zip(source_encoded, delivered, outside)), default=0)
 
 
 def encoded_check_on_file(org, back, regions, o: Options, base, w, h):
@@ -539,24 +589,57 @@ def encoded_check_on_file(org, back, regions, o: Options, base, w, h):
 
 COLOR_MATRIX_BOUND = 0.15     # how far each entry of the fitted 3x3 may be from the identity
 COLOR_SHIFT_BOUND = 10.0      # levels the transform may move the colors present in the clip (99th percentile)
+STANDARD_MATCH_LEVELS = 4.0   # how closely the fitted transform must follow a known standard conversion on the colors present in the clip (99th percentile)
+CHROMA_VARIANTS = (None, "bilinear", "area", "lanczos", "neighbor", "fast_bilinear")   # swscale chroma resampling a different tool may use; None is ffmpeg's default
+SAMPLE_BUDGET = 150_000       # pixels sampled for the color fit, in all
+NAMED_FIT_LEVELS = 6.0        # a named standard conversion is accepted when 90 percent of the sampled pixels land within this many levels of it
 FAIL_PERSISTENT_PX = 500      # a persistent unexplained area this large is an edit, not an encoder's ringing
 
 
-def fit_color_transform(org, back, outside, seed=0, per_frame=6000):
-    """A global transform between the decoded source and the delivered file: delivered = M * source + offset (a 3x3 and an offset), fitted over pixels outside the
-    declared region (null-region frames: the whole frame), robustly (iteratively reweighted, residuals above four median deviations are dropped). A different color
-    path (matrix, range) is exactly this, the same in every frame; a local edit is not, so it survives as a residual. Returns (matrix 3x3, offset 3, within bounds)."""
+def _rgb_to_yuv(kr, kb):
+    kg = 1 - kr - kb
+    return np.array([[kr, kg, kb], [-kr / (2 * (1 - kb)), -kg / (2 * (1 - kb)), 0.5], [0.5, -kg / (2 * (1 - kr)), -kb / (2 * (1 - kr))]])
+
+
+def _matrix_swap(written_with, read_as):
+    """What a file's colors become when the picture was converted with one matrix and read back with the other (full range, no offset)."""
+    return np.linalg.inv(_rgb_to_yuv(*read_as)) @ _rgb_to_yuv(*written_with)
+
+
+BT601, BT709 = (0.299, 0.114), (0.2126, 0.0722)
+# Conversions a different tool really makes between the decoded source and its delivered file: delivered = matrix @ source + offset.
+STANDARD_TRANSFORMS = {
+    "limited_to_full_range": (np.eye(3) * 255 / 219, np.full(3, -16 * 255 / 219)),
+    "full_to_limited_range": (np.eye(3) * 219 / 255, np.full(3, 16.0)),
+    "bt601_written_bt709_read": (_matrix_swap(BT601, BT709), np.zeros(3)),
+    "bt709_written_bt601_read": (_matrix_swap(BT709, BT601), np.zeros(3)),
+}
+
+
+def collect_color_samples(org_iter, back_iter, track, halo, seed=0, per_frame=6000, every=3):
+    """Pixels outside the declared region (null-region frames: the whole frame) from every third frame, as (source colors, delivered colors)."""
     rng = np.random.default_rng(seed); xs, ys = [], []
-    for k in range(0, len(org), 3):
-        idx = np.flatnonzero(outside[k].ravel())
+    for k, (a, b) in enumerate(zip(org_iter, back_iter)):
+        if k % every: continue
+        idx = np.flatnonzero(halo_outside(track.mask(k), halo).ravel())
         if idx.size == 0: continue
         pick = rng.choice(idx, min(idx.size, per_frame), replace=False)
-        xs.append(org[k].reshape(-1, 3)[pick]); ys.append(back[k].reshape(-1, 3)[pick])
-    if not xs: return np.eye(3), np.zeros(3), False
-    x = np.concatenate(xs).astype(np.float64); y = np.concatenate(ys).astype(np.float64); x1 = np.hstack([x, np.ones((len(x), 1))])
+        xs.append(a.reshape(-1, 3)[pick]); ys.append(b.reshape(-1, 3)[pick])
+    if not xs: return None, None
+    return np.concatenate(xs), np.concatenate(ys)
+
+
+def fit_color_model(x, y):
+    """A global transform between the decoded source and the delivered file: delivered = M * source + offset (a 3x3 and an offset), fitted over the sampled
+    pixels robustly (iteratively reweighted, residuals above four median deviations are dropped). A different color path (matrix, range) is exactly this, the
+    same in every frame; a local edit is not, so it survives as a residual. Returns (matrix 3x3, offset 3, within bounds, the standard conversion it matches or
+    "near_identity" or None)."""
+    if x is None: return np.eye(3), np.zeros(3), False, None
+    x = x.astype(np.float64); y = y.astype(np.float64); x1 = np.hstack([x, np.ones((len(x), 1))])
     weight = np.ones(len(x)); coef = np.vstack([np.eye(3), np.zeros((1, 3))])
     # a ridge toward "no change" keeps the fit sane when the clip has few distinct colors (the data alone cannot pin a 3x3 down); real footage's colors outweigh it
-    prior = np.sqrt(0.01 * len(x) * 400.0) * np.hstack([np.eye(3), np.zeros((3, 1))]); prior_target = np.sqrt(0.01 * len(x) * 400.0) * np.eye(3)
+    strength = np.sqrt(0.01 * len(x) * 400.0)
+    prior = strength * np.hstack([np.eye(3), np.zeros((3, 1))]); prior_target = strength * np.eye(3)
     with np.errstate(all="ignore"):
         for _ in range(6):
             root = np.sqrt(weight)[:, None]
@@ -564,11 +647,31 @@ def fit_color_transform(org, back, outside, seed=0, per_frame=6000):
             residual = np.abs(x1 @ coef - y).max(1); spread = float(np.median(residual)) + 1e-6
             weight = (residual < 4 * spread + 2).astype(np.float64)
     matrix, offset = coef[:3].T, coef[3]          # delivered = matrix @ source + offset
-    # The size that matters is what the transform does to the colors actually present, so it is bounded there (a clip with few distinct colors cannot pin the
-    # matrix down, but the colors it has are explained or not): at most 10 levels at the 99th percentile, and no wild matrix.
+    if not np.all(np.isfinite(matrix)): return np.eye(3), np.zeros(3), False, None
+    # What matters is what the transform does to the colors actually present (a clip with few distinct colors cannot pin the matrix down, but the colors it has
+    # are explained or not). A standard conversion a different tool really makes (a limited-to-full range change, a matrix swap) is recognized by name: it is
+    # scored directly against the samples, and when it explains 90 percent of them far better than "no change" does it is used as the transform. Otherwise the
+    # fit is accepted when it stays within 10 levels of "no change" at the 99th percentile with a sane matrix.
+    def score(m, o_):
+        with np.errstate(all="ignore"):
+            return float(np.percentile(np.abs(np.clip(x @ m.T + o_, 0, 255) - y).max(1), 90))
+    plain = score(np.eye(3), np.zeros(3))
+    named = min(((score(m, o_), name, m, o_) for name, (m, o_) in STANDARD_TRANSFORMS.items()), default=None)
+    if named is not None and named[0] <= NAMED_FIT_LEVELS and named[0] + 2.0 <= plain:
+        return named[2], named[3], True, named[1]
     with np.errstate(all="ignore"):
-        shift = np.abs(x @ matrix.T + offset - x).max(1)
-    ok = bool(np.all(np.isfinite(matrix)) and np.abs(matrix - np.eye(3)).max() <= COLOR_MATRIX_BOUND and float(np.percentile(shift, 99)) <= COLOR_SHIFT_BOUND)
+        fitted = np.clip(x @ matrix.T + offset, 0, 255)
+        if np.abs(matrix - np.eye(3)).max() <= COLOR_MATRIX_BOUND and float(np.percentile(np.abs(fitted - x).max(1), 99)) <= COLOR_SHIFT_BOUND:
+            return matrix, offset, True, "near_identity"
+    return matrix, offset, False, None
+
+
+def fit_color_transform(org, back, outside, seed=0, per_frame=6000):
+    """The list form of the fit, for callers that hold the frames: (matrix, offset, within bounds)."""
+    class _Track:
+        def mask(self, k): return ~outside[k]
+    x, y = collect_color_samples(org, back, _Track(), 0, seed, per_frame)
+    matrix, offset, ok, _ = fit_color_model(x, y)
     return matrix, offset, ok
 
 
@@ -578,55 +681,102 @@ def apply_color_transform(frame, matrix, offset):
     return np.clip(np.rint(out), 0, 255).astype(np.uint8).reshape(frame.shape)
 
 
-def foreign_check(org, back, regions, o: Options, base, w, h):
-    """The post-encode check for a delivered file another tool encoded. Nothing is learned from the delivered file's own pixels as a tolerance: a tolerance taken
-    from frames not shown to match the source would excuse exactly the edits this check exists to catch. What is modeled is what a different pipeline really
-    does, a global color transform (fitted robustly, bounded; out of bounds is `inconclusive`). The source is corrected by it, encoded here with the worker's
-    settings, and the delivered file is judged against that by the same persistence rule, drift control and strong-change gate as the worker's own composites.
-    Frames whose region is empty (the target was absent) have no declared edit and are checked over the whole frame. A persistent unexplained area of 500 pixels
-    or more, or a strong compact change, fails; 50 to 499 pixels is `inconclusive` (`unknown_encoder`); below that it passes. Returns (encoded numbers, baseline,
-    verdict, reasons, map path)."""
-    outside = [halo_outside(r, o.encode_halo_px) for r in regions]
-    matrix, offset, ok = fit_color_transform(org, back, outside)
-    baseline = {"source": "global_color_transform", "matrix": np.round(matrix, 4).tolist(), "offset": np.round(offset, 2).tolist(), "within_bounds": ok}
+def foreign_check_stream(open_org, open_back, track, o: Options, base, w, h, n):
+    """The post-encode check for a delivered file another tool encoded, one frame at a time (open_org and open_back each return a fresh frame iterator). Nothing is
+    learned from the delivered file's own pixels as a tolerance: a tolerance taken from frames not shown to match the source would excuse exactly the edits this
+    check exists to catch. What is modeled is what a different pipeline really does, a global color transform (fitted robustly; a standard conversion such as a
+    limited-to-full range change is recognized by name; anything else out of bounds is `inconclusive`). The source is corrected by it, encoded here with the
+    worker's settings (and once more with a violent edit inside the region only, the drift control), and the delivered file is judged against that by the persistence
+    rule, the drift control and the strong-change gate, as the worker's own composites are. Frames whose region is empty (the target was absent) have no declared
+    edit and are checked over the whole frame. A persistent unexplained area of 500 pixels or more, or a strong compact change, fails; 50 to 499 pixels is
+    `inconclusive` (`unknown_encoder`); below that it passes. Returns (encoded numbers, baseline, verdict, reasons, map path)."""
+    per_frame = max(300, min(6000, SAMPLE_BUDGET // max(1, (n + 2) // 3)))     # the fit's memory is bounded by the budget, not by the clip's length
+    x, y = collect_color_samples(open_org(), open_back(), track, o.encode_halo_px, per_frame=per_frame)
+    matrix, offset, ok, standard = fit_color_model(x, y)
+    baseline = {"source": "global_color_transform", "matrix": np.round(matrix, 4).tolist(), "offset": np.round(offset, 2).tolist(), "within_bounds": ok, "standard": standard}
+    del x, y
     if not ok:
         return ({"persistent_pixels": 0, "largest_blob_px": 0, "share_gt8": 0.0, "max_diff": 0, "drift_masked_px": 0, "strong_blob_px": 0}, baseline, "inconclusive",
                 ["unknown_encoder: the delivered clip's colors differ from the source by more than a different color conversion would explain, so no change can be told from a color path. Check it by eye."], None)
-    corrected = [apply_color_transform(f, matrix, offset) for f in org]
-    encoded, map_path = encoded_check_on_file(corrected, back, regions, o, base, w, h)
+    def corrected():
+        for a in open_org(): yield apply_color_transform(a, matrix, offset)
+    def control():
+        for k, c in enumerate(corrected()):
+            m = track.mask(k); yield np.where(m[..., None], 255 - c, c).astype(np.uint8)
+    def judge(sws):
+        """One run of the check with the source encoded with chroma resampling `sws`: the numbers and the changed-pixel overlay."""
+        srcenc, ctl = base + ".srcenc.mp4", base + ".ctl.mp4"
+        dvotes = np.zeros((h, w), np.int32); cvotes = np.zeros((h, w), np.int32); strong = 0; changed = 0; total = 0; max_diff = 0; first = None; overlay = None
+        try:
+            write_video(corrected(), srcenc, o.fps, w, h, sws)       # the corrected source with the worker's settings: the delivered file is judged against this, not against a fixed tolerance
+            write_video(control(), ctl, o.fps, w, h, sws)            # the drift control: a violent edit inside the region only, to see where the encoder moves untouched pixels
+            vf = f"fps={o.fps}"
+            for k, (s_, c_, d_, a_) in enumerate(zip(iter_frames(srcenc, vf, w, h, n), iter_frames(ctl, vf, w, h, n), open_back(), open_org())):
+                outside = halo_outside(track.mask(k), o.encode_halo_px)
+                gap_d = np.abs(s_.astype(np.int16) - d_.astype(np.int16)).max(2)
+                dvotes += ((gap_d > 8) & outside).astype(np.int32)
+                cvotes += ((np.abs(s_.astype(np.int16) - c_.astype(np.int16)).max(2) > 8) & outside).astype(np.int32)
+                strong = max(strong, strong_blob_frame(s_, d_, outside))
+                changed += int(((gap_d > 8) & outside).sum()); total += int(outside.sum()); max_diff = max(max_diff, int(gap_d.max()))
+                if first is None: first = a_.copy(); overlay = a_.copy()
+                overlay[(gap_d > 8) & outside] = (255, 0, 0)    # the same pixels the verdict counts
+        finally:
+            for path in (srcenc, ctl):
+                try: os.unlink(path)
+                except OSError: pass
+        minimum = max(5, int(np.ceil(0.1 * n)))
+        counted, masked = judge_areas(dvotes >= minimum, cvotes >= minimum)
+        count, _, stats, _ = cv2.connectedComponentsWithStats(counted.astype(np.uint8), 8)
+        largest = int(stats[1:, cv2.CC_STAT_AREA].max()) if count > 1 else 0
+        return dict(persistent_pixels=int(counted.sum()), largest_blob_px=largest, share_gt8=changed / max(1, total), max_diff=max_diff, drift_masked_px=int(masked), strong_blob_px=strong), first, overlay
+    # A different tool resamples chroma its own way (a saturated hard edge such as a caption pill shows it). That is one of a few named swscale settings, so the
+    # source is encoded each way in turn, default first, and the first that leaves nothing unexplained is the one used; an edit cannot be explained by any of them,
+    # so when none does the run with the least unexplained area decides.
+    best = None
+    for sws in CHROMA_VARIANTS:
+        encoded, first, overlay = judge(sws)
+        if best is None or (encoded["strong_blob_px"], encoded["largest_blob_px"]) < (best[0]["strong_blob_px"], best[0]["largest_blob_px"]): best = (encoded, first, overlay, sws)
+        if encoded["largest_blob_px"] < 50 and encoded["strong_blob_px"] < STRONG_BLOB_PX: break
+    encoded, first, overlay, chosen = best
+    baseline["chroma"] = chosen or "default"
+    strong, largest = encoded["strong_blob_px"], encoded["largest_blob_px"]
+    map_path = base + ".changedmap.png"
+    if first is not None:
+        contours, _ = cv2.findContours(track.mask(0).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2)
+        cv2.imwrite(map_path, cv2.cvtColor(np.hstack([first, overlay]), cv2.COLOR_RGB2BGR))
     reasons = []
-    if encoded["strong_blob_px"] >= STRONG_BLOB_PX or encoded["largest_blob_px"] >= FAIL_PERSISTENT_PX:
+    if strong >= STRONG_BLOB_PX or largest >= FAIL_PERSISTENT_PX:
         verdict = "fail"; reasons.append("A change was found outside the declared edit region.")
-    elif encoded["largest_blob_px"] >= 50:
+    elif largest >= 50:
         verdict = "inconclusive"
         reasons.append("unknown_encoder: this clip was encoded by another tool, and a small persistent difference of "
-                       f"{encoded['largest_blob_px']} pixels outside the declared region cannot be told from that tool's own edge handling. Check it by eye, or run the swap through this worker so it makes the one encode.")
+                       f"{largest} pixels outside the declared region cannot be told from that tool's own edge handling. Check it by eye, or run the swap through this worker so it makes the one encode.")
     else:
         verdict = "pass"
     return encoded, baseline, verdict, reasons, map_path
 
 
 def verify_delivered(source, delivered, start=0.0, seconds=2.3333, caption_box=None, edit_region=None, options: Options | None = None, base=None):
-    """Judge a delivered file that this worker did not make (a swap from another tool). The pre-encode exact check cannot run on a file, so the report says
-    `pre_encode: not_run`. The delivered file is compared with the decoded source, and the file's own frames that the swap did not touch measure its encoder's
-    drift (see foreign_check); the verdict is pass, fail or inconclusive."""
+    """Judge a delivered file that this worker did not make (a swap from another tool), one frame at a time. The pre-encode exact check cannot run on a file, so
+    the report says `pre_encode: not_run`; the verdict is pass, fail or inconclusive (see foreign_check_stream)."""
     o = options or Options()
     w, h = probe_size(delivered)
     n = int(round(seconds * o.fps))
     vf = (f"delogo=x={caption_box[0]}:y={caption_box[1]}:w={caption_box[2]}:h={caption_box[3]}," if caption_box else "") + f"fps={o.fps},scale={w}:{h}"
-    org = read_frames(source, vf, w, h, n, ss=start, t=seconds)
-    back = read_frames(delivered, f"fps={o.fps}", w, h, len(org))
-    compared = min(len(org), len(back)); mismatch = abs(len(org) - len(back)) > 1
-    org, back = org[:compared], back[:compared]
-    regions, region_source = declare_edit_region(list(org), o, edit_region)
-    if caption_box:
-        x, y, bw, bh = caption_box
-        for r in regions: r[y:y + bh, x:x + bw] = True
-    encoded, baseline, verdict, reasons, map_path = foreign_check(list(org), list(back), regions, o, base or delivered, w, h)
+    open_org = lambda: iter_frames(source, vf, w, h, n, ss=start, t=seconds)
+    open_back = lambda: iter_frames(delivered, f"fps={o.fps}", w, h, n)
+    n_org = sum(1 for _ in open_org()); n_back = sum(1 for _ in open_back())
+    compared = min(n_org, n_back); mismatch = abs(n_org - n_back) > 1
+    entries, region_source = region_entries(iter_frames(source, vf, w, h, compared, ss=start, t=seconds) if edit_region is None else (), compared, o, edit_region)
+    extra = [tuple(int(v) for v in caption_box)] if caption_box else []
+    track = RegionTrack(entries, region_source, (h, w), o, extra)
+    limit = lambda it: (f for _, f in zip(range(compared), it))
+    encoded, baseline, verdict, reasons, map_path = foreign_check_stream(lambda: limit(open_org()), lambda: limit(open_back()), track, o, base or delivered, w, h, compared)
     if mismatch:
         verdict = "fail"; reasons.append("The delivered clip and the source differ in length by more than one frame, so they cannot be compared.")
-    return {"frames": len(org), "size": [w, h], "frames_compared": compared,
-            "edit_region": {"source": region_source, "head_scale": o.region_head_scale, "margin_frac": o.region_margin_frac, "frames_with_region": sum(bool(r.any()) for r in regions)},
+    return {"frames": compared, "size": [w, h], "frames_compared": compared,
+            "edit_region": {"source": region_source, "head_scale": o.region_head_scale, "margin_frac": o.region_margin_frac, "frames_with_region": sum(1 for e in entries if e is not None)},
             "preservation": {"verdict": verdict, "pre_encode": "not_run", "changed_pixels": None, "violating_frames": [], "baseline": baseline, "encoded": encoded, "map_path": map_path, "reasons": reasons}}
 
 
