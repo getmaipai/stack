@@ -4686,6 +4686,33 @@
                     "maxItems": 8,
                     "description": "VF-ROLES-01, set by the generic door only: the typed inputs of a clip request, each as a role and the hash of the file. They are written to the job's receipt and not acted on yet (the capability and route rows do that)."
                   },
+                  "prompt_writer": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version"
+                    ],
+                    "description": "VF-PROMPT-01, set by the generic door when a pack's prompt writer made `prompt`: its id and version, written to the receipt."
+                  },
+                  "prompt_hints": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 16,
+                    "description": "VF-PROMPT-01: the writer's hints (counts and advice, never text), written to the receipt."
+                  },
                   "route": {
                     "type": "object",
                     "properties": {
