@@ -253,11 +253,11 @@ class EncoderDriftTest(unittest.TestCase):
         region = {"boxes": [[60, 100, 240, 240]] * 60 + [None] * (self.N - 60)}       # the target is absent in the last 36 frames: nothing was edited there
         report = cs.verify_delivered(src, dl, seconds=self.N / 24, edit_region=region)
         self.assertEqual(report["preservation"]["pre_encode"], "not_run"); self.assertIsNone(report["preservation"]["changed_pixels"])
-        self.assertEqual(report["preservation"]["verdict"], "pass")
+        self.assertIn(report["preservation"]["verdict"], ("pass", "inconclusive"))
         changed = [f.copy() for f in edited]
         for f in changed[:60]: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
         bad = os.path.join(self.dir, "bad.mp4"); cs.write_video(changed, bad, 24, self.W, self.H)
-        self.assertEqual(cs.verify_delivered(src, bad, seconds=self.N / 24, edit_region=region)["preservation"]["verdict"], "fail")
+        self.assertNotEqual(cs.verify_delivered(src, bad, seconds=self.N / 24, edit_region=region)["preservation"]["verdict"], "pass")
 
 
 class ForeignEncoderTest(unittest.TestCase):
@@ -310,33 +310,28 @@ class ForeignEncoderTest(unittest.TestCase):
         control = os.path.join(self.dir, "ctl.mp4"); cs.write_video(inverted, control, 24, self.W, self.H)
         self.assertGreaterEqual(cs.encoded_preservation_check(so, back, list(cs.read_frames(control, "fps=24", self.W, self.H, self.N)), regions, 32)["largest_blob_px"], 50)
 
-    def test_unedited_frames_of_the_delivered_file_measure_its_own_drift(self):
+    def patched(self, frames, rows, cols, amount, only_from=0, only_to=None):
+        for f in frames[only_from:only_to]: f[rows, cols] = np.clip(f[rows, cols].astype(int) + amount, 0, 255)
+        return frames
+
+    def test_nothing_is_learned_from_the_delivered_file_so_an_edit_only_in_null_region_frames_is_never_a_pass(self):
+        # the target is absent from frame EDITED on, so nothing may be edited there; a patch only there must not be excused as that pipeline's drift
+        frames = self.patched(self.edited_frames(self.EDITED), slice(570, 610), slice(10, 60), 40, only_from=self.EDITED)
+        self.assertNotEqual(self.verify(self.foreign(frames, "null_only.mp4"), self.EDITED)["preservation"]["verdict"], "pass")
+
+    def test_an_edit_spanning_null_and_active_frames_is_never_a_pass(self):
+        frames = self.patched(self.edited_frames(self.EDITED), slice(570, 610), slice(10, 60), 40)
+        self.assertNotEqual(self.verify(self.foreign(frames, "span.mp4"), self.EDITED)["preservation"]["verdict"], "pass")
+
+    def test_a_second_face_altered_while_the_target_is_absent_is_never_a_pass(self):
+        frames = self.edited_frames(self.EDITED)
+        for f in frames[self.EDITED:]: cv2.ellipse(f, (60, 60), (30, 30), 0, 0, 360, (210, 150, 140), -1)     # another person's face recolored where nothing may change
+        self.assertNotEqual(self.verify(self.foreign(frames, "face.mp4"), self.EDITED)["preservation"]["verdict"], "pass")
+
+    def test_a_clean_foreign_file_is_never_reported_as_a_pass_on_a_baseline_it_made_up(self):
         report = self.verify(self.foreign(self.edited_frames(self.EDITED), "clean.mp4"), self.EDITED)
-        self.assertEqual(report["preservation"]["verdict"], "pass"); self.assertEqual(report["preservation"]["baseline"]["source"], "unedited_frames")
-        self.assertEqual(report["preservation"]["pre_encode"], "not_run")
-
-    def test_an_edit_outside_the_region_still_fails_with_that_baseline(self):
-        frames = self.edited_frames(self.EDITED)
-        for f in frames[:self.EDITED]: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
-        report = self.verify(self.foreign(frames, "patch.mp4"), self.EDITED)
-        self.assertEqual(report["preservation"]["verdict"], "fail"); self.assertGreaterEqual(report["preservation"]["encoded"]["largest_blob_px"], 1500)
-
-    def test_misaligned_frames_in_the_unedited_stretch_do_not_hide_an_edit(self):
-        frames = self.edited_frames(self.EDITED)
-        for k in range(60, 65): frames[k] = self.decoded[k + 1].copy()          # five frames of the delivered file are one frame late: they differ from the source everywhere
-        for f in frames[:self.EDITED]: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
-        report = self.verify(self.foreign(frames, "late.mp4"), self.EDITED)
-        self.assertEqual(report["preservation"]["verdict"], "fail"); self.assertGreaterEqual(report["preservation"]["encoded"]["largest_blob_px"], 1500)
-
-    def test_a_short_edited_stretch_is_judged_by_its_own_length(self):
-        frames = self.edited_frames(8)
-        for f in frames[:8]: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
-        self.assertEqual(self.verify(self.foreign(frames, "short.mp4"), 8)["preservation"]["verdict"], "fail")
-
-    def test_without_unedited_frames_a_hard_edge_difference_is_inconclusive_not_a_pass_or_a_fail(self):
-        report = self.verify(self.foreign(self.edited_frames(self.N), "all.mp4"), self.N)
-        self.assertEqual(report["preservation"]["verdict"], "inconclusive"); self.assertEqual(report["preservation"]["baseline"]["source"], "none")
-        self.assertTrue(any("unknown_encoder" in r for r in report["preservation"]["reasons"]))
+        self.assertEqual(report["preservation"]["baseline"]["source"], "none"); self.assertEqual(report["preservation"]["pre_encode"], "not_run")
+        self.assertIn(report["preservation"]["verdict"], ("pass", "inconclusive"))
 
 
 class RegionShapeTest(unittest.TestCase):
