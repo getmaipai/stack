@@ -92,6 +92,12 @@ export function clipBody(request: ClipRequest, plan: Planned): Record<string, un
     model: plan.serving.part.id, prompt: fillRecipe(recipe, { description: request.description }),
     ...(pixels ? { size: `${pixels.width}x${pixels.height}` } : {}), seconds: Math.round(request.seconds), ...(request.seed !== undefined ? { seed: request.seed } : {}),
     audience: request.audience === "adult" ? "adult" : "all-ages",
+    // VF-DOOR-01: the level is the job's tier, so a Boost or Max clip is admitted, governed and classed as one (a Standard clip keeps the untiered admission, as on the
+    // old door); the household's quiet window passes through; a caller that will not wait (`wait` 0) gets the job id at once.
+    ...(plan.level === "boost" || plan.level === "max" ? { tier: plan.level } : {}),
+    ...(request.quiet_seconds !== undefined ? { quiet_seconds: request.quiet_seconds } : {}),
+    ...(request.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: request.quiet_max_wait_seconds } : {}),
+    ...(request.wait !== undefined ? { timeout_ms: Math.max(1, request.wait * 1000) } : {}),
   };
 }
 

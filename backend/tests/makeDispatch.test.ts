@@ -87,6 +87,15 @@ test("a clip's result names its receipt by the job id (VF-RECEIPT-01)", async ()
   const result = await dispatchClip(clipReq(), clipPlanned(), async () => ({ status: 200, json: { job: "v1", data: [{ url: "/v1/videos/generations/v1/0.mp4", poster_url: "/v1/videos/generations/v1/0.jpg", seconds: 5, audio: true }] } }));
   expect(result.body).toMatchObject({ made_with: { receipt: "v1" } });
 });
+test("the level is the clip's tier, the quiet window passes through and a caller that will not wait gets the job at once (VF-DOOR-01)", () => {
+  const planned = (level: "standard" | "boost" | "max") => ({ ...clipPlanned(), level });
+  expect(clipBody(clipReq(), planned("standard"))).not.toHaveProperty("tier");   // Standard keeps the untiered admission
+  expect(clipBody(clipReq(), planned("boost"))).toMatchObject({ tier: "boost" });
+  expect(clipBody(clipReq(), planned("max"))).toMatchObject({ tier: "max" });
+  expect(clipBody(clipReq({ quiet_seconds: 60, quiet_max_wait_seconds: null, wait: 0 }), planned("max"))).toMatchObject({ quiet_seconds: 60, quiet_max_wait_seconds: null, timeout_ms: 1 });
+  expect(clipBody(clipReq({ wait: 30 }), planned("standard"))).toMatchObject({ timeout_ms: 30_000 });
+  expect(clipBody(clipReq(), planned("standard"))).not.toHaveProperty("timeout_ms");
+});
 const png = { bytes: new Uint8Array([137, 80, 78, 71]), type: "image/png" };
 test("typed inputs are read and handed on as a role and a hash for the receipt, and acted on by nothing (VF-ROLES-01)", async () => {
   let sent: Record<string, unknown> = {};
