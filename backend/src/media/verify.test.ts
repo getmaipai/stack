@@ -36,12 +36,12 @@ describe("media.verify pure parts", () => {
 
 const dir = mkdtempSync(join(tmpdir(), "verify-fixtures-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
-type V = "move" | "still" | "black"; type A = number | "mute" | { f: number; vol: number };
+type V = "move" | "still" | "black"; type A = number | "mute" | string | { f: number; vol: number };
 /** Three 2 s shots at 320x240, 24 fps, built from synthetic test patterns and tones, then joined. */
 function build(name: string, video: V[], audio: A[], size = "320x240"): string {
   const out = join(dir, name); const inputs: string[] = []; const chains: string[] = [];
   video.forEach((v, i) => { inputs.push("-f", "lavfi", "-i", v === "move" ? `testsrc2=size=${size}:rate=24:duration=2` : `color=c=${v === "black" ? "black" : "0x4060c0"}:size=${size}:rate=24:duration=2`); chains.push(`[${i}:v]setsar=1[v${i}]`); });
-  audio.forEach((a, i) => { const k = video.length + i; inputs.push("-f", "lavfi", "-i", a === "mute" ? "anullsrc=r=16000:cl=mono:d=2" : typeof a === "number" ? `sine=f=${a}:r=16000:d=2` : `sine=f=${a.f}:r=16000:d=2`); chains.push(`[${k}:a]aformat=sample_rates=16000:channel_layouts=mono${typeof a === "object" ? `,volume=${a.vol}` : ""}[a${i}]`); });
+  audio.forEach((a, i) => { const k = video.length + i; inputs.push("-f", "lavfi", "-i", a === "mute" ? "anullsrc=r=16000:cl=mono:d=2" : typeof a === "string" ? a : typeof a === "number" ? `sine=f=${a}:r=16000:d=2` : `sine=f=${a.f}:r=16000:d=2`); chains.push(`[${k}:a]aformat=sample_rates=16000:channel_layouts=mono${typeof a === "object" ? `,volume=${a.vol}` : ""}[a${i}]`); });
   const join_ = video.map((_, i) => `[v${i}][a${i}]`).join("") + `concat=n=${video.length}:v=1:a=1[v][a]`;
   const r = spawnSync(ffmpeg, ["-y", "-v", "error", ...inputs, "-filter_complex", [...chains, join_].join(";"), "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", out], { encoding: "utf8" });
   if (r.status !== 0) throw new Error(r.stderr);
@@ -81,6 +81,14 @@ describe.skipIf(!have)("media.verify on fixtures built with ffmpeg", () => {
     expect(fails(copied, "sound.copied").map((c) => [c.shot_id, c.other_shot_id])).toEqual([["s1", "s3"]]);
     const fine = await run(build("distinct.mp4", ["move", "move", "move"], TONES), [shot(0, { sound: true }), shot(1, { sound: true }), shot(2, { sound: true })]);
     expect(fails(fine, "sound.copied")).toEqual([]);
+  }, 60_000);
+  it("catches a copy that was moved a little in time (the real first cut of the test film: shot 1's sound under every shot, shifted 10 to 120 ms)", async () => {
+    const steps = (hz: number, shiftMs: number) => `sine=f=${hz}:r=16000:d=2,tremolo=f=3:d=1,adelay=${shiftMs}|${shiftMs},atrim=0:2`;
+    const file = build("shifted.mp4", ["move", "move", "move"], [steps(440, 0), "sine=f=660:r=16000:d=2,tremolo=f=7:d=1", steps(440, 50)]);
+    const r = await run(file, [shot(0, { sound: true }), shot(1, { sound: true }), shot(2, { sound: true })]);
+    const copies = fails(r, "sound.copied");
+    expect(copies.map((c) => [c.shot_id, c.other_shot_id])).toEqual([["s1", "s3"]]);
+    expect(Math.abs(copies[0]!.at_s!)).toBeGreaterThan(0.03); expect(Math.abs(copies[0]!.at_s!)).toBeLessThan(0.07);
   }, 60_000);
   it("flags a shot far quieter than the rest", async () => {
     const r = await run(build("quiet.mp4", ["move", "move", "move"], [440, { f: 660, vol: 0.01 }, 880]), [shot(0, { sound: true }), shot(1, { sound: true }), shot(2, { sound: true })]);

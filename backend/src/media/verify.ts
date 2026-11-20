@@ -60,8 +60,13 @@ export const VERIFY_AUDIO = {
   silentShare: 0.9,
   /** A shot this many LU below the median of the other shots' loudness is flagged as far quieter. */
   quietLu: 10,
-  /** Two shots whose sound correlates at or above this (at lag zero, from the shots' own starts) are copies. */
+  /** Two shots whose sound correlates at or above this (waveform at lag zero, from the shots' own starts) are copies. */
   copyCorrelation: 0.9,
+  /** A shifted copy: the loudness shape (10 ms frames) of two shots matches at or above this at some shift up to copyShiftSeconds. Found on the real first cut of the test film, where each shot carried shot 1's sound moved by 10 to 120 ms and the lag-zero waveform test saw nothing. */
+  copyEnvelopeCorrelation: 0.9,
+  copyShiftSeconds: 0.3,
+  /** The loudness shape only counts when it varies (standard deviation over mean at least this); a steady tone or hiss carries no shape to match. */
+  envelopeVariation: 0.25,
   /** A shot quieter than this RMS (0 to 1) carries no sound worth comparing. */
   rmsFloor: 0.001,
   /** The sound compared is cut to this many seconds per shot. */
@@ -153,6 +158,22 @@ export function correlation(a: Float32Array, b: Float32Array): number {
   return aa > 0 && bb > 0 ? ab / Math.sqrt(aa * bb) : 0;
 }
 export const rmsOf = (a: Float32Array): number => { if (!a.length) return 0; let s = 0; for (let i = 0; i < a.length; i++) s += a[i]! * a[i]!; return Math.sqrt(s / a.length); };
+/** The loudness shape: RMS per 10 ms of 4 kHz audio. */
+export function envelope(samples: Float32Array): number[] { const out: number[] = []; for (let i = 0; i + 40 <= samples.length; i += 40) { let e = 0; for (let k = 0; k < 40; k++) e += samples[i + k]! ** 2; out.push(Math.sqrt(e / 40)); } return out; }
+function pearson(xs: number[], ys: number[]): number { const n = xs.length; if (n < 20) return 0; const mx = xs.reduce((p, c) => p + c, 0) / n, my = ys.reduce((p, c) => p + c, 0) / n; let nu = 0, dx = 0, dy = 0; for (let i = 0; i < n; i++) { nu += (xs[i]! - mx) * (ys[i]! - my); dx += (xs[i]! - mx) ** 2; dy += (ys[i]! - my) ** 2; } return dx > 0 && dy > 0 ? nu / Math.sqrt(dx * dy) : 0; }
+const variation = (e: number[]): number => { const m = e.reduce((p, c) => p + c, 0) / (e.length || 1); if (!m) return 0; return Math.sqrt(e.reduce((p, c) => p + (c - m) ** 2, 0) / e.length) / m; };
+/** A shifted copy of one shot's sound in another, by the loudness shape. Null when none, or when either shape is too flat to tell. */
+export function shiftedCopy(a: Float32Array, b: Float32Array): { score: number; shift_s: number } | null {
+  const ea = envelope(a), eb = envelope(b);
+  if (variation(ea) < VERIFY_AUDIO.envelopeVariation || variation(eb) < VERIFY_AUDIO.envelopeVariation) return null;
+  const max = Math.round(VERIFY_AUDIO.copyShiftSeconds * 100); let best = { score: -1, lag: 0 };
+  for (let lag = -max; lag <= max; lag++) {
+    const from = Math.max(0, -lag), to = Math.min(ea.length, eb.length - lag);
+    const score = pearson(ea.slice(from, to), eb.slice(from + lag, to + lag));
+    if (score > best.score) best = { score, lag };
+  }
+  return best.score >= VERIFY_AUDIO.copyEnvelopeCorrelation ? { score: best.score, shift_s: best.lag / 100 } : null;
+}
 const median = (values: number[]): number => { const s = [...values].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2; };
 const fmt = (s: number): string => `${Math.round(s * 10) / 10}s`;
 
@@ -287,7 +308,12 @@ export async function verifyFile(rawInput: VerifyInput, deps: VerifyDeps): Promi
         // A line shot's audio is padded at its start, a plain one is not, so align from the shot's own start on both.
         const a = alignedStart(shots.find((s) => s.id === ids[i])!, small.get(ids[i]!)!); const b = alignedStart(shots.find((s) => s.id === ids[j])!, small.get(ids[j]!)!);
         const c = correlation(a, b);
-        if (c >= VERIFY_AUDIO.copyCorrelation) { copies++; add({ check: "sound.copied", status: "fail", shot_id: ids[i]!, other_shot_id: ids[j]!, value: Math.round(c * 1000) / 1000, message: `Shots ${ids[i]} and ${ids[j]} carry the same sound (match ${Math.round(c * 100)}%). One was copied onto the other. Make the sound again for each shot.` }); }
+        const shifted = c >= VERIFY_AUDIO.copyCorrelation ? null : shiftedCopy(a, b);
+        if (c >= VERIFY_AUDIO.copyCorrelation || shifted) {
+          copies++;
+          const score = shifted ? shifted.score : c;
+          add({ check: "sound.copied", status: "fail", shot_id: ids[i]!, other_shot_id: ids[j]!, value: Math.round(score * 1000) / 1000, ...(shifted ? { at_s: shifted.shift_s } : {}), message: `Shots ${ids[i]} and ${ids[j]} carry the same sound (match ${Math.round(score * 100)}%${shifted ? `, one moved ${Math.abs(Math.round(shifted.shift_s * 1000))} ms against the other` : ""}). One was copied onto the other. Make the sound again for each shot.` });
+        }
       }
       if (!copies) add({ check: "sound.copied", status: "pass", message: "No two shots carry the same sound." });
     }
