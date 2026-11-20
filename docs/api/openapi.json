@@ -17191,6 +17191,17 @@
                           "open_on_picture",
                           "new_shot"
                         ]
+                      },
+                      "quiet_seconds": {
+                        "type": "integer",
+                        "minimum": 20,
+                        "maximum": 3600
+                      },
+                      "quiet_max_wait_seconds": {
+                        "type": "integer",
+                        "nullable": true,
+                        "minimum": 0,
+                        "maximum": 86400
                       }
                     },
                     "required": [
