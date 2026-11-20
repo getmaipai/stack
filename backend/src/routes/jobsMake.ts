@@ -8,7 +8,7 @@ import { dispatchSong, dispatchSongEdit, dispatchStems } from "@/lib/makeDispatc
 import { dispatchSwap } from "@/lib/makeDispatchSwap";
 import { dispatchCharacterSheet, dispatchContactSheet } from "@/lib/makeDispatchSheets";
 import { planMake } from "@/lib/makePlan";
-import { WIRED_JOBS, dispatchClip, dispatchPicture, dispatchPictureEdit, type PictureBytes } from "@/lib/makeDispatch";
+import { WIRED_JOBS, withWait, dispatchClip, dispatchPicture, dispatchPictureEdit, type PictureBytes } from "@/lib/makeDispatch";
 
 const NotAvailable = z.object({ code: z.literal("not_available"), line: z.string().min(1) }).strict();
 const route = createRoute({
@@ -33,7 +33,7 @@ jobsMakeRoutes.openapi(route, async (c) => {
   if (!WIRED_JOBS.has(request.job)) return c.json({ code: "not_available", line: "This kind of job is not available through this door yet." }, 409) as never;
   const { app } = await import("@/app");
   const forward = async (path: string, body: unknown) => {
-    const response = await app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const response = await app.request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(withWait(body as Record<string, unknown>, request.wait)) });
     return { status: response.status, json: await response.json().catch(() => null) };
   };
   const read: PictureBytes = async (reference) => {

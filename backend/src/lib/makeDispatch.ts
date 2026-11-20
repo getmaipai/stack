@@ -17,6 +17,11 @@ export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit
 type Forward = (path: string, body: unknown) => Promise<{ status: number; json: unknown }>;
 type Planned = Extract<MakePlan, { ok: true }>;
 
+/** The request's `wait` (whole seconds) as the old route's `timeout_ms`. Zero is the shortest wait the route takes, so the answer is 202 with the job id. */
+export function withWait(body: Record<string, unknown>, wait: number | undefined): Record<string, unknown> {
+  return wait === undefined ? body : { ...body, timeout_ms: Math.max(1, wait * 1000) };
+}
+
 export function pictureBody(request: Extract<StackMakeRequest, { job: "picture" }>, plan: Planned): Record<string, unknown> {
   const pixels = (plan.serving.job.limits.shapes as Record<string, Record<string, { width: number; height: number } | undefined> | undefined> | undefined)?.[request.shape]?.[plan.level];
   const recipe = plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";

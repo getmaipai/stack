@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
 import type { MakePlan } from "@/lib/makePlan";
-import { fillRecipe } from "@/lib/recipe";
+import { fillRecipeLines, type RecipeInputs } from "@/lib/recipe";
 import type { PictureBytes } from "@/lib/makeDispatch";
 
 type Planned = Extract<MakePlan, { ok: true }>;
@@ -16,15 +16,16 @@ export const SONG_UNREADABLE_LINE = "That song could not be found. Send a song a
 const QUALITY = { standard: "quick", boost: "detailed", max: "max" } as const;
 const unreadable = { status: 409, body: { code: "not_available", line: SONG_UNREADABLE_LINE } };
 
-const caption = (request: { description?: string; style_words?: string[] }, plan: Planned): string => {
+/** The caption the music route takes: the pack recipe's lines (the description, and the tempo, key and language when asked for), then the style words. */
+const caption = (request: { description?: string; style_words?: string[] }, plan: Planned, extra: Pick<RecipeInputs, "bpm" | "key" | "language"> = {}): string => {
   const recipe = plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";
-  const base = request.description ? fillRecipe(recipe, { description: request.description }) : "";
-  return [base, ...(request.style_words ?? [])].filter(Boolean).join(", ");
+  const lines = request.description ? fillRecipeLines(recipe, { description: request.description, ...extra }) : [];
+  return [...lines, ...(request.style_words ?? [])].filter(Boolean).join(", ");
 };
 
 export function songBody(request: SongRequest, plan: Planned): Record<string, unknown> {
   return {
-    task: "text2music", caption: caption(request, plan), quality: QUALITY[plan.level],
+    task: "text2music", caption: caption(request, plan, { ...(request.bpm !== undefined ? { bpm: String(Math.round(request.bpm)) } : {}), ...(request.key ? { key: request.key } : {}), ...(request.language ? { language: request.language } : {}) }), quality: QUALITY[plan.level],
     ...(request.lyrics ? { lyrics: request.lyrics } : { instrumental: true }), duration_s: Math.round(request.seconds), ...(request.seed !== undefined ? { seed: request.seed } : {}),
   };
 }
@@ -47,8 +48,8 @@ export async function dispatchSong(request: SongRequest, plan: Planned, forward:
 export function songEditBody(request: SongEditRequest, plan: Planned, source: string): Record<string, unknown> {
   const change = request.change;
   const common = { source, quality: QUALITY[plan.level] };
-  if (change.kind === "cover") return { ...common, task: "cover", caption: (change.style_words ?? []).join(", "), ...(change.strength !== undefined ? { strength: change.strength } : {}) };
-  if (change.kind === "repaint") return { ...common, task: "repaint", from_s: change.from_seconds, to_s: change.to_seconds, ...(change.description ? { caption: change.description } : {}), ...(change.lyrics ? { lyrics: change.lyrics } : {}) };
+  if (change.kind === "cover") return { ...common, task: "cover", caption: caption(change, plan), ...(change.lyrics ? { lyrics: change.lyrics } : {}), ...(change.strength !== undefined ? { strength: change.strength } : {}) };
+  if (change.kind === "repaint") return { ...common, task: "repaint", from_s: change.from_seconds, to_s: change.to_seconds, ...(change.description ? { caption: caption(change, plan) } : {}), ...(change.lyrics ? { lyrics: change.lyrics } : {}) };
   return { ...common, task: "extend", add_s: Math.round(change.add_seconds), ...(change.at ? { at: change.at } : {}) };
 }
 
@@ -64,7 +65,7 @@ export async function dispatchSongEdit(request: SongEditRequest, plan: Planned, 
 export async function dispatchStems(request: StemsRequest, plan: Planned, read: PictureBytes, forward: Forward): Promise<{ status: number; body: unknown }> {
   const song = await read(request.song);
   if (!song) return unreadable;
-  const sent = await forward("/v1/audio/stems", { source: Buffer.from(song.bytes).toString("base64"), source_sha256: createHash("sha256").update(song.bytes).digest("hex"), model: "htdemucs" });
+  const sent = await forward("/v1/audio/stems", { source: Buffer.from(song.bytes).toString("base64"), source_sha256: createHash("sha256").update(song.bytes).digest("hex"), model: "htdemucs", ...(request.origin ? { origin: request.origin } : {}) });
   if (sent.status !== 200 && sent.status !== 202) return { status: sent.status, body: sent.json };
   const reply = sent.json as { job: string; data?: Array<{ stem: string; url: string }> };
   const wanted = new Set(request.stems);

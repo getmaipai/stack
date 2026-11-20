@@ -219,3 +219,50 @@ test("a song, a song edit and a split always carry made_with (part id, label, pa
     }
   }
 });
+
+// MODELPACK-HOME-05 (spec 0.1.427): the song door's new fields reach the music route through the pack's recipe, never through code that names a model.
+import { withWait } from "@/lib/makeDispatch";
+test("a recipe line with a blank the request left empty is dropped; a filled one stays", () => {
+  const recipe = "{description}\n{bpm} beats per minute\n{key} key\n{language} vocals\n---measured---\nnote";
+  expect(fillRecipe(recipe, { description: "a calm tune" })).toBe("a calm tune");
+  expect(fillRecipe(recipe, { description: "a calm tune", bpm: "96", key: "C minor", language: "Spanish" })).toBe("a calm tune\n96 beats per minute\nC minor key\nSpanish vocals");
+});
+test("a song's bpm, key and language go into the caption through the pack's recipe", () => {
+  const req = { job: "song", audience: "adult", description: "a calm tune", style_words: ["piano"], seconds: 60, bpm: 96.4, key: "C minor", language: "Spanish" } as StackMakeRequest;
+  for (const id of ["ace-step-1-5-turbo", "ace-step-1-5-xl-turbo-bf16", "ace-step-1-5-xl-sft-bf16"]) {
+    const body = songBody(req as never, musicPlan({ ...req, level: id.includes("sft") ? "max" : id.includes("xl") ? "boost" : "standard" } as StackMakeRequest, id));
+    expect(body.caption).toBe("a calm tune, 96 beats per minute, C minor key, Spanish vocals, piano");
+    expect(body).not.toHaveProperty("bpm");
+  }
+});
+test("a song without bpm, key or language keeps its old caption", () => {
+  const req = { job: "song", audience: "adult", description: "a calm tune", style_words: ["piano"], seconds: 60 } as StackMakeRequest;
+  expect(songBody(req as never, musicPlan(req)).caption).toBe("a calm tune, piano");
+});
+test("a cover's description goes through the song-edit recipe and its lyrics reach the music route", () => {
+  const req = { job: "song_edit", audience: "adult", song: "/v1/audio/music/s1/file", change: { kind: "cover", style_words: ["jazz"], description: "warm and slow", lyrics: "la la la" } } as StackMakeRequest;
+  expect(songEditBody(req as never, musicPlan(req), "data:x")).toMatchObject({ task: "cover", caption: "warm and slow, jazz", lyrics: "la la la" });
+  const bare = { ...req, change: { kind: "cover", style_words: ["jazz"] } } as StackMakeRequest;
+  const body = songEditBody(bare as never, musicPlan(bare), "data:x");
+  expect(body.caption).toBe("jazz");
+  expect(body).not.toHaveProperty("lyrics");
+});
+test("stems send origin owned_file to the splitter only when asked", async () => {
+  const sendWith = async (extra: Record<string, unknown>) => {
+    const req = { job: "stems", audience: "adult", song: "/v1/audio/music/s1/file", stems: ["vocals"], ...extra } as StackMakeRequest;
+    let sent: Record<string, unknown> = {};
+    await dispatchStems(req as never, musicPlan(req, "htdemucs"), async () => m4a, async (_p, body) => { sent = body as never; return { status: 202, json: { job: "t1" } }; });
+    return sent;
+  };
+  expect(await sendWith({ origin: "owned_file" })).toMatchObject({ origin: "owned_file" });
+  expect(await sendWith({})).not.toHaveProperty("origin");
+});
+test("wait becomes the route's timeout_ms; zero asks for the shortest wait so the answer is 202 with the id", () => {
+  expect(withWait({ a: 1 }, 30)).toEqual({ a: 1, timeout_ms: 30_000 });
+  expect(withWait({ a: 1 }, 0)).toEqual({ a: 1, timeout_ms: 1 });
+  expect(withWait({ a: 1 }, undefined)).toEqual({ a: 1 });
+});
+test("the make door accepts the 0.1.427 song fields and wait", async () => {
+  const response = await app.request("/stack/v1/jobs/make", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ job: "song", audience: "adult", description: "a calm tune", seconds: 30, bpm: 90, key: "A minor", language: "English", wait: 0 }) });
+  expect(response.status).not.toBe(400);
+});
