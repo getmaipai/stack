@@ -196,4 +196,26 @@ test("a clip whose words cannot be written is a plain 422, not a crash", async (
   const result = await dispatchClip(req, (() => { const p = planMake(req, [ready("minimax-h3")]); if (!p.ok) throw new Error("not planned"); return p; })(), async () => ({ status: 200, json: {} }));
   expect(result.status).toBe(422); expect(result.body).toMatchObject({ code: "invalid_request" });
   expect(String((result.body as { line: string }).line)).toContain("positive words");
+
+import { StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
+test("a song, a song edit and a split always carry made_with (part id, label, pack version), done or still running", async () => {
+  const song = { job: "song", audience: "adult", description: "a calm tune", seconds: 60 } as StackMakeRequest;
+  const edit = { job: "song_edit", audience: "adult", song: "/v1/audio/music/s1/file", change: { kind: "extend", add_seconds: 20 } } as StackMakeRequest;
+  const stems = { job: "stems", audience: "adult", song: "/v1/audio/music/s1/file", stems: ["vocals"] } as StackMakeRequest;
+  const running = async () => ({ status: 202, json: { job: "j1" } });
+  const finished = async () => ({ status: 200, json: { job: "j1", data: [{ duration_s: 60, lrc: null, stem: "vocals", url: "/v1/audio/stems/j1/vocals" }] } });
+  for (const forward of [running, finished]) {
+    const results = [
+      (await dispatchSong(song as never, musicPlan(song), forward)).body,
+      (await dispatchSongEdit(edit as never, musicPlan(edit), async () => m4a, forward)).body,
+      (await dispatchStems(stems as never, musicPlan(stems, "htdemucs"), async () => m4a, forward)).body,
+    ];
+    for (const [i, body] of results.entries()) {
+      const parsed = StackMakeResult.safeParse(body);
+      expect(parsed.success).toBe(true);
+      const madeWith = parsed.success ? parsed.data.made_with : null;
+      const part = PART_DEFS.find((d) => d.id === madeWith?.part);
+      expect(madeWith).toMatchObject({ part: i === 2 ? "htdemucs" : "ace-step-1-5-turbo", label: part?.label, pack_version: expect.stringMatching(/^\d+\.\d+\.\d+$/) });
+    }
+  }
 });
