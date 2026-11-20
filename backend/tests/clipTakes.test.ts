@@ -131,5 +131,5 @@ test("the restyle recipe holds the colour wording: the colorize style gets natur
   expect(fillStyleRecipe(recipe, "Colorize", { description: "the street in summer" })).toBe("the street in summer, natural realistic colours, daylight");
   expect(fillStyleRecipe(recipe, "colorize old film", { description: "x" })).toBe("x, natural realistic colours, daylight");
   expect(fillStyleRecipe(recipe, "Paper world", { description: "a painted street" })).toBe("a painted street");
-  expect(fillStyleRecipe(recipe, "Colorize", { description: "" })).toBe(", natural realistic colours, daylight");
+  expect(fillStyleRecipe(recipe, "Colorize", { description: "" })).toBe("natural realistic colours, daylight");
 });

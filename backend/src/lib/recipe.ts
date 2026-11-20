@@ -45,5 +45,6 @@ export function fillStyleRecipe(text: string, styleName: string, inputs: RecipeI
     const body = (sections[i + 1] ?? "").split(/^---(?:words|measured|identity)---$/m)[0]!.trim();
     if (key && new RegExp(`\\b${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(styleName)) { chosen = body; break; }
   }
-  return fillRecipe(chosen, inputs);
+  // No words from the person: the part's own wording stands without a dangling comma.
+  return fillRecipe(chosen, inputs).replace(/^[\s,]+/, "");
 }
