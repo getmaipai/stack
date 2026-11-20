@@ -8,7 +8,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { StackClipDialogue } from "@maipai/spec/stack/ts/stack-make.js";
+import { StackRoughCutRequest, type StackRoughCutResult } from "@maipai/spec/stack/ts/stack-rough-cut.js";
 import { JobFailure, type Job, type JobProgress } from "@/lib/jobs";
 import { speakRole, speechForm } from "@/lib/supervisor";
 import { voiceNeedsCloning } from "@/speech/voices";
@@ -20,18 +20,10 @@ import type { Runner } from "./run";
 import { decodeWave } from "@/speech/audio";
 import { finalizeWav, wavDuration } from "./tts";
 
-// The request and result mirror commons spec `stack-rough-cut-request` and `stack-rough-cut-result` (one fixture set both tests read).
-// This Stack still pins an older spec tag, so the shapes live here until the pin passes the tag that carries them.
-const text = z.string().min(1);
-const id = z.string().min(1).max(60).regex(/^[A-Za-z0-9._-]+$/);
-export const RoughCutInput = z.object({
-  audience: z.enum(["adult", "minor"]),
-  shots: z.array(z.object({ id, picture: text, seconds: z.number().positive().max(60), motion: text.optional(), caption: z.string().min(1).max(200).optional() }).strict()).min(1).max(24),
-  lines: z.array(z.object({ shot_id: id, line: StackClipDialogue }).strict()).max(96).optional(),
-  voices: z.array(z.object({ speaker: text, voice_address: text.optional(), minor: z.boolean().optional() }).strict()).max(24).optional(),
-}).strict();
-export type RoughCutInput = z.infer<typeof RoughCutInput>;
-export interface RoughCutResult { file: string; total_s: number; shots: Array<{ id: string; start_s: number; end_s: number }>; lines: Array<{ shot_id: string; speaker: string; start_s: number; length_s: number; audio: string; wave?: number[] }>; }
+// The request and result are the commons spec's `stack-rough-cut-request` and `stack-rough-cut-result` (spec-v0.1.444 added the per-shot `caption`).
+export const RoughCutInput = StackRoughCutRequest;
+export type RoughCutInput = z.infer<typeof StackRoughCutRequest>;
+export type RoughCutResult = StackRoughCutResult;
 
 /** Loudness samples of one line's audio for the player's small waveform: RMS in up to 40 equal parts, the loudest scaled to 1 (silence stays 0). */
 export function waveOf(wav: Uint8Array, parts = 40): number[] | undefined {

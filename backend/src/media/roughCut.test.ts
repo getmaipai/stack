@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { POCKET_TTS_PRESET_VOICES } from "@/speech/voices";
 import { precheck } from "./jobs";
-import { buildRoughCut, checkRoughCutRequest, LINE_LEAD_S, motionOp, RoughCutRefusal, waveOf, type RoughCutDeps, type RoughCutInput } from "./roughCut";
+import { buildRoughCut, checkRoughCutRequest, LINE_LEAD_S, motionOp, RoughCutInput, RoughCutRefusal, waveOf, type RoughCutDeps } from "./roughCut";
 import { spawnRunner } from "./run";
 
 const ffmpeg = process.env.STACK_MEDIA_FFMPEG ?? "ffmpeg";
@@ -26,6 +26,15 @@ const deps = (over: Partial<RoughCutDeps> = {}): RoughCutDeps => ({
 const probeSeconds = (path: string): number => Number(spawnSync(ffprobe, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path], { encoding: "utf8" }).stdout);
 const hasAudio = (path: string): boolean => spawnSync(ffprobe, ["-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type", "-of", "csv=p=0", path], { encoding: "utf8" }).stdout.includes("audio");
 const silent = (path: string, from: number, len: number): boolean => spawnSync(ffmpeg, ["-hide_banner", "-ss", String(from), "-t", String(len), "-i", path, "-vn", "-af", "volumedetect", "-f", "null", "-"], { encoding: "utf8" }).stderr.match(/max_volume: (-?[\d.]+|-inf) dB/)?.[1] === "-inf" || Number(spawnSync(ffmpeg, ["-hide_banner", "-ss", String(from), "-t", String(len), "-i", path, "-vn", "-af", "volumedetect", "-f", "null", "-"], { encoding: "utf8" }).stderr.match(/max_volume: (-?[\d.]+) dB/)?.[1] ?? "0") < -50;
+
+describe("media.rough_cut: the shared spec fixtures", () => {
+  const folder = join(dirname(require.resolve("@maipai/spec/package.json")), "fixtures", "stack-rough-cut-request");
+  for (const name of readdirSync(folder).filter((entry) => entry.endsWith(".json"))) {
+    it(`${name} is ${name.startsWith("invalid") ? "refused" : "accepted"} by the request shape`, () => {
+      expect(RoughCutInput.safeParse(JSON.parse(readFileSync(join(folder, name), "utf8"))).success).toBe(!name.startsWith("invalid"));
+    });
+  }
+});
 
 describe("media.rough_cut: the line's waveform", () => {
   it.skipIf(!have)("is loudness from 0 to 1, loudest at 1, and 0 where the line is silent", () => {
