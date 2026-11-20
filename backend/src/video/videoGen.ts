@@ -25,7 +25,7 @@
 // prompt, and the two absolute lines live in Home, where the person is known.
 import { engineIdleMs } from "@/lib/engineIdle";
 import { defaultToolbox } from "@/media/tools";
-import { H3_VIDEO_ID, H3_VIDEO_VERSION, h3VideoCommand, type H3VideoBuild } from "./h3";
+import { H3_MAX_SECONDS, H3_VIDEO_ID, H3_VIDEO_VERSION, h3VideoCommand, type H3VideoBuild } from "./h3";
 import { spawnRunner } from "@/media/run";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { TreeSnapshot } from "@/lib/processTree";
@@ -91,8 +91,9 @@ export const VIDEO_SPECS: Record<VideoQuality, VideoSpec> = {
   ltx25: { quality: "ltx25", modelId: STACK_VIDEO_LTX25_MODEL_ID, maxSeconds: LTX25_MAX_SECONDS, frameStep: 8, defaultSize: LTX25_DEFAULT_SIZE, maxPixels: 768 * 448, sizeStep: 32, minSide: 256, audio: true, peakBytes: LTX25_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
   // LTX25-MAX-01: the Max profile (1024x576, 10 s) on the dgrauet runtime and the bf16 pack; the peak is its admission figure (measured footprint with headroom).
   ltx25max: { quality: "ltx25max", modelId: STACK_VIDEO_LTX25_MAX_MODEL_ID, maxSeconds: LTX25_MAX_PROFILE_SECONDS, frameStep: 8, defaultSize: LTX25_MAX_DEFAULT_SIZE, maxPixels: 1024 * 576, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX25_MAX_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
-  h3: { quality: "h3", modelId: H3_VIDEO_ID, maxSeconds: 10, frameStep: 1, defaultSize: "864x480", maxPixels: 864 * 480, sizeStep: 1, minSide: 1, audio: true, peakBytes: 42_100_000_000, loraBase: "minimax-h3", worker: "ltx25_worker.py", imageToVideo: false, endImage: false },
-  h3stream: { quality: "h3stream", modelId: H3_VIDEO_ID, maxSeconds: 10, frameStep: 1, defaultSize: "864x480", maxPixels: 864 * 480, sizeStep: 1, minSide: 1, audio: true, peakBytes: 14_800_000_000, loraBase: "minimax-h3", worker: "ltx25_worker.py", imageToVideo: false, endImage: false },
+  // VF-CAPS-01: H3 takes a first and a last picture (the route and `h3VideoCommand` carry them) and makes 4 to 5 s clips; video/caps.ts reads these flags into its rows.
+  h3: { quality: "h3", modelId: H3_VIDEO_ID, maxSeconds: H3_MAX_SECONDS, frameStep: 1, defaultSize: "864x480", maxPixels: 864 * 480, sizeStep: 1, minSide: 1, audio: true, peakBytes: 42_100_000_000, loraBase: "minimax-h3", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
+  h3stream: { quality: "h3stream", modelId: H3_VIDEO_ID, maxSeconds: H3_MAX_SECONDS, frameStep: 1, defaultSize: "864x480", maxPixels: 864 * 480, sizeStep: 1, minSide: 1, audio: true, peakBytes: 14_800_000_000, loraBase: "minimax-h3", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
 };
 /** Whether a quality's runtime and weights come from the LTX-2.5 engine (its own environment). */
 export const usesLtx25Engine = (quality: VideoQuality): boolean => quality === "ltx25" || quality === "ltx25max";

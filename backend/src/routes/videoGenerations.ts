@@ -27,13 +27,14 @@ import { PAUSED_LABEL } from "@/lib/genProgress";
 import { getLora, listLoras, loraPath, LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
 import { deleteResult, isJobId, messagesPath, posterPath, readReceipt, readResult, receiptPath, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
-import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25MaxRefusal, ltx25MaxRow, ltx25PeakBytes, ltx25Refusal, ltx25Row, ltx25TrueSize, LTX25_MAX_MEASURED, LTX25_MEASURED } from "@/video/ltx25";
+import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25PeakBytes } from "@/video/ltx25";
 import { checkEdit, EditSourceError, editRuntime, ltx25EditAdmitBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED, planSource, probeSource, type Ltx25EditKind } from "@/video/ltx25Edit";
 import { MediaPathError, resolveReadable } from "@/media/paths";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND, type StashedClip } from "@/video/jobs";
 import { LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES, LTX25_INGREDIENTS_HEIGHT, LTX25_INGREDIENTS_MAX_SECONDS, LTX25_INGREDIENTS_MAX_SHEETS, LTX25_INGREDIENTS_MIN_SECONDS, LTX25_INGREDIENTS_WIDTH, ltx25IngredientsFrames } from "@/video/ltx25";
 import { sha256OfFile } from "@/lib/fileHash";
-import { H3_KEYFRAMES } from "@/video/h3";
+import { INGREDIENTS_ADAPTER_FILE } from "@/packs/videoNames";
+import { checkVideoInputs, engineOfQuality, operationOfInputs, resolveVideoSize, rowForRequest, rowsOfEngine, sizeRefusalLine, type VideoRefusal } from "@/video/caps";
 
 const DEFAULT_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 30 * 60_000;
@@ -104,8 +105,8 @@ const postRoute = createRoute({ method: "post", path: "/generations", tags: ["Vi
 } });
 const RestyleRequest = z.object({ model: z.string().optional(), source: z.string().min(1).max(4096), lora: z.string().min(1).max(40), strength: z.number().default(1), prompt: z.string(), seed: z.number().int().min(0).max(4_294_967_295).optional(), conditioning: z.enum(["source", "edges"]).default("source"), timeout_ms: z.number().int().positive().max(MAX_WAIT_MS).optional(), tier: TierFieldSchema, quiet_seconds: z.number().int().min(20).max(3600).optional(), quiet_max_wait_seconds: z.number().int().min(0).max(86400).nullable().optional() });
 const restyleRoute = createRoute({ method: "post", path: "/restyle", tags: ["Video"], summary: "Restyle a video with an installed IC-LoRA", request: { body: { content: { "application/json": { schema: RestyleRequest } } } }, responses: { 200: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The finished restyled clip." }, 202: { content: { "application/json": { schema: VideoResponseSchema } }, description: "The job is still running." }, 422: { content: { "application/json": { schema: ErrorBody } }, description: "The source, profile, LoRA, strength or prompt is not allowed." }, 503: { content: { "application/json": { schema: ErrorBody } }, description: "The model is not installed or memory is unavailable." } } });
-/** INGREDIENTS-01: the installed adapter is found by its published file name, kept in the library record's name or source address. */
-export const INGREDIENTS_ADAPTER_FILE = "ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors";
+/** INGREDIENTS-01: the installed adapter is found by its published file name (kept with the packs, rule E8), in the library record's name or source address. */
+export { INGREDIENTS_ADAPTER_FILE };
 const INGREDIENTS_MAX_PROMPT_CHARS = 2000;
 const IngredientsForm = z.object({
   sheet: z.any().openapi({ type: "array", items: { type: "string", format: "binary" }, description: "One or two reference sheet PNGs, 768x448 each. Repeat the field for the second." }),
@@ -166,30 +167,20 @@ function reply<T extends Context>(c: T, body: unknown, status: number) {
 }
 const fail = <T extends Context>(c: T, status: number, code: string, error: string, job?: string, kind?: "disk") => reply(c, { error, code, ...(kind ? { kind } : {}), ...(job ? { job } : {}) }, status);
 
+/** A row refusal as the route's plain 422 (a missing installation is a 503, as the model check below it answers). `unsupported` is the code an input the model cannot take has always had. */
+function refusal<T extends Context>(c: T, refused: VideoRefusal, unsupported: string) {
+  return fail(c, refused.code === "not_installed" ? 503 : 422, refused.code === "input_not_supported" ? unsupported : refused.code, refused.line);
+}
+
 function entry(meta: VideoResultMeta) {
   return { url: `/v1/videos/generations/${meta.job}/video.mp4`, poster_url: `/v1/videos/generations/${meta.job}/poster.jpg`, content_type: "video/mp4" as const, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, model: meta.model, quality: meta.quality ?? "quick", audio: meta.audio === true, mode: meta.mode, lora_ids: meta.lora_ids, ms: meta.ms, bytes: meta.bytes, poster_bytes: meta.poster_bytes, ...(existsSync(receiptPath(meta.job)) ? { receipt_url: `/v1/videos/generations/${meta.job}/receipt.json` } : {}), ...(meta.native ? { native: meta.native } : {}), ...(meta.delivered_is ? { delivered_is: meta.delivered_is } : {}) };
 }
 
-/** "832x480" to width and height, or the sentence to return. */
+/** "832x480" to width and height, or the sentence to return. The LTX-2.5 and H3 sizes come from the operation rows (video/caps.ts); Quick keeps its own rule. */
 export function parseVideoSize(size: string | undefined, quality: VideoQuality = "quick"): { width: number; height: number } | string {
   const spec = VIDEO_SPECS[quality];
-  if (quality === "ltx25max") {
-    // Max: the one measured size (video/ltx25.ts, LTX25_MAX_MEASURED).
-    const found = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
-    if (!found || !ltx25MaxRow(Number(found[1]), Number(found[2])) || Number(found[1]) % 64 || Number(found[2]) % 64) return `The Max video model makes ${LTX25_MAX_MEASURED.map((row) => row.size).join(", ")} only (or tall, 576x1024). Pick that size.`;
-    return { width: Number(found[1]), height: Number(found[2]) };
-  }
-  if (quality === "ltx25") {
-    // Only the measured sizes (video/ltx25.ts); anything else is refused with the list.
-    const found = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
-    if (!found || Number(found[1]) % 32 || Number(found[2]) % 32 || !ltx25Row(Number(found[1]), Number(found[2]))) return `This video model makes ${LTX25_MEASURED.map((row) => row.size).join(", ")}; a height between is rounded down to a multiple of 64 (512x288 gives 512x256). Pick one of those sizes (or the same size turned tall, such as 256x512).`;
-    // The clip is made, kept and reported at its true size.
-    return ltx25TrueSize(Number(found[1]), Number(found[2]));
-  }
-  if (quality === "h3" || quality === "h3stream") {
-    if (!["864x480", "480x864"].includes(size ?? spec.defaultSize)) return "MiniMax H3 makes 864x480 (wide) or 480x864 (tall) clips. Choose one of those.";
-    return (size ?? spec.defaultSize) === "480x864" ? { width: 480, height: 864 } : { width: 864, height: 480 };
-  }
+  const engine = engineOfQuality(quality);
+  if (engine) return resolveVideoSize(engine, size);
   const match = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
   if (!match) return `The size must look like ${spec.defaultSize}.`;
   const width = Number(match[1]); const height = Number(match[2]);
@@ -261,15 +252,20 @@ videoV1Routes.openapi(postRoute, async (c) => {
   if (body.model === "detailed" || body.model === "ltx-2-3-distilled-mlx") return fail(c, 422, "retired_model", "The Detailed video model was retired. Use ltx25-q8 or ltx25-max.");
   if (!quality) return fail(c, 422, "unknown_model", "That video model is not one this computer has. Use quick, ltx25-q8 or ltx25-max.");
   const spec = VIDEO_SPECS[quality];
-  const isH3 = quality === "h3" || quality === "h3stream";
-  const h3Refusal = "MiniMax H3 cannot do source video edits, extensions, retakes or household LoRAs yet.";
-  if (isH3 && (body.source_video !== undefined || body.extend_seconds !== undefined || body.retake_from_seconds !== undefined || body.loras?.length)) return fail(c, 422, "reference_unsupported", h3Refusal);
-  if (isH3 && !H3_KEYFRAMES && (body.image !== undefined || body.end_image !== undefined)) return fail(c, 422, "reference_unsupported", "MiniMax H3 cannot start or end a clip with a picture yet.");
+  const engine = engineOfQuality(quality);
+  // VF-CAPS-01: the LTX-2.5 and H3 qualities are checked against the operation rows (video/caps.ts); Quick has none and keeps its own checks below.
+  if (engine === "h3") {
+    const h3Text = rowsOfEngine("h3").find((row) => row.operation === "clip_text")!;
+    const refused = checkVideoInputs(h3Text, { engine, source_clip: body.source_video !== undefined || body.extend_seconds !== undefined || body.retake_from_seconds !== undefined });
+    if (refused) return refusal(c, refused, "reference_unsupported");
+    // Style files are not an operation input (the rows carry no field for them); the model listing says `loras.supported: false`.
+    if (body.loras?.length) return fail(c, 422, "reference_unsupported", "MiniMax H3 cannot use household style files yet. Leave the styles out.");
+  }
   if (body.end_image !== undefined && body.image === undefined) return fail(c, 422, "bad_image", "A last picture needs a first picture. Send image as well, or leave end_image out.");
   const editKind: Ltx25EditKind | null = body.extend_seconds !== undefined ? "extend" : body.retake_from_seconds !== undefined ? "retake" : null;
   if (editKind !== null || body.source_video !== undefined) return await submitEdit(c, body, quality, editKind);
-  if (body.image !== undefined && !spec.imageToVideo && !isH3) return fail(c, 422, "reference_unsupported", "This video model cannot start from a picture. Use Quick or LTX-2.5.");
-  if (body.end_image !== undefined && !spec.endImage && !isH3) return fail(c, 422, "reference_unsupported", "This video model cannot end on a picture. Ask for an LTX-2.5 video to give both a first and a last picture, or send only the first picture.");
+  if (!engine && body.image !== undefined && !spec.imageToVideo) return fail(c, 422, "reference_unsupported", "This video model cannot start from a picture. Use Quick or LTX-2.5.");
+  if (!engine && body.end_image !== undefined && !spec.endImage) return fail(c, 422, "reference_unsupported", "This video model cannot end on a picture. Ask for an LTX-2.5 video to give both a first and a last picture, or send only the first picture.");
   const ltx25Lora = quality === "ltx25" || quality === "ltx25max" ? ltx25LoraProfile(quality) : null;
   if (ltx25Lora && (body.loras ?? []).length > 0) {
     if (!ltx25Lora.supported) return fail(c, 422, "lora_unsupported", `${ltx25Lora.reason ?? "This video model takes no style files yet."} Leave the styles out, or ask for a Max video to use one.`);
@@ -277,10 +273,14 @@ videoV1Routes.openapi(postRoute, async (c) => {
   }
   const size = parseVideoSize(body.size, quality);
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
-  const seconds = quality === "h3" || quality === "h3stream" ? Math.max(4, Math.min(10, body.seconds ?? 5)) : body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
-  if (quality === "ltx25max") { const refusal = ltx25MaxRefusal(size.width, size.height, seconds * VIDEO_FPS + 1); if (refusal) return fail(c, 422, "bad_seconds", refusal); }
-  if (quality === "ltx25") { const refusal = ltx25Refusal(size.width, size.height, seconds * VIDEO_FPS + 1); if (refusal) return fail(c, 422, "bad_seconds", refusal); }
-  if (seconds > spec.maxSeconds) return fail(c, 422, "bad_seconds", `This clip is at most ${spec.maxSeconds} seconds on this computer.`);
+  const seconds = body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
+  if (engine) {
+    // The row of this operation at this size says which sizes, lengths and pictures it takes; a length outside it is refused, never lifted or clamped.
+    const operation = operationOfInputs({ start_picture: body.image !== undefined, end_picture: body.end_image !== undefined });
+    const row = rowForRequest(engine, operation, size);
+    const refused = row ? checkVideoInputs(row, { engine, size, seconds, start_picture: body.image !== undefined, end_picture: body.end_image !== undefined }) : { code: "bad_size" as const, line: sizeRefusalLine(engine) };
+    if (refused) return refusal(c, refused, "reference_unsupported");
+  } else if (seconds > spec.maxSeconds) return fail(c, 422, "bad_seconds", `This clip is at most ${spec.maxSeconds} seconds on this computer.`);
   let image: Uint8Array | null = null;
   let endImage: Uint8Array | null = null;
   // Any picture can start (or end) a clip: the Stack does not judge where it came from. The age and surface gate is the caller's (Home) and stays outside this file.

@@ -15,6 +15,12 @@
               "width": 864,
               "height": 480
             }
+          },
+          "portrait": {
+            "standard": {
+              "width": 480,
+              "height": 864
+            }
           }
         }
       },

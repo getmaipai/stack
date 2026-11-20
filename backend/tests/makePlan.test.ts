@@ -56,8 +56,11 @@ test("a level the model does not serve is refused", () => {
   expect((plan as { refusal: { code: string } }).refusal.code).toBe("level_not_served");
 });
 test("a shape the model does not serve is refused", () => {
-  const plan = planMake({ job: "clip", audience: "adult", part: "minimax-h3", description: "x", shape: "portrait", level: "standard", seconds: 5 }, parts());
+  // VF-CAPS-01: H3 makes tall clips (480x864) as the route always accepted, so its pack lists portrait; square is the shape it does not serve.
+  const plan = planMake({ job: "clip", audience: "adult", part: "minimax-h3", description: "x", shape: "square", level: "standard", seconds: 5 }, parts());
   expect((plan as { refusal: { code: string } }).refusal.code).toBe("shape_not_served");
+  const tall = planMake({ job: "clip", audience: "adult", part: "minimax-h3", description: "x", shape: "portrait", level: "standard", seconds: 5 }, parts());
+  expect(tall.ok).toBe(true);
 });
 
 test("a song with no level is planned at the first level its model serves, and a long one is refused in songs", () => {

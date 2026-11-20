@@ -10,6 +10,9 @@ import { listParts, type PartsAudience } from "@/lib/partsList";
 import { PART_DEFS } from "@/lib/partDefs";
 import type { HardwareInfo } from "@/lib/hardware";
 import { WIRED_JOBS } from "@/lib/makeDispatch";
+import { jobCapabilitiesFromRows, jobLimitsFromRows, rowsForJob } from "@/video/caps";
+import { ltx25MaxEditSupported } from "@/video/ltx25Edit";
+import type { StackOperationRow } from "@maipai/spec/stack/ts/stack-model-pack.js";
 
 type Level = "standard" | "boost" | "max";
 type PackJob = LoadedPack["pack"]["jobs"][number];
@@ -28,10 +31,10 @@ export const JOB_PHRASE: Readonly<Record<StackJobName, string>> = {
   song: "make songs", song_edit: "change songs", sound_effect: "make sound effects", stems: "split songs into parts", vocal_swap: "swap a singing voice", lyric_timing: "time lyrics to a song",
 };
 
-const levelsOf = (job: PackJob): Level[] => {
+const levelsOf = (limits: PackJob["limits"]): Level[] => {
   const found = new Set<Level>();
-  for (const shape of Object.values(job.limits.shapes ?? {})) for (const level of Object.keys(shape ?? {})) found.add(level as Level);
-  for (const level of Object.keys(job.limits.max_seconds ?? {})) found.add(level as Level);
+  for (const shape of Object.values(limits.shapes ?? {})) for (const level of Object.keys(shape ?? {})) found.add(level as Level);
+  for (const level of Object.keys(limits.max_seconds ?? {})) found.add(level as Level);
   const order: Level[] = ["standard", "boost", "max"];
   const levels = order.filter((l) => found.has(l));
   return levels.length ? levels : ["standard"];
@@ -52,6 +55,32 @@ export function servingFor(name: StackJobName, audience: PartsAudience, parts: r
 }
 export const isRunnable = runnable;
 
+/** VF-CAPS-01: the jobs whose limits and capabilities are the derivation from their operation rows (video/caps.ts), so the pack JSON, the validators and this catalog are one source. */
+const ROW_DERIVED_JOBS: ReadonlySet<StackJobName> = new Set<StackJobName>(["clip", "clip_from_sheet"]);
+export const NOT_INSTALLED_LINE = "Not installed. An admin can add it in Settings, AI and models.";
+const EDIT_UNSUPPORTED_LINE = "This computer's Max video engine cannot extend or retake a clip yet. Update Home and the Stack, then try again.";
+
+/**
+ * The rows of a job as this computer can run them now: a row is available only when the Stack's own contract says so AND its part is turned on
+ * and ready AND the level fits in memory (and, for extend and retake, the installed Max runtime has the edit pipelines). A row that is off
+ * says why in one plain line; a minor's catalog carries no reason (rule C10).
+ */
+export function catalogOperations(rows: readonly StackOperationRow[], part: StackPartView | null, options: { editSupported: boolean; audience: PartsAudience }): StackOperationRow[] {
+  return rows.map((item) => {
+    const { unavailable_reason: own, ...rest } = item;
+    let reason: string | null = item.available ? null : own ?? "This is not available here.";
+    if (reason === null) {
+      if (!part || (part.state !== "ready" && part.state !== "unsupported" && part.state !== "updating")) reason = NOT_INSTALLED_LINE;
+      else if (part.state === "unsupported") reason = "This computer cannot run it.";
+      else if (part.state === "updating") reason = "It is being updated. Try again in a few minutes.";
+      else if (!part.enabled) reason = "Turned off. An admin can turn it on in Settings, AI and models.";
+      else if (!part.fits[item.level]) reason = `This does not fit in this computer's memory at the ${item.level} level. ${part.fits.reason ?? "Free some memory, or pick a smaller level."}`;
+      else if ((item.operation === "extend" || item.operation === "retake") && !options.editSupported) reason = EDIT_UNSUPPORTED_LINE;
+    }
+    return { ...rest, available: reason === null, ...(reason !== null && options.audience === "adult" ? { unavailable_reason: reason } : {}) };
+  });
+}
+
 export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): Promise<Catalog> {
   const list = await listParts({ audience, kind: "model" }, hw);
 
@@ -61,11 +90,16 @@ export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): P
     const chosen = WIRED_JOBS.has(name) ? (serving.find((s) => runnable(s.part)) ?? null) : null; // a job not wired through the generic door is never "available"
     const shown = chosen ?? serving[0] ?? null;
     const limitsSource = shown?.job;
+    const rows = shown ? rowsForJob(shown.part.id, name) : [];
+    const derived = rows.length > 0 && ROW_DERIVED_JOBS.has(name) ? jobLimitsFromRows(rows) : null;
+    const limits = limitsSource && derived ? { ...limitsSource.limits, ...derived } : limitsSource?.limits;
+    const capabilities = limitsSource && derived ? { ...limitsSource.capabilities, ...jobCapabilitiesFromRows(rows) } : limitsSource?.capabilities;
     const entry = {
       job: name, label: JOB_LABELS[name], available: chosen !== null,
       part: chosen ? { id: chosen.part.id, label: chosen.part.label } : null,
-      limits: limitsSource ? { levels: levelsOf(limitsSource), ...(limitsSource.limits.max_seconds ? { max_seconds: limitsSource.limits.max_seconds } : {}), ...(limitsSource.limits.max_references !== undefined ? { max_references: limitsSource.limits.max_references } : {}), ...(limitsSource.limits.shapes ? { shapes: limitsSource.limits.shapes } : {}), ...(limitsSource.limits.max_words !== undefined ? { max_words: limitsSource.limits.max_words } : {}) } : { levels: ["standard" as Level] },
-      capabilities: limitsSource?.capabilities ?? { text: false, end_picture: false, sound: false, keeps_likeness: false },
+      limits: limits ? { levels: levelsOf(limits), ...(limits.max_seconds ? { max_seconds: limits.max_seconds } : {}), ...(limits.max_references !== undefined ? { max_references: limits.max_references } : {}), ...(limits.shapes ? { shapes: limits.shapes } : {}), ...(limits.max_words !== undefined ? { max_words: limits.max_words } : {}) } : { levels: ["standard" as Level] },
+      capabilities: capabilities ?? { text: false, end_picture: false, sound: false, keeps_likeness: false },
+      ...(rows.length > 0 ? { operations: catalogOperations(rows, shown!.part, { editSupported: ltx25MaxEditSupported(), audience }) } : {}),
       styles: { bases: shown?.pack.pack.style_bases?.filter((b) => !b.retired).map((b) => ({ id: b.id, label: b.label })) ?? [], max: 0 },
       restyles: [] as Array<{ name: string; label: string }>,
     };

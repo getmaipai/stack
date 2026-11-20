@@ -4,6 +4,9 @@ export const H3_VIDEO_ID = "minimax-h3";
 export const H3_VIDEO_ENGINE = "minimax-h3-video-gen";
 export const H3_VIDEO_VERSION = "55bb7dd";
 export const H3_KEYFRAMES = true;
+/** VF-CAPS-01: the clip lengths H3 makes. The measured peak is for 5 s; a clip below 4 s is not offered, and one past 5 s was never measured. */
+export const H3_MIN_SECONDS = 4;
+export const H3_MAX_SECONDS = 5;
 export const H3_VIDEO_CAPABILITIES = {
   first_picture: true, last_picture: true, reference_pictures: false,
   extend: false, audio: true, lora: false,

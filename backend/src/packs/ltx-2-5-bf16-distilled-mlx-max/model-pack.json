@@ -15,6 +15,12 @@
               "width": 1024,
               "height": 576
             }
+          },
+          "portrait": {
+            "max": {
+              "width": 576,
+              "height": 1024
+            }
           }
         },
         "steps_fixed": true

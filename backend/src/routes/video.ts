@@ -24,7 +24,8 @@ import { ltx25EnvironmentReady, ltx25LoraProfile, LTX25_UNFUSED_ADMIT_FACTOR, LT
 import { ltx25EditAdmitBytes, ltx25EditPeakBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_MAX_SOURCE_FRAMES, LTX25_EDIT_MIN_SOURCE_FRAMES, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED } from "@/video/ltx25Edit";
 import { LTX25_GEN_NAME, LTX25_GEN_VERSION, LTX25_MAX_GEN_NAME, LTX25_MAX_GEN_VERSION, LTX25_MAX_MEASURED, ltx25MaxEnvironmentReady, ltx25MaxPeakBytes, LTX25_MAX_PICTURE_PEAK_MEASURED_BYTES } from "@/video/ltx25";
 import { memoryVerdict, tierAvailability, videoGen, VIDEO_SPECS, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_GEN_NAME, VIDEO_GEN_VERSION, VIDEO_MAX_FRAMES, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_PEAK_BYTES, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, videoGenEnvironmentReady, videoGenSourceInstalled } from "@/video/videoGen";
-import { H3_VIDEO_LICENSE_NOTICE, H3_VIDEO_CAPABILITIES } from "@/video/h3";
+import { H3_VIDEO_LICENSE_NOTICE } from "@/video/h3";
+import { engineFacts, engineOfQuality } from "@/video/caps";
 import { videoModelPaths } from "@/video/videoGen";
 import { h3SwapReady, H3_SWAP_MAX_SECONDS } from "@/video/swap";
 
@@ -144,11 +145,14 @@ export const videoRoutes = apiRouter<AppEnv>();
 type PlanModel = ReturnType<typeof videoInstallModels>[number];
 async function qualityView(quality: "quick" | "ltx25" | "ltx25max", models: PlanModel[], _installed: string[], available: boolean) {
   const spec = VIDEO_SPECS[quality];
+  // VF-CAPS-01: the LTX numbers come from the operation rows (video/caps.ts), the same ones the validators check; Quick has no rows.
+  const engine = engineOfQuality(quality);
+  const facts = engine ? engineFacts(engine) : { max_seconds: spec.maxSeconds, audio: spec.audio, image_to_video: spec.imageToVideo, end_image: spec.endImage };
   const verdict = await memoryVerdict(quality);
   const remaining = models.filter((model) => !model.installed).reduce((sum, model) => sum + model.approx_bytes, 0);
   return {
-    id: spec.modelId, installed: models.every((model) => model.installed), available, audio: spec.audio, image_to_video: spec.imageToVideo, end_image: spec.endImage,
-    limits: { max_seconds: available ? spec.maxSeconds : 0, fps: VIDEO_FPS, default_size: spec.defaultSize, max_pixels: spec.maxPixels, size_step: spec.sizeStep, min_side: spec.minSide, max_frames: spec.maxSeconds * VIDEO_FPS + 1 },
+    id: spec.modelId, installed: models.every((model) => model.installed), available, audio: facts.audio, image_to_video: facts.image_to_video, end_image: facts.end_image,
+    limits: { max_seconds: available ? facts.max_seconds : 0, fps: VIDEO_FPS, default_size: spec.defaultSize, max_pixels: spec.maxPixels, size_step: spec.sizeStep, min_side: spec.minSide, max_frames: facts.max_seconds * VIDEO_FPS + 1 },
     memory: { fits: verdict.ok, reason: verdict.ok ? null : verdict.reason, peak_gb: Math.round(spec.peakBytes / 1e8) / 10 },
     install: { models, remaining_bytes: remaining, download_bytes: models.reduce((sum, model) => sum + model.approx_bytes, 0) },
     licence: quality === "ltx25" || quality === "ltx25max" ? { id: LTX_LICENCE_NOTICE.id, name: LTX_LICENCE_NOTICE.name, url: LTX_LICENCE_NOTICE.url } : null,
@@ -237,11 +241,12 @@ async function h3View(quality: "h3" | "h3stream") {
   const spec = VIDEO_SPECS[quality];
   const ready = videoModelPaths(quality) !== null;
   const verdict = await memoryVerdict(quality);
+  const facts = engineFacts("h3");
   return {
-    id: spec.modelId, installed: ready, available: ready, ready, audio: true,
-    image_to_video: H3_VIDEO_CAPABILITIES.first_picture, end_image: H3_VIDEO_CAPABILITIES.last_picture,
+    id: spec.modelId, installed: ready, available: ready, ready, audio: facts.audio,
+    image_to_video: facts.image_to_video, end_image: facts.end_image,
     video_to_video: false, reference_pictures: false, reference_videos: false, reference_audio: false,
-    limits: { max_seconds: 5, fps: VIDEO_FPS, default_size: "864x480" },
+    limits: { max_seconds: facts.max_seconds, fps: VIDEO_FPS, default_size: spec.defaultSize },
     memory: { fits: verdict.ok, reason: verdict.ok ? null : verdict.reason, peak_gb: Math.round(spec.peakBytes / 1e8) / 10 },
     install: { models: [], remaining_bytes: 0, download_bytes: 0 },
     licence: { id: H3_VIDEO_LICENSE_NOTICE.id, name: H3_VIDEO_LICENSE_NOTICE.name, url: H3_VIDEO_LICENSE_NOTICE.url },

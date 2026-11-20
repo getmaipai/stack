@@ -35,7 +35,7 @@
  "routes/parts.ts": 1,
  "routes/installPlan.ts": 10,
  "routes/capabilities.ts": 1,
- "routes/videoGenerations.ts": 24,
+ "routes/videoGenerations.ts": 23,
  "routes/music.ts": 2,
  "routes/imageGenerations.ts": 42,
  "routes/musicGenerations.ts": 1,
