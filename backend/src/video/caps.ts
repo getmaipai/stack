@@ -186,8 +186,8 @@ function engineSizes(engine: VideoEngine): Size[] {
 /** The plain refusal for a size the engine does not make. */
 export function sizeRefusalLine(engine: VideoEngine): string {
   const sizes = engineSizes(engine);
-  const wide = sizes.filter((size) => size.orientation !== "portrait").map(sizeText);
-  const tall = sizes.filter((size) => size.orientation === "portrait").map(sizeText);
+  const wide = [...new Set(sizes.filter((size) => size.orientation !== "portrait").map(sizeText))];
+  const tall = [...new Set(sizes.filter((size) => size.orientation === "portrait").map(sizeText))];
   const subject = VIDEO_ENGINE_NAMES[engine].subject;
   if (engine === "ltx25") return `${subject} makes ${wide.join(", ")}; a height between is rounded down to a multiple of 64 (512x288 gives 512x256). Pick one of those sizes (or the same size turned tall, such as ${tall[0]}).`;
   if (engine === "ltx25max") return `${subject} makes ${wide.join(", ")} only (or tall, ${tall.join(", ")}). Pick that size.`;
