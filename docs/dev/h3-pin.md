@@ -13,3 +13,9 @@ The Stack recognizes an existing H3 install by checking the published pinned fil
 The status check reads the folder with synchronous file calls. On an unmounted or stalled volume a stat can hang the caller until the volume answers, so a caller that must stay responsive should run it off the request path. A variable that points at a folder that does not exist reads `missing`.
 
 Real cold timings and a real download have not been measured.
+
+## Swap runner pin data (H3-PIN-01 b, data only)
+
+`backend/src/packs/h3/swapPins.ts` holds the pin data for the head and character swap runner: the upstream source revision, the reference bundle's files (repository, revision, size, SHA-256) and the two adapters (revision not recorded, so a builder pins the current one and compares the hashes). It is data only: no download, build or install exists, and the swap routes stay private testing. The runner's local patch is not in this repository.
+
+Before any swap runner, bundle or adapter is published, made a default or offered for install, all of these must be true: a clean reproducible rebuild with the flags recorded; the licences of the bundle and both adapter repositories read and written down; the owner's yes. Until then a household cannot install head or character swap.
