@@ -31,7 +31,7 @@ const view = (audience: "adult" | "minor", over: Partial<StackPartView> = {}): S
 const request = (description: string, rating: "G" | "PG-13" = "G") => ({ job: "clip", audience: "minor", rating, description, shape: "landscape", level: "standard", seconds: 5 }) as const;
 const planWith = (request: unknown, pack: LoadedPack = testPack) => {
   const row = pack.pack.jobs[0]!;
-  const plan = { ok: true as const, serving: { pack, job: row, part: view("minor") }, level: "standard" as const, shape: "landscape" as const, seconds: 5, minorRecipe: { id: "minor.clip.g", version: "1" } };
+  const plan = { ok: true as const, serving: { pack, job: row, part: view("minor") }, level: "standard" as const, shape: "landscape" as const, seconds: 5, minorRecipe: { id: "minor.clip.g", version: "2" } };
   return plan;
 };
 
@@ -115,6 +115,28 @@ test("dispatch sends recipe identity without prompt text in made_with", async ()
   const result = await dispatchClip(req, { ...plan, serving: { ...plan.serving, pack: source, job: source.pack.jobs[0]! } } as never, async (_path, body) => { sent = body as Record<string, unknown>; return { status: 200, json: { job: "j", data: [] } }; });
   expect(sent.prompt).toContain("private tail");
   const made = (result.body as { made_with: Record<string, unknown> }).made_with;
-  expect(made.recipe).toEqual({ id: "minor.clip.g", version: "1" });
+  expect(made.recipe).toEqual({ id: "minor.clip.g", version: "2" });
   expect(JSON.stringify(made)).not.toContain("private tail");
+});
+
+test("a description with dollar patterns is inserted verbatim", () => {
+  const out = fillMinorRecipe(recipes["recipes/clip.child-g.md"]!, "G", "a cat $& $' $` $$ here");
+  expect(out.prompt).toContain(": a cat $& $' $` $$ here.");
+});
+
+test("covers are positive wording: no cover phrase names a forbidden term or uses a negation", () => {
+  const negations = /\b(no|not|without|non\w*|never|avoid)\b/i;
+  for (const rating of ["G", "PG-13"]) for (const [term, phrase] of Object.entries(golden.term_phrases[rating]!)) {
+    expect(negations.test(phrase), `${rating} ${term}: ${phrase}`).toBe(false);
+    for (const forbidden of input.negative_terms) expect(new RegExp(`\\b${forbidden}\\b`, "i").test(phrase), `${rating} ${term}: ${phrase} names ${forbidden}`).toBe(false);
+    expect(golden.outputs[rating]!).toContain(phrase);
+  }
+});
+
+test("an over-long idea and any field outside the allow-list are refused plainly", () => {
+  const long = planMake({ ...request("x".repeat(401)) } as never, [view("minor")]);
+  expect(long.ok).toBe(false);
+  for (const extra of [{ intent: "new_shot" }, { loop: undefined, key_colour: "green" }, { conditioning: "edges" }, { style_strength: 1 }, { quiet_seconds: 30 }, { operation: "companion_take" }, { operation: "clip_film_shot" }]) {
+    expect(planMake({ ...request("a dragon"), ...extra } as never, [view("minor")]).ok).toBe(false);
+  }
 });

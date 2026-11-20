@@ -74,5 +74,5 @@ export function parseMinorRecipe(text: string): MinorRecipe {
 }
 export function fillMinorRecipe(text: string, _rating: "G" | "PG-13", description: string): { prompt: string; id: string; version: string } {
   const recipe = parseMinorRecipe(text);
-  return { prompt: recipe.body.replaceAll("{description}", description), id: recipe.id, version: recipe.version };
+  return { prompt: recipe.body.replaceAll("{description}", () => description), id: recipe.id, version: recipe.version };
 }

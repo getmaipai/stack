@@ -3,6 +3,7 @@
 // minor's refusal names no model (rule C10). Nothing here reads a model's name; a pack's numbers and a part's label do the work.
 import type { StackMakeRequest, StackMakeRefusal } from "@maipai/spec/stack/ts/stack-make.js";
 import type { StackPartView } from "@maipai/spec/stack/ts/stack-part-view.js";
+import { parseMinorRecipe } from "@/lib/recipe";
 import { JOB_PHRASE, isRunnable, servingFor, type Serving } from "@/lib/jobsCatalog";
 
 export type MakePlan =
@@ -10,6 +11,8 @@ export type MakePlan =
   | { ok: false; refusal: StackMakeRefusal }
   | { ok: false; unavailable: string };
 
+/** The longest idea a minor may send for a clip (characters). */
+export const MINOR_DESCRIPTION_MAX = 400;
 const SHAPES = ["landscape", "portrait", "square"] as const;
 
 /** The levels one pack job serves; a job whose limits name none serves Standard only. */
@@ -22,11 +25,14 @@ export function planMake(request: StackMakeRequest, parts: readonly StackPartVie
   const audience = request.audience;
   const minorRefusal: MakePlan = { ok: false, refusal: { code: "not_on_this_model", line: "That is not available right now.", alternatives: [] } };
   if (audience === "minor" && request.job === "clip") {
-    const loose = request as typeof request & Record<string, unknown>;
     const refuse = (code: "input_not_supported" | "not_on_this_model" = "input_not_supported"): MakePlan => ({ ok: false, refusal: { code, line: "That is not available right now.", alternatives: [] } });
+    // An allow-list: a minor's clip carries only these keys, so a field added to the clip request later is refused until it is deliberately allowed here.
+    const allowed = new Set(["job", "audience", "rating", "description", "shape", "level", "seconds", "seed", "part", "loop"]);
+    if (Object.keys(request).some((key) => !allowed.has(key) && (request as Record<string, unknown>)[key] !== undefined)) return refuse();
     if (request.rating !== "G" && request.rating !== "PG-13") return refuse();
-    if (loose.words !== undefined || loose.negative_prompt !== undefined || loose.negative_words !== undefined || (request.level !== undefined && request.level !== "standard") || request.dialogue !== undefined || loose.sound !== undefined || !!request.inputs?.length || request.start_picture !== undefined || request.end_picture !== undefined || !!request.styles?.length || request.look !== undefined || request.take_of !== undefined || (request.operation !== undefined && request.operation !== "companion_take")) return refuse();
-    // Companion takes remain unavailable until their recipes carry rating wording.
+    if (request.level !== "standard") return refuse();
+    // The fixed wording must stay inside the engine's prompt: a longer idea is refused plainly, never trimmed.
+    if (request.description.length > MINOR_DESCRIPTION_MAX) return refuse();
     if (request.operation === "companion_take") return refuse();
     if (!servingFor("clip", "minor", parts).some((s) => isRunnable(s.part) && !!s.job.minor_recipes?.[request.rating as "G" | "PG-13"])) return minorRefusal;
   }
@@ -64,8 +70,7 @@ export function planMake(request: StackMakeRequest, parts: readonly StackPartVie
     const path = chosen.job.minor_recipes?.[rating];
     const recipeText = path ? chosen.pack.recipes[path] : undefined;
     if (!recipeText) return { ok: false, refusal: { code: "not_on_this_model", line: "That is not available right now.", alternatives: [] } };
-    const [idLine, versionLine] = recipeText.trim().split("\n");
-    minorRecipe = { id: (idLine ?? "").replace(/^id: /, ""), version: (versionLine ?? "").replace(/^version: /, "") };
+    try { const parsed = parseMinorRecipe(recipeText); minorRecipe = { id: parsed.id, version: parsed.version }; } catch { return minorRefusal; }
   }
 
   const limits = chosen.job.limits;

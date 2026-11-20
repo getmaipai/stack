@@ -134,7 +134,7 @@ export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): P
       ...(rows.length > 0 ? { operations: catalogOperations(rows, shown!.part, { editSupported: ltx25MaxEditSupported(), audience }) } : {}),
       styles: { bases: shown?.pack.pack.style_bases?.filter((b) => !b.retired).map(({ browse: _browse, retired: _retired, ...served }) => served) ?? [], max: 0 },
       restyles: name === "clip" && rows.some((row) => row.operation === "retake") ? listLoras().filter((item) => (item.base_model ?? "") === LORA_BASE_LTX25).map((item) => ({ name: item.id, label: item.name })) : [] as Array<{ name: string; label: string }>,
-      ...(audience === "minor" && name === "clip" ? (() => { const ratings = [...new Set(serving.filter((s) => s.job.minor_recipes && Object.keys(s.job.minor_recipes).length).flatMap((s) => Object.keys(s.job.minor_recipes!)))]; return ratings.length ? { minor_ratings: ratings } : {}; })() : {}),
+      ...(audience === "minor" && name === "clip" ? (() => { const ratings = [...new Set(serving.filter((s) => isRunnable(s.part) && s.job.minor_recipes && Object.keys(s.job.minor_recipes).length).flatMap((s) => Object.keys(s.job.minor_recipes!)))]; return ratings.length ? { minor_ratings: ratings } : {}; })() : {}),
     };
     if (audience === "minor") return [entry];
     const why = chosen ? null : serving.length && !WIRED_JOBS.has(name) ? `This kind of job is not available through the generic door yet. An admin does not need to do anything.` : serving.length
