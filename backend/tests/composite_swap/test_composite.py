@@ -321,6 +321,18 @@ class ForeignEncoderTest(unittest.TestCase):
         report = self.verify(self.foreign(frames, "patch.mp4"), self.EDITED)
         self.assertEqual(report["preservation"]["verdict"], "fail"); self.assertGreaterEqual(report["preservation"]["encoded"]["largest_blob_px"], 1500)
 
+    def test_misaligned_frames_in_the_unedited_stretch_do_not_hide_an_edit(self):
+        frames = self.edited_frames(self.EDITED)
+        for k in range(60, 65): frames[k] = self.decoded[k + 1].copy()          # five frames of the delivered file are one frame late: they differ from the source everywhere
+        for f in frames[:self.EDITED]: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
+        report = self.verify(self.foreign(frames, "late.mp4"), self.EDITED)
+        self.assertEqual(report["preservation"]["verdict"], "fail"); self.assertGreaterEqual(report["preservation"]["encoded"]["largest_blob_px"], 1500)
+
+    def test_a_short_edited_stretch_is_judged_by_its_own_length(self):
+        frames = self.edited_frames(8)
+        for f in frames[:8]: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
+        self.assertEqual(self.verify(self.foreign(frames, "short.mp4"), 8)["preservation"]["verdict"], "fail")
+
     def test_without_unedited_frames_a_hard_edge_difference_is_inconclusive_not_a_pass_or_a_fail(self):
         report = self.verify(self.foreign(self.edited_frames(self.N), "all.mp4"), self.N)
         self.assertEqual(report["preservation"]["verdict"], "inconclusive"); self.assertEqual(report["preservation"]["baseline"]["source"], "none")

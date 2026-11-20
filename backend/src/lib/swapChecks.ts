@@ -152,7 +152,9 @@ export function donorCopiedLine(at: number, tries: number): string {
 /** The checks on one segment's composite report. Each failing check is one plain line; an empty list means the segment passed. */
 export function segmentFailures(report: CompositeSwapReport, at: number): string[] {
   const lines: string[] = [];
-  if (!report.preservation || report.preservation.verdict !== "pass") {   // fail and inconclusive both throw the clip away: a swap is never delivered unproven
+  if (report.preservation?.verdict === "inconclusive") {   // an unproven swap is never delivered; this is not the same fact as a changed picture
+    lines.push(`The swap at ${clock(at)} could not be checked, because it was made by another tool and no part of the clip is free of the person to measure it against, so the clip was thrown away. Try again with a clip where the person leaves the picture for a moment, or send this clip in to be looked at.`);
+  } else if (!report.preservation || report.preservation.verdict !== "pass") {
     lines.push(`The swap changed parts of the picture outside the head at ${clock(at)}, which it must never do, so the clip was thrown away. Try again, and if it happens again send this clip in to be looked at.`);
   }
   const residual = report.residual_original_head_frames.length;

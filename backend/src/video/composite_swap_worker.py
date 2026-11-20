@@ -429,6 +429,7 @@ def halo_outside(region, halo):
     return cv2.dilate(region.astype(np.uint8), np.ones((2 * halo + 1, 2 * halo + 1), np.uint8)) == 0
 
 DRIFT_REACH_PX = 15        # how far from the control's persistent drift a delivered area may sit and still count as the same drifting edge
+FOREIGN_SPREAD_PX = 9      # width of the square that spreads each place's ceiling to its neighbors (4 px each way)
 FOREIGN_MARGIN = 8          # levels above the most the delivered file's own untouched frames differ from the source at a place before a difference counts
 DRIFT_OVERLAP = 0.5        # share of a persistent area that must lie on the control's drift for the whole area to be called encoder drift
 
@@ -527,27 +528,39 @@ def foreign_check(org, back, regions, o: Options, base, w, h):
     """The post-encode check for a delivered file another tool encoded. Its encoder, color conversion and frame handling are unknown, so a source-only encode
     made here cannot predict where it moves untouched pixels. The delivered file's own frames in which the declared region is empty (the target was absent, so
     nothing was edited) are the control: they show exactly what that pipeline does to untouched pixels, at every place. Without enough of them the check cannot
-    tell a hard-edge difference from an edit and says so (`unknown_encoder`) instead of passing or failing. Returns (encoded numbers, baseline, verdict, reasons, map path)."""
+    tell a hard-edge difference from an edit and says so (`unknown_encoder`) instead of passing or failing. Limit: a change applied equally to the file's untouched frames (a watermark over the whole clip) is part of its baseline and is not seen. Returns (encoded numbers, baseline, verdict, reasons, map path)."""
     n = len(org)
     outside = [halo_outside(r, o.encode_halo_px) for r in regions]
     unedited = [k for k, r in enumerate(regions) if not r.any()]
+    edited = n - len(unedited)
+    diff = lambda k: np.abs(org[k].astype(np.int16) - back[k].astype(np.int16)).max(2)
     enough = len(unedited) >= max(20, int(np.ceil(0.1 * n)))
-    diffs = [np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) for a, b in zip(org, back)]
     if enough:
-        # the most that pipeline moved each place in frames it did not edit, spread 4 px each way for sub-pixel shifts: a difference only counts above it by a margin
-        ceiling = cv2.dilate(np.max(np.stack([diffs[k] for k in unedited]), axis=0).astype(np.uint8), np.ones((2 * DRIFT_REACH_PX // 3 + 1, 2 * DRIFT_REACH_PX // 3 + 1), np.uint8)).astype(np.int16)
-        baseline = {"source": "unedited_frames", "frames": len(unedited)}
-        flagged = [(d > ceiling + FOREIGN_MARGIN) & x for d, x in zip(diffs, outside)]
+        # A cut or a misaligned frame in the untouched stretch differs from the source everywhere; it says nothing about drift and would lift the ceiling over any edit.
+        means = {k: float(diff(k).mean()) for k in unedited}
+        typical = float(np.median(list(means.values())))
+        usable = [k for k in unedited if means[k] <= 3 * typical + 1]
+        enough = len(usable) >= max(20, int(np.ceil(0.1 * n)) // 2)
+    if enough:
+        # the most that pipeline moved each place in frames it did not edit, spread a few pixels for sub-pixel shifts: a difference only counts above it by a margin
+        ceiling = np.zeros(org[0].shape[:2], np.uint8)
+        for k in usable: ceiling = np.maximum(ceiling, diff(k).astype(np.uint8))
+        ceiling = cv2.dilate(ceiling, np.ones((FOREIGN_SPREAD_PX, FOREIGN_SPREAD_PX), np.uint8)).astype(np.int16)
+        baseline = {"source": "unedited_frames", "frames": len(usable)}
+        floor = ceiling + FOREIGN_MARGIN
     else:
         baseline = {"source": "none", "frames": len(unedited)}
-        flagged = [(d > 8) & x for d, x in zip(diffs, outside)]
-    counted = np.sum(np.stack(flagged), axis=0) >= max(5, int(np.ceil(0.1 * n)))
-    masked = 0
+        floor = np.full(org[0].shape[:2], 8, np.int16)
+    votes = np.zeros(org[0].shape[:2], np.int32); overlay = org[0].copy(); changed_gt8 = 0; total = 0; max_diff = 0
+    for k in range(n):
+        d = diff(k); x = outside[k]
+        votes += ((d > floor) & x).astype(np.int32)
+        overlay[(d > floor) & x] = (255, 0, 0)
+        changed_gt8 += int(((d > 8) & x).sum()); total += int(x.sum()); max_diff = max(max_diff, int(d.max()))
+    counted = votes >= max(5, int(np.ceil(0.1 * edited)))     # only frames with a region can flag, so the minimum scales with them
     count, _, stats, _ = cv2.connectedComponentsWithStats(counted.astype(np.uint8), 8)
     largest = int(stats[1:, cv2.CC_STAT_AREA].max()) if count > 1 else 0
-    total = sum(int(x.sum()) for x in outside)
-    encoded = dict(persistent_pixels=int(counted.sum()), largest_blob_px=largest, share_gt8=sum(int(((d > 8) & x).sum()) for d, x in zip(diffs, outside)) / max(1, total),
-                   max_diff=int(max(d.max() for d in diffs)), drift_masked_px=int(masked))
+    encoded = dict(persistent_pixels=int(counted.sum()), largest_blob_px=largest, share_gt8=changed_gt8 / max(1, total), max_diff=max_diff)
     reasons = []
     if largest < 50: verdict = "pass"
     elif enough: verdict = "fail"; reasons.append("A persistent changed area was found outside the declared edit region.")
@@ -555,9 +568,6 @@ def foreign_check(org, back, regions, o: Options, base, w, h):
         verdict = "inconclusive"
         reasons.append("unknown_encoder: this clip was encoded by another tool and fewer than 20 of its frames are free of the target, so its own drift at hard edges cannot be measured. A persistent difference of "
                        f"{largest} pixels was found outside the region and cannot be told from an edit. Check it by eye, or give the swap tool's own unedited output of the same clip.")
-    overlay = org[0].copy()
-    for a, b, x in zip(org, back, outside):
-        overlay[(np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > 8) & x] = (255, 0, 0)
     map_path = base + ".changedmap.png"
     contours, _ = cv2.findContours(regions[0].astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2)
