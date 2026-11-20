@@ -25,16 +25,17 @@ import { upscaleClip, upscaleProblem, UPSCALE_DEADLINE_MS, UpscaleFailure } from
 import { runTtsBatch } from "./tts";
 import { MixInput, runMix } from "./mix";
 import { VerifyInput, runVerify } from "./verify";
+import { roughCutPrecheck, runRoughCut } from "./roughCut";
 import { COMPANION_MAKER_DEADLINES_MS, COMPANION_MAKER_KINDS, companionMakerPrecheck, companionMakerRunner, type CompanionMakerKind } from "./companionMaker";
 import { RECORDED_SPEECH_PEAK_BYTES } from "@/recordedSpeech/recordedSpeech";
 import { seriesFromFrames } from "./clipCheck";
 
-export const MEDIA_KINDS = ["media.probe", "media.check", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.tts", "media.mix", "media.verify", "media.setup", ...COMPANION_MAKER_KINDS] as const;
+export const MEDIA_KINDS = ["media.probe", "media.check", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.tts", "media.mix", "media.verify", "media.rough_cut", "media.setup", ...COMPANION_MAKER_KINDS] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
 export const MEDIA_LANE = "idle";
 export const MEDIA_QUEUE_CAP = 64;
 const MINUTE = 60_000;
-export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.check": 5 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.edit": 30 * MINUTE, "media.tts": 30 * MINUTE, "media.mix": 30 * MINUTE, "media.verify": 20 * MINUTE, "media.setup": 30 * MINUTE, ...COMPANION_MAKER_DEADLINES_MS };
+export const MEDIA_DEADLINES_MS: Record<MediaKind, number> = { "media.probe": 3 * MINUTE, "media.check": 5 * MINUTE, "media.preview": 20 * MINUTE, "media.fetch": 3 * 60 * MINUTE, "media.transcode": 12 * 60 * MINUTE, "media.companion_clip": 20 * MINUTE, "media.edit": 30 * MINUTE, "media.tts": 30 * MINUTE, "media.mix": 30 * MINUTE, "media.verify": 20 * MINUTE, "media.rough_cut": 20 * MINUTE, "media.setup": 30 * MINUTE, ...COMPANION_MAKER_DEADLINES_MS };
 
 type RawInputRunner = (argv: string[], inputPath: string, signal: AbortSignal) => Promise<RunResult>;
 async function spawnRawInputRunner(argv: string[], inputPath: string, signal: AbortSignal): Promise<RunResult> {
@@ -92,6 +93,7 @@ export function precheck(kind: MediaKind): (input: Record<string, unknown>) => J
       else if (kind === "media.setup") SetupInput.parse(input);
       else if ((COMPANION_MAKER_KINDS as readonly string[]).includes(kind)) return companionMakerPrecheck(kind as CompanionMakerKind)(input);
       else if (kind === "media.verify") resolveReadable(VerifyInput.parse(input).path);
+      else if (kind === "media.rough_cut") { const refused = roughCutPrecheck(input); if (refused) return refused; }
       else if (kind === "media.mix") { const parsed = MixInput.parse(input); for (const track of parsed.tracks) resolveReadable(track.path); if (parsed.output.dir) resolveWritableDir(parsed.output.dir); safeName(parsed.output.name, "mix.wav"); }
       else {
         const parsed = FetchInput.parse(input);
@@ -996,6 +998,7 @@ export function registerMediaJobs(): void {
   registerJobRunner("media.tts", runTtsBatch, { generator: { role: "tts", queueBehind: ["image", "video", "music"], memory: () => ({ requestedBytes: RECORDED_SPEECH_PEAK_BYTES, measuredPeakBytes: RECORDED_SPEECH_PEAK_BYTES, engine: "recorded-speech" }) } });
   registerJobRunner("media.mix", runMix, { lane: laneFor("media.mix") });
   registerJobRunner("media.verify", (job, signal, progress) => runVerify(job, signal, progress, mediaDeps), { lane: laneFor("media.verify") });
+  registerJobRunner("media.rough_cut", (job, signal, progress) => runRoughCut(job, signal, progress, mediaDeps), { lane: laneFor("media.rough_cut") });
   registerJobRunner("media.setup", runSetup, { lane: laneFor("media.setup") });
   for (const kind of COMPANION_MAKER_KINDS) registerJobRunner(kind, companionMakerRunner(kind, extractClipFrames), { lane: laneFor(kind) });
 }

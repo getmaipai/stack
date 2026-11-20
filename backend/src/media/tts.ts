@@ -17,7 +17,7 @@ export function finalizeWav(bytes: Uint8Array): void {
     at += 8 + size + (size & 1);
   }
 }
-function wavDuration(bytes: Uint8Array): number {
+export function wavDuration(bytes: Uint8Array): number {
   if (bytes.length < 44 || String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF" || String.fromCharCode(...bytes.slice(8, 12)) !== "WAVE") throw new Error("The speech engine returned an invalid WAV file. Try again or change the voice.");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength); let rate = 0; let data = 0;
   for (let at = 12; at + 8 <= bytes.length;) { const tag = String.fromCharCode(...bytes.slice(at, at + 4)); const size = view.getUint32(at + 4, true); if (tag === "fmt " && size >= 16) rate = view.getUint32(at + 16, true); if (tag === "data") data = size; at += 8 + size + (size & 1); }
