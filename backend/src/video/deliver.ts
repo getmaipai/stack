@@ -2,7 +2,7 @@
 // a finish (H3's sharpening and enlarging) works on a copy of it and its result becomes the delivered `video.mp4` that Home downloads today;
 // a failed finish leaves the native file as the delivered one. Both files are probed, and the poster is cut again from the delivered file when
 // the finish changed its size. Pulled out of the job runner so it can be tested without a model.
-import { copyFileSync, existsSync } from "node:fs";
+import { copyFileSync, existsSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { probeReceiptFile, reportedFile, type ReceiptFile } from "./receipt";
 import { RecipeFinishFailure, type AppliedFinish } from "./recipeFinish";
@@ -33,13 +33,18 @@ export async function deliverClip(input: DeliverInput): Promise<Delivered> {
   let applied: readonly AppliedFinish[] = [];
   let failedStep: string | null = null;
   if (input.finish) {
-    copyFileSync(video, native);
-    try { applied = await input.finish(video); finished = applied.some((step) => step.ok) ? "ok" : "failed"; if (finished === "failed") failedStep = applied.find((step) => !step.ok)?.operation ?? "finish"; }
+    // The generator already set the model's own file aside as `native.mp4` and made `video.mp4` from it (the 1280-wide messaging copy). The finish must work on a copy
+    // of the NATIVE file (a crop from 1920x1088 cannot be done on the 1280 copy) and the native file must never be overwritten; a failed finish leaves the derived copy.
+    const nativeKept = input.derivedByGenerator && existsSync(native);
+    const work = nativeKept ? join(input.outputDir, "finish-work.mp4") : video;
+    if (nativeKept) copyFileSync(native, work); else copyFileSync(video, native);
+    try { applied = await input.finish(work); finished = applied.some((step) => step.ok) ? "ok" : "failed"; if (finished === "failed") failedStep = applied.find((step) => !step.ok)?.operation ?? "finish"; }
     catch (error) {
-      if (input.signal?.aborted) throw error;
+      if (input.signal?.aborted) { if (nativeKept) rmSync(work, { force: true }); throw error; }
       finished = "failed";
       if (error instanceof RecipeFinishFailure) { applied = error.applied; failedStep = error.operation; } else failedStep = "finish";
     }
+    if (nativeKept) { if (finished === "ok") renameSync(work, video); else rmSync(work, { force: true }); }
   }
   if (finished === "ok") { try { await input.recutPoster(video, join(input.outputDir, "poster.jpg")); } catch { /* the first cut stays */ } }
   const keptNative = existsSync(native);

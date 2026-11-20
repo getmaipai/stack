@@ -77,6 +77,32 @@ describe("applyRecipeFinish and the receipt", () => {
     expect(probed.streams.find((s) => s.type === "video")!.fps).toBe(24);
   }, 180_000);
 
+  real("a generator-derived clip: the finish works on the NATIVE file, the native file is never overwritten, the delivered clip is the finished native (the real 1920x1088 run's bug)", async () => {
+    const native = await clip("native.mp4", 1920, 1088); const nativeBytes = sha(native);
+    await clip("video.mp4", 1280, 726);   // the generator's messaging copy
+    const made = await deliverClip({
+      outputDir: dir, derivedByGenerator: true, reported: { width: 1920, height: 1088, frames: 48, fps: 24, audio: true },
+      finish: (path) => applyRecipeFinish({ ...deps(path), steps: MAX_STEPS, upscale: copyUpscale }),
+      recutPoster: async (file, target) => { await spawnRunner([FFMPEG, "-y", "-i", file, "-frames:v", "1", target], {}); },
+    });
+    expect(sha(join(dir, "native.mp4"))).toBe(nativeBytes);
+    expect([made.native.width, made.native.height, made.delivered.width, made.delivered.height]).toEqual([1920, 1088, 1920, 1080]);
+    expect(made).toMatchObject({ keptNative: true, deliveredIs: "finished" });
+    expect(made.finish.map((f) => [f.operation, f.ok, f.code])).toEqual([["crop", true, null], ["unsharp", true, null], ["messaging_copy", true, null]]);
+  }, 180_000);
+
+  real("a generator-derived clip whose finish does not apply keeps the native and the derived copy as they were", async () => {
+    const native = await clip("native.mp4", 1280, 704); const nativeBytes = sha(native);
+    const derived = await clip("video.mp4", 960, 528); const derivedBytes = sha(derived);
+    const made = await deliverClip({
+      outputDir: dir, derivedByGenerator: true, reported: { width: 1280, height: 704, frames: 48, fps: 24, audio: true },
+      finish: (path) => applyRecipeFinish({ ...deps(path), steps: MAX_STEPS, upscale: copyUpscale }), recutPoster: async () => {},
+    });
+    expect(sha(join(dir, "native.mp4"))).toBe(nativeBytes); expect(sha(join(dir, "video.mp4"))).toBe(derivedBytes);
+    expect(made.deliveredIs).toBe("messaging_copy");
+    expect(existsSync(join(dir, "finish-work.mp4"))).toBe(false);
+  }, 180_000);
+
   real("a crop that does not fit the clip's size is reported not_applicable, never silently dropped, and the clip is kept as made", async () => {
     const video = await clip("video.mp4", 1280, 704); const before = sha(video);
     const made = await deliverClip({
