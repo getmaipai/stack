@@ -211,7 +211,7 @@ test("a second clip waits behind the first with its position; the fifth is refus
   expect(refused.status).toBe(429);
   expect(((await refused.json()) as { code: string }).code).toBe("queue_full");
   release();
-  await Bun.sleep(200);
+  for (let waited = 0; requests.length < 4 && waited < 5000; waited += 50) await Bun.sleep(50);   // poll, not a fixed sleep: a loaded machine is slower than 200 ms
   expect(requests).toHaveLength(4);
   expect(spawned).toBe(1);
 });
