@@ -97,6 +97,12 @@
           "level": "standard",
           "bytes": 24000000000,
           "status": "measured"
+        },
+        {
+          "shape": "landscape",
+          "level": "standard",
+          "bytes": 22400000000,
+          "status": "measured"
         }
       ]
     },
