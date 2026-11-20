@@ -2,7 +2,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { engineTagRoot } from "@/lib/store/layout";
-import { H3_VIDEO_VERSION } from "./h3";
+import { H3_VIDEO_VERSION } from "@/video/h3";
 import { H3_PINNED_FILES, type H3PinFile } from "./h3Pins";
 export { H3_PINNED_FILES } from "./h3Pins";
 

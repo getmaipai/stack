@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { H3_PINNED_FILES, h3PinStatus } from "@/video/h3Pin";
+import { H3_PINNED_FILES, h3PinStatus } from "@/packs/h3/h3Pin";
 
 const roots: string[] = [];
 const fresh = () => { const path = mkdtempSync(join(tmpdir(), "h3-adopt-")); roots.push(path); return path; };

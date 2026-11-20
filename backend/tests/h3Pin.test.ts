@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { H3_PINNED_FILES } from "@/video/h3Pin";
-import { h3PinStatus } from "@/video/h3Pin";
+import { H3_PINNED_FILES } from "@/packs/h3/h3Pin";
+import { h3PinStatus } from "@/packs/h3/h3Pin";
 import { videoModelPaths } from "@/video/videoGen";
 import { ENGINE_BINARIES } from "@/lib/engineCatalog";
 import { STACK_VIDEO_H3_MODEL } from "@/lib/modelCatalog";
@@ -60,7 +60,7 @@ test("the parts list's cheap look never reads a file's bytes: sizes only, so a b
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { createHash } = await import("node:crypto");
-  const { h3PinStatus } = await import("@/video/h3Pin");
+  const { h3PinStatus } = await import("@/packs/h3/h3Pin");
   const home = mkdtempSync(join(tmpdir(), "h3pin-"));
   try {
     mkdirSync(join(home, "models/minimax_h3/qwen/8-bit"), { recursive: true });

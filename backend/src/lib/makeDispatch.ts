@@ -178,9 +178,9 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     const styleId = request.styles?.[0];
     const record = styleId && isLoraId(styleId) ? getLora(styleId) : null;
     const styleFile = record ? loraPath(record.id) : "";
-    if (!record || !existsSync(styleFile) || (record.base_model ?? "") !== LORA_BASE_LTX25) return { status: 409, body: { code: "not_available", line: "That style is not available. Choose an installed LTX-2.5 style." } };
+    if (!record || !existsSync(styleFile) || (record.base_model ?? "") !== LORA_BASE_LTX25) return { status: 409, body: { code: "not_available", line: "That style is not available. Choose an installed style." } };
     const stat = statSync(styleFile);
-    if (stat.size !== record.bytes || (Math.floor(stat.mtimeMs) !== record.mtime_ms && await sha256OfFile(styleFile) !== record.sha256)) return { status: 409, body: { code: "not_available", line: "That style is not available. Choose an installed LTX-2.5 style." } };
+    if (stat.size !== record.bytes || (Math.floor(stat.mtimeMs) !== record.mtime_ms && await sha256OfFile(styleFile) !== record.sha256)) return { status: 409, body: { code: "not_available", line: "That style is not available. Choose an installed style." } };
     const recipe = plan.serving.pack.recipes["recipes/restyle.md"] ?? plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";
     const body = { source: sourcePath, lora: record.id, strength: request.style_strength ?? record.strength_default, conditioning: request.conditioning ?? "source", prompt: fillStyleRecipe(recipe, record.name, { description: request.description }), ...(request.seed !== undefined ? { seed: request.seed } : {}), ...(request.wait !== undefined ? { timeout_ms: Math.max(1, request.wait * 1000) } : {}), route: { name: "restyle", reason: chosen.reason } };
     const sent = await forward("/v1/videos/restyle", body);

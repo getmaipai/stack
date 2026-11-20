@@ -14,7 +14,7 @@ import { componentDefs } from "@/lib/components";
 import { getModel } from "@/lib/modelStore";
 import { catalogModelsForIds, pendingEngineUpdate } from "@/updates/catalog";
 import { modelUpdateJob } from "@/updates/models";
-import { h3PinStatus } from "@/video/h3Pin";
+import { h3PinStatus } from "@/packs/h3/h3Pin";
 import { STACK_VIDEO_H3_MODEL_ID } from "@/lib/modelCatalog";
 
 export type PartsAudience = "adult" | "minor";
