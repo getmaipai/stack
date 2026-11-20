@@ -54,7 +54,7 @@ describe("the pinned folder shape (the three trees the real pin lists)", () => {
     expect(status.mismatched).toEqual([table[3]!.local]);
     expect(status.absent).toEqual([table[30]!.local]);
   });
-  test("an empty folder and a folder that does not exist are told apart; a missing path from the variable reads as an existing install that cannot be verified (documented behavior)", async () => {
+  test("an empty folder and a folder that does not exist are told apart; a variable that points at a missing path reads missing too (H3-PIN-01 follow-up)", async () => {
     const empty = fresh();
     const emptyStatus = await h3PinStatus(empty, table);
     expect(emptyStatus).toMatchObject({ state: "existing_unverified", matched: [], mismatched: [] });
@@ -62,7 +62,7 @@ describe("the pinned folder shape (the three trees the real pin lists)", () => {
     const gone = join(fresh(), "not-there");
     expect((await h3PinStatus(gone, table)).state).toBe("missing");
     process.env.MAIPAI_H3_VIDEO_HOME = gone;
-    expect((await h3PinStatus(gone, table)).state).toBe("existing_unverified");
+    expect((await h3PinStatus(gone, table)).state).toBe("missing");
   });
 });
 
