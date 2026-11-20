@@ -196,6 +196,7 @@ test("a clip whose words cannot be written is a plain 422, not a crash", async (
   const result = await dispatchClip(req, (() => { const p = planMake(req, [ready("minimax-h3")]); if (!p.ok) throw new Error("not planned"); return p; })(), async () => ({ status: 200, json: {} }));
   expect(result.status).toBe(422); expect(result.body).toMatchObject({ code: "invalid_request" });
   expect(String((result.body as { line: string }).line)).toContain("positive words");
+});
 
 import { StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
 test("a song, a song edit and a split always carry made_with (part id, label, pack version), done or still running", async () => {
