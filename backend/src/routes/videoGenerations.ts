@@ -29,6 +29,7 @@ import { deleteResult, isJobId, messagesPath, posterPath, readReceipt, readResul
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
 import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25PeakBytes } from "@/video/ltx25";
 import { checkEdit, EditSourceError, editRuntime, ltx25EditAdmitBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED, planSource, probeSource, type Ltx25EditKind } from "@/video/ltx25Edit";
+import { H3_MIN_SECONDS } from "@/video/h3";
 import { MediaPathError, resolveReadable } from "@/media/paths";
 import { stashClip, unstashClip, videoFailure, videoPreviewPath, videoProgress, videoTracker, VIDEO_JOB_KIND, type StashedClip } from "@/video/jobs";
 import { LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES, LTX25_INGREDIENTS_HEIGHT, LTX25_INGREDIENTS_MAX_SECONDS, LTX25_INGREDIENTS_MAX_SHEETS, LTX25_INGREDIENTS_MIN_SECONDS, LTX25_INGREDIENTS_WIDTH, ltx25IngredientsFrames } from "@/video/ltx25";
@@ -273,7 +274,8 @@ videoV1Routes.openapi(postRoute, async (c) => {
   }
   const size = parseVideoSize(body.size, quality);
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
-  const seconds = body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
+  // Legacy outcome kept (API changes are additive): H3 lifts a short request up to its 4 s floor and makes it; a length past the row is refused below.
+  const seconds = quality === "h3" || quality === "h3stream" ? Math.max(H3_MIN_SECONDS, body.seconds ?? 5) : body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
   if (engine) {
     // The row of this operation at this size says which sizes, lengths and pictures it takes; a length outside it is refused, never lifted or clamped.
     const operation = operationOfInputs({ start_picture: body.image !== undefined, end_picture: body.end_image !== undefined });

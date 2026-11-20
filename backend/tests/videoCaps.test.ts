@@ -267,15 +267,18 @@ test("a size or a length outside a row is refused as bad_size or bad_seconds, ov
   expect(h3Commands).toEqual([]);
 });
 
-test("H3 refuses 3 s and 6 s with bad_seconds and a plain line, and never lifts or clamps them; 4 s and 5 s run", async () => {
-  for (const seconds of [1, 3, 6, 10]) {
+test("H3 keeps its old legacy outcome: 1 to 3 s are lifted to 4 s and made, 6 to 10 s are refused with bad_seconds; 4 s and 5 s run", async () => {
+  for (const seconds of [6, 10]) {
     const response = await post({ prompt: "x", model: MODEL.h3, seconds, timeout_ms: 5000 });
     const body = await response.json() as Err;
     expect([response.status, body.code], `${seconds}s`).toEqual([422, "bad_seconds"]);
-    expect(body.error).toContain("4 to 5 seconds");
     expect(body.error).toContain("Choose");
   }
   expect(h3Commands).toEqual([]);
+  for (const seconds of [1, 3]) {
+    expect((await post({ prompt: "x", model: MODEL.h3, seconds, timeout_ms: 20_000 })).status, `${seconds}s`).toBe(200);
+    expect(h3Commands.at(-1)![h3Commands.at(-1)!.indexOf("--duration") + 1]).toBe("4");
+  }
   for (const seconds of [4, 5]) {
     expect((await post({ prompt: "x", model: MODEL.h3, seconds, timeout_ms: 20_000 })).status, `${seconds}s`).toBe(200);
     expect(h3Commands.at(-1)![h3Commands.at(-1)!.indexOf("--duration") + 1]).toBe(String(seconds));
