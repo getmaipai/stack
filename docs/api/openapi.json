@@ -4686,6 +4686,24 @@
                     "maxItems": 8,
                     "description": "VF-ROLES-01, set by the generic door only: the typed inputs of a clip request, each as a role and the hash of the file. They are written to the job's receipt and not acted on yet (the capability and route rows do that)."
                   },
+                  "route": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "reason": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  },
                   "quiet_seconds": {
                     "type": "integer",
                     "minimum": 20,
@@ -16967,6 +16985,40 @@
                         "minimum": 0,
                         "maximum": 120
                       },
+                      "inputs": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "identity",
+                                "wardrobe",
+                                "voice_reference",
+                                "edit_source"
+                              ]
+                            },
+                            "file": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "file"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "intent": {
+                        "type": "string",
+                        "enum": [
+                          "open_on_picture",
+                          "new_shot",
+                          "derived_start"
+                        ]
+                      },
                       "description": {
                         "type": "string",
                         "minLength": 1
@@ -17213,8 +17265,13 @@
                         "type": "string",
                         "enum": [
                           "open_on_picture",
-                          "new_shot"
+                          "new_shot",
+                          "derived_start"
                         ]
+                      },
+                      "look": {
+                        "type": "string",
+                        "minLength": 1
                       },
                       "quiet_seconds": {
                         "type": "integer",
@@ -18063,6 +18120,19 @@
                             "receipt": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -18186,6 +18256,19 @@
                             "receipt": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -18302,6 +18385,19 @@
                               }
                             },
                             "receipt": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
                               "type": "string",
                               "minLength": 1
                             }
@@ -18429,6 +18525,19 @@
                             "receipt": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -18551,6 +18660,19 @@
                               }
                             },
                             "receipt": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
                               "type": "string",
                               "minLength": 1
                             }
@@ -18690,6 +18812,19 @@
                               }
                             },
                             "receipt": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
                               "type": "string",
                               "minLength": 1
                             }
@@ -18842,6 +18977,19 @@
                             "receipt": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -18965,6 +19113,19 @@
                             "receipt": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -19081,6 +19242,19 @@
                               }
                             },
                             "receipt": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
                               "type": "string",
                               "minLength": 1
                             }
@@ -19208,6 +19382,19 @@
                             "receipt": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -19330,6 +19517,19 @@
                               }
                             },
                             "receipt": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
                               "type": "string",
                               "minLength": 1
                             }
@@ -19471,6 +19671,19 @@
                             "receipt": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "route": {
+                              "type": "string",
+                              "enum": [
+                                "words",
+                                "start_picture",
+                                "start_end_pictures",
+                                "references"
+                              ]
+                            },
+                            "route_reason": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -19568,10 +19781,54 @@
                         "code": {
                           "type": "string",
                           "enum": [
+                            "needs_start_picture"
+                          ]
+                        },
+                        "line": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "shape": {
+                          "type": "string",
+                          "enum": [
+                            "landscape",
+                            "portrait",
+                            "square"
+                          ]
+                        },
+                        "inputs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "identity",
+                              "wardrobe",
+                              "voice_reference",
+                              "edit_source"
+                            ]
+                          },
+                          "minItems": 1
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "line",
+                        "shape",
+                        "inputs"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
                             "shape_not_served",
                             "level_not_served",
                             "input_not_supported",
-                            "not_installed"
+                            "not_installed",
+                            "needs_start_picture"
                           ]
                         },
                         "line": {
