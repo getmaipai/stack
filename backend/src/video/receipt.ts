@@ -65,6 +65,9 @@ export interface BuildReceiptInput extends ReceiptFacts {
   finish: Receipt["finish"];
   /** The prompt the model was given; only its length in bytes and its hash are kept. */
   prompt: string;
+  /** VF-PROMPT-01: the prompt writer that made it, its version and the hints it recorded (advice and counts, never text). */
+  promptWriter?: { id: string; version: string } | undefined;
+  promptHints?: readonly string[] | undefined;
   inputs: Receipt["inputs"];
 }
 
@@ -76,7 +79,7 @@ export function buildReceipt(input: BuildReceiptInput): Receipt {
     runtime: input.runtime, model: input.model, steps: input.steps, adapter: input.adapter, inputs: input.inputs,
     requested: input.requested, native: input.native, delivered: input.delivered, delivered_is: input.deliveredIs,
     seed: input.seed, phases: input.phases.map((phase) => ({ name: phase.name, ms: Math.max(0, Math.round(phase.ms)) })),
-    peak_memory_bytes: input.peakBytes, finish: input.finish, prompt: { bytes: prompt.length, sha256: sha256Hex(prompt) },
+    peak_memory_bytes: input.peakBytes, finish: input.finish, prompt: { bytes: prompt.length, sha256: sha256Hex(prompt), ...(input.promptWriter ? { writer: input.promptWriter } : {}), ...(input.promptHints?.length ? { hints: [...input.promptHints] } : {}) },
   });
 }
 

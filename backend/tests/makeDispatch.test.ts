@@ -171,3 +171,35 @@ test("stems keep only the parts asked for", async () => {
   const done = await dispatchStems(req as never, plan, async () => m4a, async () => ({ status: 200, json: { job: "t1", data: [{ stem: "vocals", url: "/v1/audio/stems/t1/vocals" }, { stem: "drums", url: "/v1/audio/stems/t1/drums" }] } }));
   expect(done.body).toMatchObject({ job: "stems", state: "done", stems: [{ name: "vocals", file: "/v1/audio/stems/t1/vocals" }], files: ["/v1/audio/stems/t1/vocals"] });
 });
+
+// VF-PROMPT-01: a pack whose clip recipe declares a prompt writer gets its engine's own prompt, written from the typed request; the writer and hints ride on the body.
+test("an H3 clip's prompt is written in the official sectioned format from the structured dialogue, and the writer and hints go with it (never the text)", () => {
+  const only = (id: string, req = clipReq()) => { const p = planMake(req, [ready(id)]); if (!p.ok) throw new Error(`not planned: ${JSON.stringify(p)}`); return p; };
+  const req = clipReq({ description: "A woman sits at a kitchen table. There is no music.", dialogue: [{ speaker: "Ana", text: "It was my grandmother's." }], start_picture: "media-1" });
+  const body = clipBody(req, only("minimax-h3", req));
+  expect(String(body.prompt)).toBe(
+    "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n\n"
+    + "integrated_multimodal_description: [Shot 1] A woman sits at a kitchen table. For the first half second the scene is quiet and the speaker's lips are closed. The speaker Ana (S1), in a calm, warm, natural speaking voice with the lips forming each word, says: <d>[English] It was my grandmother's.</d>\n\n"
+    + "overall_soundscape: Soft room tone continues under the scene.\n\nnon_diegetic_music: N/A");
+  expect(body).toMatchObject({ prompt_writer: { id: "h3-sectioned", version: "1" }, prompt_hints: ["negation_removed:1", "start_picture_mouth_closed_advised"] });
+});
+test("an LTX Max clip's prompt is one paragraph with the line in quotes, and the film's look comes first, byte for byte, in every shot", () => {
+  const only = (req: ReturnType<typeof clipReq>) => { const p = planMake(req, [ready("ltx-2-5-bf16-distilled-mlx-max")]); if (!p.ok) throw new Error("not planned"); return p; };
+  const look = "Naturalistic digital drama at dusk, cool light from the window.";
+  const a = clipReq({ level: "max", description: "A man waits by the door.", look }), b = clipReq({ level: "max", description: "A woman reads.", look, dialogue: [{ speaker: "Ana", text: "Leave the light on." }] });
+  const first = String(clipBody(a, only(a)).prompt), second = String(clipBody(b, only(b)).prompt);
+  expect(first.startsWith(`${look} A man waits by the door.`)).toBe(true);
+  expect(second).toBe(`${look} A woman reads. Ana says quietly, with the lips parting only slightly, "Leave the light on." Quiet room tone fills the background.`);
+  expect(first.slice(0, look.length)).toBe(second.slice(0, look.length));
+  expect(clipBody(b, only(b))).toMatchObject({ prompt_writer: { id: "ltx-paragraph", version: "1" } });
+});
+test("a pack with no writer keeps the plain recipe and sends no writer fields", () => {
+  const body = clipBody(clipReq(), clipPlanned());
+  expect(body).not.toHaveProperty("prompt_writer"); expect(body).not.toHaveProperty("prompt_hints");
+});
+test("a clip whose words cannot be written is a plain 422, not a crash", async () => {
+  const req = clipReq({ description: "There is no music. He is not smiling." });
+  const result = await dispatchClip(req, (() => { const p = planMake(req, [ready("minimax-h3")]); if (!p.ok) throw new Error("not planned"); return p; })(), async () => ({ status: 200, json: {} }));
+  expect(result.status).toBe(422); expect(result.body).toMatchObject({ code: "invalid_request" });
+  expect(String((result.body as { line: string }).line)).toContain("positive words");
+});

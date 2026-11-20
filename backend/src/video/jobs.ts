@@ -61,6 +61,9 @@ export interface StashedClip {
   ingredients?: { sheets: Uint8Array[]; loraPath: string; loraId: string };
   /** VF-ROLES-01: the typed inputs of the generic door's clip request (role and file hash), written to the receipt and not acted on yet. */
   roles?: Array<{ role: "identity" | "wardrobe" | "voice_reference" | "edit_source"; sha256: string; bytes: number }>;
+  /** VF-PROMPT-01: the prompt writer that made `prompt` and its hints, written to the receipt. */
+  promptWriter?: { id: string; version: string };
+  promptHints?: string[];
 }
 const pending = new Map<string, StashedClip & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -235,7 +238,7 @@ export function registerVideoJobs(): void {
       const adapter = clip.ingredients ? { id: clip.ingredients.loraId, strength: 1, sha256: null } : clip.icLora ? { id: clip.icLora.loraId, strength: clip.icLora.strength, sha256: null } : result.ran?.adapter ? { ...result.ran.adapter, sha256: null } : loraAdapter;
       const receipt = buildReceipt({
         job: job.id, operation: receiptOperation(clip), madeAt: new Date(), ...receiptFacts(quality), steps: { count: result.ran?.steps ?? null, schedule: result.ran?.schedule ?? null }, adapter,
-        inputs: receiptInputs, requested, native: nativeFile, delivered: deliveredFile, deliveredIs, seed: result.seed, phases: phaseDurations(entered, Date.now()), peakBytes: result.peakBytes, finish, prompt: clip.prompt,
+        inputs: receiptInputs, promptWriter: clip.promptWriter, promptHints: clip.promptHints, requested, native: nativeFile, delivered: deliveredFile, deliveredIs, seed: result.seed, phases: phaseDurations(entered, Date.now()), peakBytes: result.peakBytes, finish, prompt: clip.prompt,
       });
       const meta: VideoResultMeta = {
         job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), width: deliveredFile.width, height: deliveredFile.height, frames: deliveredFile.frames, fps: Math.round(deliveredFile.fps) || result.fps, seconds: Math.round((deliveredFile.frames - 1) / (deliveredFile.fps || result.fps)),

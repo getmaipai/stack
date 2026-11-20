@@ -167,3 +167,18 @@ test("a swap's result tells the truth: its real byte counts, the swap mode, the 
   expect(receipt.delivered).toEqual(receipt.native);
   expect(JSON.stringify(receipt)).not.toContain("swap the head");
 });
+
+test("the receipt records which prompt writer made the prompt and its hints, never the prompt text", () => {
+  const prompt = "integrated_multimodal_description: [Shot 1] a secret scene";
+  const receipt = buildReceipt({
+    job: "job-2", operation: "generate", madeAt: new Date("2026-11-20T10:00:00Z"), runtime: { id: "engine-a", revision: "abc1234" }, model: { id: "model-a", build: "distilled", quantization: "bf16" },
+    steps: { count: 11, schedule: "8 + 3" }, adapter: null, inputs: [], requested: { width: 864, height: 480, frames: 121, seconds: 5 },
+    native: file(864, 480), delivered: file(864, 480), deliveredIs: "native", seed: 7, phases: [], peakBytes: null, finish: [], prompt,
+    promptWriter: { id: "h3-sectioned", version: "1" }, promptHints: ["negation_removed:1", "start_picture_mouth_closed_advised"],
+  });
+  expect(receipt.prompt).toEqual({ bytes: new TextEncoder().encode(prompt).length, sha256: sha256Hex(prompt), writer: { id: "h3-sectioned", version: "1" }, hints: ["negation_removed:1", "start_picture_mouth_closed_advised"] });
+  expect(JSON.stringify(receipt)).not.toContain("secret scene");
+  const plain = buildReceipt({ ...{ job: "job-3", operation: "generate" as const, madeAt: new Date("2026-11-20T10:00:00Z"), runtime: { id: "engine-a", revision: "abc1234" }, model: { id: "model-a", build: "distilled", quantization: "bf16" },
+    steps: { count: 11, schedule: "8 + 3" }, adapter: null, inputs: [], requested: { width: 864, height: 480, frames: 121, seconds: 5 }, native: file(864, 480), delivered: file(864, 480), deliveredIs: "native" as const, seed: 7, phases: [], peakBytes: null, finish: [], prompt } });
+  expect(plain.prompt).not.toHaveProperty("writer"); expect(plain.prompt).not.toHaveProperty("hints");
+});

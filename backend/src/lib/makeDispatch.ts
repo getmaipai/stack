@@ -5,6 +5,7 @@ import { sha256Hex } from "@/video/receipt";
 import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
 import type { MakePlan } from "@/lib/makePlan";
 import { fillRecipe } from "@/lib/recipe";
+import { writePrompt, writerData } from "@/video/promptWriter";
 
 export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit", "clip", "swap", "song", "song_edit", "stems", "character_sheet", "contact_sheet"]);
 
@@ -88,8 +89,13 @@ export async function pictureDataUrl(reference: string, read: PictureBytes): Pro
 export function clipBody(request: ClipRequest, plan: Planned): Record<string, unknown> {
   const pixels = (plan.serving.job.limits.shapes as Record<string, Record<string, { width: number; height: number } | undefined> | undefined> | undefined)?.[request.shape]?.[plan.level];
   const recipe = plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";
+  // VF-PROMPT-01: a pack whose clip recipe declares a prompt writer gets the prompt in its engine's own format, written from the typed request (the person's
+  // words, structured dialogue, pictures, the film's look); a pack without one keeps the plain recipe. The writer and its hints go to the receipt, never the text.
+  const data = writerData(recipe);
+  const written = data ? writePrompt({ description: request.description, ...(request.dialogue ? { dialogue: request.dialogue } : {}), seconds: request.seconds, startPicture: request.start_picture !== undefined, endPicture: request.end_picture !== undefined, ...(request.look !== undefined ? { look: request.look } : {}) }, data) : null;
   return {
-    model: plan.serving.part.id, prompt: fillRecipe(recipe, { description: request.description }),
+    model: plan.serving.part.id, prompt: written ? written.text : fillRecipe(recipe, { description: request.description }),
+    ...(written ? { prompt_writer: written.writer, prompt_hints: written.hints } : {}),
     ...(pixels ? { size: `${pixels.width}x${pixels.height}` } : {}), seconds: Math.round(request.seconds), ...(request.seed !== undefined ? { seed: request.seed } : {}),
     audience: request.audience === "adult" ? "adult" : "all-ages",
     // VF-DOOR-01: the level is the job's tier, so a Boost or Max clip is admitted, governed and classed as one (a Standard clip keeps the untiered admission, as on the
@@ -103,7 +109,9 @@ export function clipBody(request: ClipRequest, plan: Planned): Record<string, un
 }
 
 export async function dispatchClip(request: ClipRequest, plan: Planned, forward: Forward, read?: PictureBytes): Promise<{ status: number; body: unknown }> {
-  const body = clipBody(request, plan);
+  let body: Record<string, unknown>;
+  try { body = clipBody(request, plan); }
+  catch (error) { return { status: 422, body: { code: "invalid_request", line: error instanceof Error ? error.message : "The clip's words could not be turned into a prompt. Describe what the clip shows and try again." } }; }
   if (request.start_picture || request.end_picture) {
     const first = request.start_picture && read ? await pictureDataUrl(request.start_picture, read) : null;
     const last = request.end_picture && read ? await pictureDataUrl(request.end_picture, read) : null;
