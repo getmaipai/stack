@@ -1,5 +1,6 @@
 import { hfUrl } from "@/lib/hf";
 import type { CatalogModelLike } from "@/lib/modelStore";
+import { H3_PINNED_FILES } from "@/video/h3Pins";
 import { H3_IMAGE_FILES, H3_IMAGE_PRIMARY, ERNIE_IMAGE_TURBO_FILES, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, KLEIN_4B_FILES, KLEIN_4B_PRIMARY, QWEN_IMAGE_FILES, QWEN_IMAGE_PRIMARY, QWEN_IMAGE_REPO, QWEN_IMAGE_REVISION, SEEDVR2_FILES, SEEDVR2_PRIMARY, SEEDVR2_REPO, SEEDVR2_REVISION, KLEIN_4B_REPO, KLEIN_4B_REVISION, KLEIN3_FILES, KLEIN3_PRIMARY, KLEIN3_REPO, KLEIN3_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
 
 // The household's Standard chat model on every profile, copied from Home's verified pin.
@@ -1280,8 +1281,7 @@ export const STACK_VIDEO_LTX25_MODEL: CatalogModelLike = {
 };
 export const STACK_VIDEO_LTX25_MODELS: CatalogModelLike[] = [STACK_VIDEO_LTX25_MODEL];
 
-// H3-VIDEO-STACK-01: the CLI runtime and license are registered now. Exact
-// model file hashes/revisions remain a hard prerequisite to a verified install.
+// H3-VIDEO-STACK-01: published source files are pinned. Two files on existing installs have no published source; they keep working there and are not offered elsewhere.
 export const STACK_VIDEO_H3_MODEL_ID = "minimax-h3";
 export const H3_VIDEO_LICENSE = "MiniMax H3 Community License";
 export const H3_VIDEO_LICENSE_NOTICE = {
@@ -1293,6 +1293,7 @@ export const H3_VIDEO_LICENSE_NOTICE = {
 export const STACK_VIDEO_H3_MODEL: CatalogModelLike = {
   id: STACK_VIDEO_H3_MODEL_ID, role: "video", license: H3_VIDEO_LICENSE,
   engine: "minimax-h3-video-gen", sizing: { profile: "p128", quantization: "8-bit or Core4 stream2" },
+  download: { url: hfUrl(`${H3_PINNED_FILES[0].repo}/resolve/${H3_PINNED_FILES[0].revision}/${H3_PINNED_FILES[0].path}`), sha256: H3_PINNED_FILES[0].sha256, approx_bytes: H3_PINNED_FILES.reduce((sum, file) => sum + file.bytes, 0), directory: "minimax_h3", files: H3_PINNED_FILES.map(({ path, sha256, bytes }) => ({ path, sha256, bytes })) },
   measured: { footprintBytes: 42_100_000_000, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" },
 };
 export const STACK_VIDEO_H3_MODELS: CatalogModelLike[] = [STACK_VIDEO_H3_MODEL];

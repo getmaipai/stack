@@ -264,6 +264,19 @@ export const ENGINE_BINARIES: EngineBinaryPin[] = [
     verified: true,
   },
   {
+    id: "minimax-h3-video-gen-55bb7dd-macos-arm64",
+    name: "minimax-h3-video-gen",
+    tag: "55bb7dd",
+    platform: "darwin",
+    arch: "arm64",
+    tool: "pyproject.toml",
+    requiresNvidia: false,
+    label: "ComfyUI-MiniMax-H3-MLX-SolAttn source, commit 55bb7dd (Apache-2.0; MiniMax H3 video runtime)",
+    docsUrl: "https://github.com/yshenaw/ComfyUI-MiniMax-H3-MLX-SolAttn/tree/55bb7ddd015321a25385683419951e7c7f518775",
+    archive: { label: "MiniMax H3 video runtime source", url: "https://codeload.github.com/yshenaw/ComfyUI-MiniMax-H3-MLX-SolAttn/tar.gz/55bb7ddd015321a25385683419951e7c7f518775", sha256: "5ed91b6815555ea4638aa4648b4918308e6182c73a650d09c694a1e3d1ae1356", approxBytes: 125691 },
+    verified: true,
+  },
+  {
     id: "ltx25-max-gen-b82b97e-macos-arm64",
     name: "ltx25-max-gen",
     tag: "b82b97e",
@@ -371,7 +384,7 @@ export type ChatEngine = typeof CHAT_ENGINES[number];
 /** The role each engine name serves, for the routes that act on "the
  * engine's role" (start, stop, restart, the swap's drain). */
 export type EngineRole = "chat" | "coding" | "tts" | "image" | "video" | "music";
-export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "mask-gen": "video", "composite-swap": "video", liveportrait: "image", "music-gen": "music", "sfx-gen": "music", "score-gen": "music", "stems": "music", align: "music", beats: "music", "voice-convert": "music", "image-gen": "image", "h3-image-gen": "image" };
+export const ENGINE_ROLE: Record<string, EngineRole> = { "llama-server": "chat", splash: "coding", "splash-chat": "chat", "mlx-serve": "chat", omlx: "chat", uv: "tts", "pocket-tts": "tts", "mlx-audio": "tts", "recorded-speech": "tts", comfyui: "image", "video-gen": "video", "ltx25-gen": "video", "ltx25-max-gen": "video", "minimax-h3-video-gen": "video", "mask-gen": "video", "composite-swap": "video", liveportrait: "image", "music-gen": "music", "sfx-gen": "music", "score-gen": "music", "stems": "music", align: "music", beats: "music", "voice-convert": "music", "image-gen": "image", "h3-image-gen": "image" };
 export function engineRole(name: string): EngineRole { return ENGINE_ROLE[name] ?? "chat"; }
 
 /** Runtimes the Stack assembles from pinned wheels through uv, in an
@@ -391,6 +404,7 @@ export const MANAGED_RUNTIMES: ManagedRuntime[] = [
   { name: "ltx25-gen", version: "5795228", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the LTX-2.5 runtime source archive (fork of dgrauet/ltx-2-mlx) plus a hashed requirements file; text to video with a sound track made in the same pass; needs 64 GB or more; no Linux file)" },
   { name: "mask-gen", version: "2b90b9f", roles: ["video"], platforms: "macOS 14 or later on arm64 (SAM 2.1 source archive and hashed Python 3.12 requirements; MPS tracking; no Linux file yet)" },
   { name: "composite-swap", version: "1.0.0", roles: ["video"], platforms: "macOS 14 or later on arm64 (numpy and OpenCV only, no torch; the head-only composite of a swap: donor pixels inside a tracked head mask, every original pixel outside it kept; a hashed requirements file; no Linux file yet)" },
+  { name: "minimax-h3-video-gen", version: "55bb7dd", roles: ["video"], platforms: "macOS arm64 (pinned MiniMax H3 MLX runtime)" },
   { name: "ltx25-max-gen", version: "b82b97e", roles: ["video"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the dgrauet ltx-2-mlx 0.18.0 source archive plus a hashed requirements file; the Max LTX-2.5 slot, 1024x576 with a sound track; needs 128 GB; no Linux file)" },
   { name: "music-gen", version: "ca1e85f", roles: ["music"], platforms: "macOS 14 or later on arm64 (MLX is Apple silicon only; the ACE-Step 1.5 source archive plus a hashed requirements file; songs with sung lyrics, remakes, covers, repaints and extensions; needs 64 GB or more; no Linux file)" },
   { name: "sfx-gen", version: "790793b", roles: ["music"], platforms: "macOS 14 or later on arm64 (torch 2.7.1 MPS; the stable-audio-3 source archive plus a hashed requirements file; Stable Audio 3 Small-SFX sound effects, 1 to 47 seconds, about 5.3 GB while it runs; no Linux file)" },

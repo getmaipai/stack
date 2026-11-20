@@ -164,17 +164,18 @@ export function buildWorkerRequest(quality: VideoQuality, paths: VideoModelPaths
     ...(edit ? { source_video: edit.sourcePath, ffmpeg: edit.ffmpeg, ffprobe: edit.ffprobe, ...(edit.kind === "extend" ? { extend_frames: edit.extendFrames } : { retake_start_latent: edit.retakeStartLatent }) } : {}) };
 }
 
-export interface VideoModelPaths { modelDir: string; tokenizerDir: string; textEncoderDir?: string; h3Home?: string; h3Build?: H3VideoBuild; }
+export interface VideoModelPaths { modelDir: string; tokenizerDir: string; textEncoderDir?: string; h3Home?: string; h3Build?: H3VideoBuild; h3Script?: string; }
 /** The installed, verified weights and text folders of one quality, or null when any is missing. */
 export function videoModelPaths(quality: VideoQuality = "quick"): VideoModelPaths | null {
   if (quality === "h3" || quality === "h3stream") {
     const home = process.env.MAIPAI_H3_VIDEO_HOME || engineTagRoot("minimax-h3-video-gen", H3_VIDEO_VERSION);
     const models = join(home, "models/minimax_h3");
-    const required = [join(home, "node/scripts/generate_staged.py"), join(home, ".venv/bin/python"), join(models, "upstream/FL2VA"), join(models, "qwen/8-bit")];
+    const script = existsSync(join(home, "node/scripts/generate_staged.py")) ? join(home, "node/scripts/generate_staged.py") : join(home, "scripts/generate_staged.py");
+    const required = [script, join(home, ".venv/bin/python"), join(models, "upstream/FL2VA"), join(models, "qwen/8-bit")];
     const stream = join(models, "transformers/4-bit-pruned-stream2");
     const build: H3VideoBuild = quality === "h3stream" ? "streaming-24gb" : "boost-8bit";
     if (!required.every(existsSync) || (quality === "h3stream" ? !existsSync(stream) : !existsSync(join(models, "transformers/8-bit")))) return null;
-    return { modelDir: models, tokenizerDir: join(models, "qwen/8-bit"), h3Home: home, h3Build: build };
+    return { modelDir: models, tokenizerDir: join(models, "qwen/8-bit"), h3Home: home, h3Build: build, h3Script: script };
   }
   if (quality === "ltx25max") { const paths = ltx25MaxModelPaths(); return paths ? { modelDir: paths.modelDir, tokenizerDir: paths.gemmaDir, textEncoderDir: paths.gemmaDir } : null; }
   if (quality === "ltx25") { const paths = ltx25ModelPaths(); return paths ? { modelDir: paths.modelDir, tokenizerDir: join(paths.modelDir, "text_encoder"), textEncoderDir: join(paths.modelDir, "text_encoder") } : null; }
@@ -466,7 +467,7 @@ export class VideoGenService {
         const lora = adapter ? join(models, `loras/${adapter.id}.safetensors`) : null;
         if (adapter?.required && (!lora || !existsSync(lora))) throw new VideoError("not_installed", "The fast-draft adapter for MiniMax H3 is not installed. An admin can install it in Settings, AI and models, or ask for Boost quality.", 503);
         const transformer = paths.h3Build === "streaming-24gb" ? join(models, "transformers/4-bit-pruned-stream2") : join(models, "transformers/8-bit");
-        const argv = h3VideoCommand(join(home, ".venv/bin/python"), join(home, "node/scripts/generate_staged.py"), {
+        const argv = h3VideoCommand(join(home, ".venv/bin/python"), paths.h3Script ?? join(home, "node/scripts/generate_staged.py"), {
           prompt: input.prompt, build: paths.h3Build!, checkpoint: join(models, selected.recipe.checkpoint), transformer,
           qwenDir: join(models, "qwen/8-bit"), output,
           seconds: Math.max(4, Math.min(10, Math.round(input.frames / VIDEO_FPS))), width: input.width, height: input.height,

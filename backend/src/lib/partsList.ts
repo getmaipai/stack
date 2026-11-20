@@ -14,6 +14,8 @@ import { componentDefs } from "@/lib/components";
 import { getModel } from "@/lib/modelStore";
 import { catalogModelsForIds, pendingEngineUpdate } from "@/updates/catalog";
 import { modelUpdateJob } from "@/updates/models";
+import { h3PinStatus } from "@/video/h3Pin";
+import { STACK_VIDEO_H3_MODEL_ID } from "@/lib/modelCatalog";
 
 export type PartsAudience = "adult" | "minor";
 export interface PartsFilter { audience: PartsAudience; kind?: "model" | "tool" | "engine"; category?: string }
@@ -30,6 +32,7 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
   const hardware = hw ?? (hasHardwareOverride ? testHardware! : await detectHardware());
   const [components, runtimeParts] = await Promise.all([listComponents(hardware), Promise.resolve(stackParts())]);
   const modelEntries = catalogModelsForIds(runtimeParts.filter((part) => part.kind === "model").map((part) => part.id));
+  const h3Pin = await h3PinStatus(undefined, undefined, { hashes: false });
   const modelUpdates = new Map(runtimeParts.filter((part) => part.kind === "model").map((part) => {
     const installed = getModel(part.id);
     const entry = modelEntries.get(part.id);
@@ -74,7 +77,7 @@ export async function listParts(filter: PartsFilter, hw?: HardwareInfo): Promise
       description: filter.audience === "adult" ? def.description : "", enabled: enabledFor(def.id, def.category, choices), state,
       // Whole bytes: a shared environment is split between its parts and the fallback environment sizes are fractions of a GB (a live 500 on 2026-11-17).
       size_bytes: wholeBytes(component.size_bytes), download_bytes: wholeBytes(component.download_bytes), percent: component.percent === null ? null : Math.min(100, Math.max(0, component.percent)),
-      fits, can_install: component.can_install, install_block: component.install_block,
+      fits, can_install: component.can_install, install_block: def.id === STACK_VIDEO_H3_MODEL_ID && h3Pin.state === "existing_unverified" ? "existing install, not verified" : component.install_block,
       can_uninstall: component.can_uninstall, uninstall_block: component.uninstall_block,
       licence_needed: component.licence !== null && component.licence.accepted_at === null,
       required_by: requiredBy.get(def.id) ?? [], update: modelUpdates.get(def.id) ?? { available: false, version: null },
