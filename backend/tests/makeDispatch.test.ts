@@ -97,21 +97,15 @@ test("the level is the clip's tier, the quiet window passes through and a caller
   expect(clipBody(clipReq(), planned("standard"))).not.toHaveProperty("timeout_ms");
 });
 const png = { bytes: new Uint8Array([137, 80, 78, 71]), type: "image/png" };
-test("typed inputs are read and handed on as a role and a hash for the receipt, and acted on by nothing (VF-ROLES-01)", async () => {
+test("identity inputs without a reference row are refused before files are read", async () => {
   let sent: Record<string, unknown> = {};
   const request = clipReq({ inputs: [{ role: "identity", file: "/v1/images/generations/a/0.png" }, { role: "wardrobe", file: "/v1/images/generations/b/0.png" }], dialogue: [{ speaker: "sage", text: "I left it here." }], intent: "new_shot" });
-  const result = await dispatchClip(request, clipPlanned(), async (_p, body) => { sent = body as Record<string, unknown>; return { status: 200, json: { job: "v1", data: [] } }; }, async () => png);
-  expect(result.status).toBe(200);
-  expect(sent.roles).toEqual([{ role: "identity", sha256: sha256Hex(png.bytes), bytes: 4 }, { role: "wardrobe", sha256: sha256Hex(png.bytes), bytes: 4 }]);
-  // Not acted on: no picture is sent as a frame, and the dialogue and the intent change neither the prompt nor the body.
-  expect(sent.image).toBeUndefined(); expect(sent.end_image).toBeUndefined();
-  const plain = clipBody(clipReq(), clipPlanned());
-  expect(clipBody(request, clipPlanned())).toEqual(plain);
-  expect(JSON.stringify(sent)).not.toContain("I left it here");
+  const result = await dispatchClip(request, clipPlanned(), async () => { throw new Error("must not forward"); }, async () => { throw new Error("must not read"); });
+  expect(result).toEqual({ status: 422, body: { code: "needs_start_picture", line: "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.", shape: "landscape", inputs: ["identity"] } });
 });
 test("an input that cannot be read is refused plainly, never dropped", async () => {
   const refused = await dispatchClip(clipReq({ inputs: [{ role: "identity", file: "nope" }] }), clipPlanned(), async () => ({ status: 200, json: {} }), async () => null);
-  expect(refused).toEqual({ status: 409, body: { code: "not_available", line: INPUT_UNREADABLE_LINE } });
+  expect(refused).toEqual({ status: 422, body: { code: "needs_start_picture", line: "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.", shape: "landscape", inputs: ["identity"] } });
 });
 test("a clip with only start and end pictures still means the opening and closing frames, and sends no roles", async () => {
   let sent: Record<string, unknown> = {};

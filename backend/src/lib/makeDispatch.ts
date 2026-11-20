@@ -6,6 +6,8 @@ import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/st
 import type { MakePlan } from "@/lib/makePlan";
 import { fillRecipe } from "@/lib/recipe";
 import { writePrompt, writerData } from "@/video/promptWriter";
+import { planClipRoute } from "@/lib/clipRoute";
+import { rowsForJob } from "@/video/caps";
 
 export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit", "clip", "swap", "song", "song_edit", "stems", "character_sheet", "contact_sheet"]);
 
@@ -86,7 +88,7 @@ export async function pictureDataUrl(reference: string, read: PictureBytes): Pro
   return got ? `data:${got.type};base64,${Buffer.from(got.bytes).toString("base64")}` : null;
 }
 
-export function clipBody(request: ClipRequest, plan: Planned): Record<string, unknown> {
+export function clipBody(request: ClipRequest, plan: Planned, route?: { name: string; reason: string }): Record<string, unknown> {
   const pixels = (plan.serving.job.limits.shapes as Record<string, Record<string, { width: number; height: number } | undefined> | undefined> | undefined)?.[request.shape]?.[plan.level];
   const recipe = plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";
   // VF-PROMPT-01: a pack whose clip recipe declares a prompt writer gets the prompt in its engine's own format, written from the typed request (the person's
@@ -105,12 +107,16 @@ export function clipBody(request: ClipRequest, plan: Planned): Record<string, un
     ...(request.quiet_seconds !== undefined ? { quiet_seconds: request.quiet_seconds } : {}),
     ...(request.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: request.quiet_max_wait_seconds } : {}),
     ...(request.wait !== undefined ? { timeout_ms: Math.max(1, request.wait * 1000) } : {}),
+    ...(route ? { route } : {}),
   };
 }
 
 export async function dispatchClip(request: ClipRequest, plan: Planned, forward: Forward, read?: PictureBytes): Promise<{ status: number; body: unknown }> {
+  const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"));
+  if (!chosen.ok) return { status: 422, body: chosen.refusal };
+  const route = { name: chosen.route, reason: chosen.reason };
   let body: Record<string, unknown>;
-  try { body = clipBody(request, plan); }
+  try { body = clipBody(request, plan, route); }
   catch (error) { return { status: 422, body: { code: "invalid_request", line: error instanceof Error ? error.message : "The clip's words could not be turned into a prompt. Describe what the clip shows and try again." } }; }
   if (request.start_picture || request.end_picture) {
     const first = request.start_picture && read ? await pictureDataUrl(request.start_picture, read) : null;
@@ -137,7 +143,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
   const result: StackMakeResult = {
     id: reply.job, job: "clip", state: first ? "done" : "running", percent: first ? 100 : 0, status: first ? "Done" : "Making your clip",
     files: (reply.data ?? []).map((d) => d.url), poster: first?.poster_url ?? null,
-    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job },
+    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job, route: chosen.route, route_reason: chosen.reason },
   };
   return { status: sent.status, body: result };
 }

@@ -64,6 +64,7 @@ export interface StashedClip {
   /** VF-PROMPT-01: the prompt writer that made `prompt` and its hints, written to the receipt. */
   promptWriter?: { id: string; version: string };
   promptHints?: string[];
+  route?: { name: string; reason: string };
 }
 const pending = new Map<string, StashedClip & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -238,7 +239,7 @@ export function registerVideoJobs(): void {
       const adapter = clip.ingredients ? { id: clip.ingredients.loraId, strength: 1, sha256: null } : clip.icLora ? { id: clip.icLora.loraId, strength: clip.icLora.strength, sha256: null } : result.ran?.adapter ? { ...result.ran.adapter, sha256: null } : loraAdapter;
       const receipt = buildReceipt({
         job: job.id, operation: receiptOperation(clip), madeAt: new Date(), ...receiptFacts(quality), steps: { count: result.ran?.steps ?? null, schedule: result.ran?.schedule ?? null }, adapter,
-        inputs: receiptInputs, promptWriter: clip.promptWriter, promptHints: clip.promptHints, requested, native: nativeFile, delivered: deliveredFile, deliveredIs, seed: result.seed, phases: phaseDurations(entered, Date.now()), peakBytes: result.peakBytes, finish, prompt: clip.prompt,
+        inputs: receiptInputs, promptWriter: clip.promptWriter, promptHints: clip.promptHints, requested, native: nativeFile, delivered: deliveredFile, deliveredIs, seed: result.seed, phases: phaseDurations(entered, Date.now()), peakBytes: result.peakBytes, finish, prompt: clip.prompt, ...(clip.route ? { route: clip.route } : {})
       });
       const meta: VideoResultMeta = {
         job: job.id, created: Math.floor(new Date(job.createdAt).getTime() / 1000), width: deliveredFile.width, height: deliveredFile.height, frames: deliveredFile.frames, fps: Math.round(deliveredFile.fps) || result.fps, seconds: Math.round((deliveredFile.frames - 1) / (deliveredFile.fps || result.fps)),
