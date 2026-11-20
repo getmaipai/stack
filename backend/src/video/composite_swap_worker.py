@@ -496,9 +496,23 @@ def caption_residue(before, after, box, o: Options):
     return float(np.mean(ratios)) if ratios else None
 
 
+STRONG_LEVELS = 24      # a change this strong, in one frame, in a compact blob is not encoder drift whatever the pipeline
+STRONG_BLOB_PX = 100    # compact: survives a 3x3 opening, at least this many pixels
+
+
+def strong_blob(source_encoded, delivered, outside):
+    """The largest compact blob of strong change (more than 24 levels, after a 3x3 opening) outside the region in any single frame, against the source-only encode."""
+    kernel = np.ones((3, 3), np.uint8); largest = 0
+    for a, b, x in zip(source_encoded, delivered, outside):
+        mask = cv2.morphologyEx((((np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > STRONG_LEVELS) & x)).astype(np.uint8), cv2.MORPH_OPEN, kernel)
+        count, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+        if count > 1: largest = max(largest, int(stats[1:, cv2.CC_STAT_AREA].max()))
+    return largest
+
+
 def encoded_check_on_file(org, back, regions, o: Options, base, w, h):
     """The post-encode check for a delivered file read back as `back`: a source-only encode and a drift control with the same encoder settings, the persistence
-    rule, and a changed-pixel map written beside `base`. Returns (encoded numbers, map path)."""
+    rule, the strong-change gate, and a changed-pixel map written beside `base`. Returns (encoded numbers, map path)."""
     n = len(org)
     srcenc, ctl = base + ".srcenc.mp4", base + ".ctl.mp4"
     try:
@@ -510,48 +524,85 @@ def encoded_check_on_file(org, back, regions, o: Options, base, w, h):
         for path in (srcenc, ctl):
             try: os.unlink(path)
             except OSError: pass
+    outside = [halo_outside(r, o.encode_halo_px) for r in regions[:len(back)]]
     encoded = encoded_preservation_check(srcback, back, ctlback, regions[:len(back)], o.encode_halo_px)
+    encoded["strong_blob_px"] = strong_blob(srcback, back, outside)
     map_path = base + ".changedmap.png"
     original = org[0].copy(); overlay = original.copy()
-    for a, b, region in zip(srcback, back, regions):
-        d = (np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > 8) & halo_outside(region, o.encode_halo_px)   # the same pixels the verdict counts
-        overlay[d] = (255, 0, 0)
+    for a, b, x in zip(srcback, back, outside):
+        overlay[(np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2) > 8) & x] = (255, 0, 0)   # the same pixels the verdict counts
     contours, _ = cv2.findContours(regions[0].astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2)
     cv2.imwrite(map_path, cv2.cvtColor(np.hstack([original, overlay]), cv2.COLOR_RGB2BGR))
     return encoded, map_path
 
 
+COLOR_MATRIX_BOUND = 0.15     # how far each entry of the fitted 3x3 may be from the identity
+COLOR_SHIFT_BOUND = 10.0      # levels the transform may move the colors present in the clip (99th percentile)
+FAIL_PERSISTENT_PX = 500      # a persistent unexplained area this large is an edit, not an encoder's ringing
+
+
+def fit_color_transform(org, back, outside, seed=0, per_frame=6000):
+    """A global transform between the decoded source and the delivered file: delivered = M * source + offset (a 3x3 and an offset), fitted over pixels outside the
+    declared region (null-region frames: the whole frame), robustly (iteratively reweighted, residuals above four median deviations are dropped). A different color
+    path (matrix, range) is exactly this, the same in every frame; a local edit is not, so it survives as a residual. Returns (matrix 3x3, offset 3, within bounds)."""
+    rng = np.random.default_rng(seed); xs, ys = [], []
+    for k in range(0, len(org), 3):
+        idx = np.flatnonzero(outside[k].ravel())
+        if idx.size == 0: continue
+        pick = rng.choice(idx, min(idx.size, per_frame), replace=False)
+        xs.append(org[k].reshape(-1, 3)[pick]); ys.append(back[k].reshape(-1, 3)[pick])
+    if not xs: return np.eye(3), np.zeros(3), False
+    x = np.concatenate(xs).astype(np.float64); y = np.concatenate(ys).astype(np.float64); x1 = np.hstack([x, np.ones((len(x), 1))])
+    weight = np.ones(len(x)); coef = np.vstack([np.eye(3), np.zeros((1, 3))])
+    # a ridge toward "no change" keeps the fit sane when the clip has few distinct colors (the data alone cannot pin a 3x3 down); real footage's colors outweigh it
+    prior = np.sqrt(0.01 * len(x) * 400.0) * np.hstack([np.eye(3), np.zeros((3, 1))]); prior_target = np.sqrt(0.01 * len(x) * 400.0) * np.eye(3)
+    with np.errstate(all="ignore"):
+        for _ in range(6):
+            root = np.sqrt(weight)[:, None]
+            coef = np.linalg.lstsq(np.vstack([x1 * root, prior]), np.vstack([y * root, prior_target]), rcond=None)[0]
+            residual = np.abs(x1 @ coef - y).max(1); spread = float(np.median(residual)) + 1e-6
+            weight = (residual < 4 * spread + 2).astype(np.float64)
+    matrix, offset = coef[:3].T, coef[3]          # delivered = matrix @ source + offset
+    # The size that matters is what the transform does to the colors actually present, so it is bounded there (a clip with few distinct colors cannot pin the
+    # matrix down, but the colors it has are explained or not): at most 10 levels at the 99th percentile, and no wild matrix.
+    with np.errstate(all="ignore"):
+        shift = np.abs(x @ matrix.T + offset - x).max(1)
+    ok = bool(np.all(np.isfinite(matrix)) and np.abs(matrix - np.eye(3)).max() <= COLOR_MATRIX_BOUND and float(np.percentile(shift, 99)) <= COLOR_SHIFT_BOUND)
+    return matrix, offset, ok
+
+
+def apply_color_transform(frame, matrix, offset):
+    with np.errstate(all="ignore"):
+        out = frame.reshape(-1, 3).astype(np.float64) @ matrix.T + offset
+    return np.clip(np.rint(out), 0, 255).astype(np.uint8).reshape(frame.shape)
+
+
 def foreign_check(org, back, regions, o: Options, base, w, h):
-    """The post-encode check for a delivered file another tool encoded. Its encoder, color conversion and frame handling are unknown, so a source-only encode made
-    here cannot predict where it moves untouched pixels, and nothing may be learned from the delivered file's own pixels (a tolerance learned from frames that
-    were not shown to match the source would excuse exactly the edits this check exists to catch). So the file is compared with the decoded source as it is: a
-    persistent difference of 50 pixels or more outside the declared region is reported `inconclusive` (`unknown_encoder`), never a pass; below that it passes.
-    Frames whose region is empty (the target was absent) have no declared edit at all and are compared outside the whole frame. Returns (encoded numbers,
-    baseline, verdict, reasons, map path)."""
-    n = len(org)
+    """The post-encode check for a delivered file another tool encoded. Nothing is learned from the delivered file's own pixels as a tolerance: a tolerance taken
+    from frames not shown to match the source would excuse exactly the edits this check exists to catch. What is modeled is what a different pipeline really
+    does, a global color transform (fitted robustly, bounded; out of bounds is `inconclusive`). The source is corrected by it, encoded here with the worker's
+    settings, and the delivered file is judged against that by the same persistence rule, drift control and strong-change gate as the worker's own composites.
+    Frames whose region is empty (the target was absent) have no declared edit and are checked over the whole frame. A persistent unexplained area of 500 pixels
+    or more, or a strong compact change, fails; 50 to 499 pixels is `inconclusive` (`unknown_encoder`); below that it passes. Returns (encoded numbers, baseline,
+    verdict, reasons, map path)."""
     outside = [halo_outside(r, o.encode_halo_px) for r in regions]
-    votes = np.zeros(org[0].shape[:2], np.int32); overlay = org[0].copy(); changed_gt8 = 0; total = 0; max_diff = 0
-    for k in range(n):
-        d = np.abs(org[k].astype(np.int16) - back[k].astype(np.int16)).max(2); x = outside[k]
-        votes += ((d > 8) & x).astype(np.int32)
-        overlay[(d > 8) & x] = (255, 0, 0)
-        changed_gt8 += int(((d > 8) & x).sum()); total += int(x.sum()); max_diff = max(max_diff, int(d.max()))
-    counted = votes >= max(5, int(np.ceil(0.1 * n)))
-    count, _, stats, _ = cv2.connectedComponentsWithStats(counted.astype(np.uint8), 8)
-    largest = int(stats[1:, cv2.CC_STAT_AREA].max()) if count > 1 else 0
-    encoded = dict(persistent_pixels=int(counted.sum()), largest_blob_px=largest, share_gt8=changed_gt8 / max(1, total), max_diff=max_diff)
-    baseline = {"source": "none", "frames": sum(1 for r in regions if not r.any())}
+    matrix, offset, ok = fit_color_transform(org, back, outside)
+    baseline = {"source": "global_color_transform", "matrix": np.round(matrix, 4).tolist(), "offset": np.round(offset, 2).tolist(), "within_bounds": ok}
+    if not ok:
+        return ({"persistent_pixels": 0, "largest_blob_px": 0, "share_gt8": 0.0, "max_diff": 0, "drift_masked_px": 0, "strong_blob_px": 0}, baseline, "inconclusive",
+                ["unknown_encoder: the delivered clip's colors differ from the source by more than a different color conversion would explain, so no change can be told from a color path. Check it by eye."], None)
+    corrected = [apply_color_transform(f, matrix, offset) for f in org]
+    encoded, map_path = encoded_check_on_file(corrected, back, regions, o, base, w, h)
     reasons = []
-    if largest < 50: verdict = "pass"
-    else:
+    if encoded["strong_blob_px"] >= STRONG_BLOB_PX or encoded["largest_blob_px"] >= FAIL_PERSISTENT_PX:
+        verdict = "fail"; reasons.append("A change was found outside the declared edit region.")
+    elif encoded["largest_blob_px"] >= 50:
         verdict = "inconclusive"
-        reasons.append("unknown_encoder: this clip was encoded by another tool, so its own changes at hard edges cannot be told from an edit. "
-                       f"A persistent difference of {largest} pixels was found outside the declared region. Check it by eye, or run the swap through this worker so it makes the one encode.")
-    map_path = base + ".changedmap.png"
-    contours, _ = cv2.findContours(regions[0].astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2)
-    cv2.imwrite(map_path, cv2.cvtColor(np.hstack([org[0], overlay]), cv2.COLOR_RGB2BGR))
+        reasons.append("unknown_encoder: this clip was encoded by another tool, and a small persistent difference of "
+                       f"{encoded['largest_blob_px']} pixels outside the declared region cannot be told from that tool's own edge handling. Check it by eye, or run the swap through this worker so it makes the one encode.")
+    else:
+        verdict = "pass"
     return encoded, baseline, verdict, reasons, map_path
 
 
@@ -631,8 +682,8 @@ def composite_swap(source, donor, out=None, start=0.0, seconds=2.3333, size=None
         back = read_frames(out, f"fps={o.fps}", w, h, n)
         encoded, map_path = encoded_check_on_file(org, list(back), regions, o, out, w, h)
         preservation["encoded"] = encoded; preservation["map_path"] = map_path
-        if encoded["largest_blob_px"] >= 50:
-            preservation["verdict"] = "fail"; preservation["reasons"].append("A persistent changed area was found outside the declared edit region.")
+        if encoded["largest_blob_px"] >= 50 or encoded["strong_blob_px"] >= STRONG_BLOB_PX:
+            preservation["verdict"] = "fail"; preservation["reasons"].append("A changed area was found outside the declared edit region.")
     if report_path:
         with open(report_path, "w") as handle:
             json.dump(report, handle, indent=1)

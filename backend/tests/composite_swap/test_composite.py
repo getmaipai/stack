@@ -253,17 +253,17 @@ class EncoderDriftTest(unittest.TestCase):
         region = {"boxes": [[60, 100, 240, 240]] * 60 + [None] * (self.N - 60)}       # the target is absent in the last 36 frames: nothing was edited there
         report = cs.verify_delivered(src, dl, seconds=self.N / 24, edit_region=region)
         self.assertEqual(report["preservation"]["pre_encode"], "not_run"); self.assertIsNone(report["preservation"]["changed_pixels"])
-        self.assertIn(report["preservation"]["verdict"], ("pass", "inconclusive"))
+        self.assertEqual(report["preservation"]["verdict"], "pass")
         changed = [f.copy() for f in edited]
         for f in changed[:60]: f[570:610, 10:60] = np.clip(f[570:610, 10:60].astype(int) + 40, 0, 255)
         bad = os.path.join(self.dir, "bad.mp4"); cs.write_video(changed, bad, 24, self.W, self.H)
-        self.assertNotEqual(cs.verify_delivered(src, bad, seconds=self.N / 24, edit_region=region)["preservation"]["verdict"], "pass")
+        self.assertEqual(cs.verify_delivered(src, bad, seconds=self.N / 24, edit_region=region)["preservation"]["verdict"], "fail")
 
 
 class ForeignEncoderTest(unittest.TestCase):
-    """A delivered file made by another pipeline (here a bt709 conversion and a light blur, where the worker's own encode is plain) differs from the decoded
-    source at saturated hard edges such as a caption pill, in every frame, including frames nothing touched. The worker's own source-only encode cannot predict
-    it; the delivered file's own unedited frames can. Each place's ceiling there is how far the file's untouched frames differ from the source."""
+    """A delivered file made by another pipeline has a different color conversion (here bt709 where the worker's own encode is plain). That is one global transform,
+    the same in every frame; it is modeled as such (fitted robustly, bounded), the source is corrected by it, and the delivered file is judged against the corrected
+    source. Nothing is learned from the delivered file's own pixels as a tolerance, so an edit in frames where no edit was declared cannot excuse itself."""
     W, H, N, EDITED = 360, 640, 96, 40
     BOX = [60, 100, 240, 240]
 
@@ -280,10 +280,10 @@ class ForeignEncoderTest(unittest.TestCase):
         cls.decoded = list(cs.read_frames(cls.src, "fps=24", cls.W, cls.H, cls.N))
 
     @classmethod
-    def foreign(cls, frames, name):
+    def foreign(cls, frames, name, vf="scale=out_color_matrix=bt709:out_range=tv"):
         path = os.path.join(cls.dir, name)
         p = subprocess.Popen([os.environ.get("STACK_MEDIA_FFMPEG", "ffmpeg"), "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{cls.W}x{cls.H}", "-r", "24", "-i", "-",
-                              "-vf", "scale=out_color_matrix=bt709:out_range=tv,gblur=sigma=0.6", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", path], stdin=subprocess.PIPE)
+                              "-vf", vf, "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", path], stdin=subprocess.PIPE)
         for f in frames: p.stdin.write(f.tobytes())
         p.stdin.close(); p.wait()
         return path
@@ -299,39 +299,42 @@ class ForeignEncoderTest(unittest.TestCase):
     def verify(self, delivered, edited):
         return cs.verify_delivered(self.src, delivered, seconds=self.N / 24, edit_region={"boxes": [self.BOX] * edited + [None] * (self.N - edited)})
 
-    def test_the_worker_encode_as_control_fails_this_clean_file_falsely(self):
-        # what the first drift control did: judge a foreign file against the worker's own source-only encode
-        frames = self.edited_frames(self.EDITED)
-        path = self.foreign(frames, "old.mp4"); back = list(cs.read_frames(path, "fps=24", self.W, self.H, self.N))
-        regions, _ = cs.declare_edit_region(self.decoded, cs.Options(), {"boxes": [self.BOX] * self.EDITED + [None] * (self.N - self.EDITED)})
-        source_only = os.path.join(self.dir, "so.mp4"); cs.write_video(self.decoded, source_only, 24, self.W, self.H)
-        so = list(cs.read_frames(source_only, "fps=24", self.W, self.H, self.N))
-        inverted = [np.where(r[..., None], 255 - f, f).astype(np.uint8) for f, r in zip(self.decoded, regions)]
-        control = os.path.join(self.dir, "ctl.mp4"); cs.write_video(inverted, control, 24, self.W, self.H)
-        self.assertGreaterEqual(cs.encoded_preservation_check(so, back, list(cs.read_frames(control, "fps=24", self.W, self.H, self.N)), regions, 32)["largest_blob_px"], 50)
-
     def patched(self, frames, rows, cols, amount, only_from=0, only_to=None):
         for f in frames[only_from:only_to]: f[rows, cols] = np.clip(f[rows, cols].astype(int) + amount, 0, 255)
         return frames
 
-    def test_nothing_is_learned_from_the_delivered_file_so_an_edit_only_in_null_region_frames_is_never_a_pass(self):
-        # the target is absent from frame EDITED on, so nothing may be edited there; a patch only there must not be excused as that pipeline's drift
+    def test_a_clean_file_with_another_color_path_passes_after_the_global_transform(self):
+        report = self.verify(self.foreign(self.edited_frames(self.EDITED), "clean.mp4"), self.EDITED)
+        self.assertEqual(report["preservation"]["verdict"], "pass"); self.assertEqual(report["preservation"]["pre_encode"], "not_run")
+        self.assertEqual(report["preservation"]["baseline"]["source"], "global_color_transform"); self.assertTrue(report["preservation"]["baseline"]["within_bounds"])
+
+    def test_an_edit_only_in_null_region_frames_fails(self):
+        # the target is absent from frame EDITED on, so nothing may be edited there; nothing excuses a patch there (it is the strictest case, not the loosest)
         frames = self.patched(self.edited_frames(self.EDITED), slice(570, 610), slice(10, 60), 40, only_from=self.EDITED)
-        self.assertNotEqual(self.verify(self.foreign(frames, "null_only.mp4"), self.EDITED)["preservation"]["verdict"], "pass")
+        self.assertEqual(self.verify(self.foreign(frames, "null_only.mp4"), self.EDITED)["preservation"]["verdict"], "fail")
 
-    def test_an_edit_spanning_null_and_active_frames_is_never_a_pass(self):
+    def test_an_edit_spanning_null_and_active_frames_fails(self):
         frames = self.patched(self.edited_frames(self.EDITED), slice(570, 610), slice(10, 60), 40)
-        self.assertNotEqual(self.verify(self.foreign(frames, "span.mp4"), self.EDITED)["preservation"]["verdict"], "pass")
+        self.assertEqual(self.verify(self.foreign(frames, "span.mp4"), self.EDITED)["preservation"]["verdict"], "fail")
 
-    def test_a_second_face_altered_while_the_target_is_absent_is_never_a_pass(self):
+    def test_a_second_face_altered_while_the_target_is_absent_fails(self):
         frames = self.edited_frames(self.EDITED)
         for f in frames[self.EDITED:]: cv2.ellipse(f, (60, 60), (30, 30), 0, 0, 360, (210, 150, 140), -1)     # another person's face recolored where nothing may change
-        self.assertNotEqual(self.verify(self.foreign(frames, "face.mp4"), self.EDITED)["preservation"]["verdict"], "pass")
+        self.assertEqual(self.verify(self.foreign(frames, "face.mp4"), self.EDITED)["preservation"]["verdict"], "fail")
 
-    def test_a_clean_foreign_file_is_never_reported_as_a_pass_on_a_baseline_it_made_up(self):
-        report = self.verify(self.foreign(self.edited_frames(self.EDITED), "clean.mp4"), self.EDITED)
-        self.assertEqual(report["preservation"]["baseline"]["source"], "none"); self.assertEqual(report["preservation"]["pre_encode"], "not_run")
-        self.assertIn(report["preservation"]["verdict"], ("pass", "inconclusive"))
+    def test_a_faint_persistent_change_outside_the_region_still_fails(self):
+        frames = self.patched(self.edited_frames(self.EDITED), slice(400, 440), slice(10, 60), 14)
+        self.assertEqual(self.verify(self.foreign(frames, "faint.mp4"), self.EDITED)["preservation"]["verdict"], "fail")
+
+    def test_a_color_difference_larger_than_a_color_path_is_inconclusive(self):
+        frames = self.edited_frames(self.EDITED)
+        report = self.verify(self.foreign(frames, "dark.mp4", vf="eq=brightness=-0.12"), self.EDITED)
+        self.assertEqual(report["preservation"]["verdict"], "inconclusive"); self.assertFalse(report["preservation"]["baseline"]["within_bounds"])
+
+    def test_an_edge_handling_difference_the_transform_cannot_explain_is_never_a_pass(self):
+        frames = self.edited_frames(self.EDITED)
+        report = self.verify(self.foreign(frames, "blur.mp4", vf="scale=out_color_matrix=bt709:out_range=tv,gblur=sigma=0.6"), self.EDITED)
+        self.assertNotEqual(report["preservation"]["verdict"], "pass")
 
 
 class RegionShapeTest(unittest.TestCase):
