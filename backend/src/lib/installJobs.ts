@@ -12,8 +12,8 @@ import { modelsDir } from "@/lib/paths";
 import { restartForNewChatEngine, restartForNewProjector } from "@/lib/supervisor";
 import { warmUp } from "@/lib/warmup";
 import { diskAdmission, DiskRefusalError } from "@/lib/diskState";
-import { buildDiskPlan } from "@/lib/diskPlan";
-import { PROFILE_TIERS } from "@/profiles";
+import type { buildDiskPlan as BuildDiskPlan } from "@/lib/diskPlan";
+import type { PROFILE_TIERS as ProfileTiers } from "@/profiles";
 import type { RoleId } from "@/roles";
 
 type Pin = CatalogModelLike & { download: NonNullable<CatalogModelLike["download"]> };
@@ -30,6 +30,10 @@ export const MISSING_PART_CODE = (id: string): string => `model-part-missing.${i
 
 /** Starts the install job for a pin. `done` settles when the install ends. */
 export async function startModelInstall(model: Pin, role: RoleId, download?: DownloadModelOptions["download"]): Promise<{ job: string; done: Promise<void> }> {
+  // Loaded on first use: a static import of the disk plan pulls the model catalog and speech voices into this module's load order and
+  // breaks their initialisation (gen:components-doc failed with a use-before-init error).
+  const { buildDiskPlan } = require("@/lib/diskPlan") as { buildDiskPlan: typeof BuildDiskPlan };
+  const { PROFILE_TIERS } = require("@/profiles") as { PROFILE_TIERS: typeof ProfileTiers };
   const row = PROFILE_TIERS.flatMap((tier) => buildDiskPlan(tier).rows).find((candidate) => candidate.model_ids.includes(model.id));
   const need = row ? row.download_bytes + row.installed_bytes + row.peak_temp_bytes : model.download.approx_bytes * 3;
   const admission = await diskAdmission(need);

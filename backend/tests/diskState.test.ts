@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { __sampleDiskForTests, __setDiskReaderForTests, diskAdmission, latestDisk, lowDiskRefusal, missingModelFiles } from "@/lib/diskState";
+import { __sampleDiskForTests, __setDiskReaderForTests, diskAdmission, latestDisk, lowDiskRefusal, } from "@/lib/diskState";
+import { missingModelFiles } from "@/lib/missingModels";
 import { app } from "@/app";
 import { modelsDir } from "@/lib/paths";
 import { upsertModel, clearModelsForTests } from "@/lib/modelStore";
