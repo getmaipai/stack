@@ -15993,6 +15993,192 @@
                                     },
                                     "additionalProperties": false
                                   },
+                                  "first_picture_shapes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "landscape": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "portrait": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "square": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
                                   "max_words": {
                                     "type": "integer",
                                     "minimum": 0
@@ -16451,6 +16637,192 @@
                                     "minimum": 0
                                   },
                                   "shapes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "landscape": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "portrait": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "square": {
+                                        "type": "object",
+                                        "properties": {
+                                          "standard": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "boost": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "max": {
+                                            "type": "object",
+                                            "properties": {
+                                              "width": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              },
+                                              "height": {
+                                                "type": "integer",
+                                                "minimum": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "width",
+                                              "height"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "first_picture_shapes": {
                                     "type": "object",
                                     "properties": {
                                       "landscape": {
