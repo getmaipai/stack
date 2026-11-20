@@ -16381,6 +16381,13 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "request_fields": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
                               "styles": {
                                 "type": "object",
                                 "properties": {
@@ -16533,6 +16540,10 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "spec": {
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [
@@ -17210,6 +17221,13 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "request_fields": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
                               "styles": {
                                 "type": "object",
                                 "properties": {
@@ -17333,6 +17351,10 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "spec": {
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [
