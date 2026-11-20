@@ -33,7 +33,7 @@ capabilitiesRoutes.openapi(route, (c) => {
     const cap_bytes = Math.round(tierCapBytes(tier, room, reducedFreed));
     const resolved = profile ? resolveTier({ category: tierCategory, tier, profile, roomBytes: room, reducedFreedBytes: reducedFreed }) : null;
     const smallest = profile ? TIER_CANDIDATES.filter((item) => item.category === tierCategory && item.profiles.includes(profile) && item.tiers.includes(tier)).flatMap((item) => item.peaks.map((peak) => peak.peakBytes)).sort((a, b) => a - b)[0] ?? null : null;
-    const needs_bytes = resolved?.model === "ltx-2-5-bf16-distilled-mlx-max" ? Math.max(...(TIER_CANDIDATES.find((item) => item.id === resolved.model)?.peaks.map((peak) => peak.peakBytes) ?? [resolved.peakBytes])) : resolved?.peakBytes ?? smallest;
+    const needs_bytes = resolved?.model === "ltx-2-5-bf16-distilled-mlx-max" ? Math.max(...(TIER_CANDIDATES.find((item) => item.id === resolved.model)?.peaks.filter((peak) => peak.options.size !== "1920x1088").map((peak) => peak.peakBytes) ?? [resolved.peakBytes])) : resolved?.peakBytes ?? smallest;
     const fits_ever = needs_bytes !== null && fitsEverForTier({ id: `capability-${category}-${tier}`, kind: "generator", requestedBytes: needs_bytes, tier }).fits;
     return { category, tier, fits_ever: resolved ? fits_ever : false, needs_bytes, cap_bytes, model: resolved?.model ?? null };
   }));
