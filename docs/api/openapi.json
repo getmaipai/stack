@@ -4735,6 +4735,42 @@
                     "type": "string",
                     "minLength": 1
                   },
+                  "take_facts": {
+                    "type": "object",
+                    "properties": {
+                      "part": {
+                        "type": "string"
+                      },
+                      "pack_version": {
+                        "type": "string"
+                      },
+                      "shape": {
+                        "type": "string"
+                      },
+                      "operation": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "part",
+                      "pack_version",
+                      "shape",
+                      "operation"
+                    ]
+                  },
+                  "take_level": {
+                    "type": "string",
+                    "enum": [
+                      "standard",
+                      "boost",
+                      "max"
+                    ]
+                  },
+                  "take_recipe_steps": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
                   "quiet_seconds": {
                     "type": "integer",
                     "minimum": 20,
