@@ -1,0 +1,5 @@
+Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid {key_colour} background. Action: the person is facing the camera with lips gently closed, {description}. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.
+---frame:gesture---
+Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid {key_colour} background. {description}.
+---negative---
+different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop

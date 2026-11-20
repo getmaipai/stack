@@ -4,17 +4,27 @@ import { checkVideoInputs } from "@/video/caps";
 
 type ClipRequest = Extract<StackMakeRequest, { job: "clip" }>;
 export type PlannedClipRoute =
-  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend" | "restyle"; identityUsed: number; reason: string; /** The request is a film shot: the dispatcher chooses the Max recipe from the machine (no size field). */ filmShot?: true }
+  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend" | "restyle" | "companion_take"; identityUsed: number; reason: string; /** The request is a film shot: the dispatcher chooses the Max recipe from the machine (no size field). */ filmShot?: true; companionTake?: true }
   | { ok: false; refusal: StackMakeRefusal };
 
 export const NEEDS_START_PICTURE_LINE = "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.";
 const refuse = (line: string): PlannedClipRoute => ({ ok: false, refusal: { code: "input_not_supported", line } });
 
-export function planClipRoute(request: ClipRequest, rows: readonly StackOperationRow[]): PlannedClipRoute {
+export function planClipRoute(request: ClipRequest, rows: readonly StackOperationRow[], hasCompanionRecipe = false): PlannedClipRoute {
   const identityCount = request.inputs?.filter((input) => input.role === "identity").length ?? 0;
   const hasVoice = request.inputs?.some((input) => input.role === "voice_reference") ?? false;
   const hasWardrobe = request.inputs?.some((input) => input.role === "wardrobe") ?? false;
   const hasEditSource = request.inputs?.some((input) => input.role === "edit_source") ?? false;
+  if (request.operation === "companion_take") {
+    if (request.audience !== "adult") return refuse("Companion takes are not available for this viewer yet.");
+    if (!hasCompanionRecipe) return refuse("Companion takes are not available for this clip model.");
+    if (!request.start_picture) return refuse("Companion takes need a start picture.");
+    const endRow = rows.find((candidate) => candidate.operation === "clip_start_end_pictures" && candidate.level === request.level && candidate.available && candidate.inputs.end_picture);
+    const startRow = rows.find((candidate) => candidate.operation === "clip_start_picture" && candidate.level === request.level && candidate.available && candidate.inputs.start_picture);
+    if (!startRow) return refuse("Companion takes are not available at the chosen quality.");
+    if (request.loop && endRow) return { ok: true, route: "start_end_pictures", operation: "companion_take", identityUsed: 0, reason: "The same picture opens and closes the loop.", companionTake: true };
+    return { ok: true, route: "start_picture", operation: "companion_take", identityUsed: 0, reason: request.loop ? "This clip model has no end-picture row, so the loop uses the start picture alone." : "The companion take starts from the picture you sent.", companionTake: true };
+  }
   if (request.operation === "enhance") return refuse("Enhancing a clip has its own request.");
   if (request.operation === "restyle") {
     if (request.start_picture || request.end_picture || identityCount || hasVoice || hasWardrobe || (request.inputs ?? []).some((input) => input.role !== "edit_source")) return refuse("Restyling a clip cannot be combined with pictures or other inputs.");

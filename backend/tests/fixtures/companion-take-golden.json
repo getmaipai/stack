@@ -1,0 +1,215 @@
+{
+  "entries": [
+    {
+      "kind": "pack_take",
+      "description": "awake and attentive, eyes open and bright, holding steady eye contact with the camera, the face evenly lit by the same soft front light, a tiny slow nod of the head and back",
+      "key_colour": "green",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid green background. Action: the person is facing the camera with lips gently closed, awake and attentive, eyes open and bright, holding steady eye contact with the camera, the face evenly lit by the same soft front light, a tiny slow nod of the head and back. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_take",
+      "description": "attentive, eyes open, the eyes glance briefly to one side and back to the camera, the head stays still, the face evenly lit",
+      "key_colour": "green",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid green background. Action: the person is facing the camera with lips gently closed, attentive, eyes open, the eyes glance briefly to one side and back to the camera, the head stays still, the face evenly lit. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_take",
+      "description": "listening attentively, eyes open and bright, gives one slight friendly nod and returns upright",
+      "key_colour": "green",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid green background. Action: the person is facing the camera with lips gently closed, listening attentively, eyes open and bright, gives one slight friendly nod and returns upright. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_take",
+      "description": "thoughtful, eyes open, the eyes glance a little to the side for a moment then return to the camera, the gaze stays level, the head and shoulders stay still, the face evenly lit by the same soft front light",
+      "key_colour": "green",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid green background. Action: the person is facing the camera with lips gently closed, thoughtful, eyes open, the eyes glance a little to the side for a moment then return to the camera, the gaze stays level, the head and shoulders stay still, the face evenly lit by the same soft front light. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_take",
+      "description": "head makes small natural talking movements with tiny nods and tilts, lips stay gently closed, eyes open and bright",
+      "key_colour": "green",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid green background. Action: the person is facing the camera with lips gently closed, head makes small natural talking movements with tiny nods and tilts, lips stay gently closed, eyes open and bright. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_take",
+      "description": "awake and attentive, eyes open and bright, holding steady eye contact with the camera, the face evenly lit by the same soft front light, a tiny slow nod of the head and back",
+      "key_colour": "magenta",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid magenta background. Action: the person is facing the camera with lips gently closed, awake and attentive, eyes open and bright, holding steady eye contact with the camera, the face evenly lit by the same soft front light, a tiny slow nod of the head and back. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_take",
+      "description": "attentive, eyes open, the eyes glance briefly to one side and back to the camera, the head stays still, the face evenly lit",
+      "key_colour": "magenta",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid magenta background. Action: the person is facing the camera with lips gently closed, attentive, eyes open, the eyes glance briefly to one side and back to the camera, the head stays still, the face evenly lit. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_take",
+      "description": "listening attentively, eyes open and bright, gives one slight friendly nod and returns upright",
+      "key_colour": "magenta",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid magenta background. Action: the person is facing the camera with lips gently closed, listening attentively, eyes open and bright, gives one slight friendly nod and returns upright. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_take",
+      "description": "thoughtful, eyes open, the eyes glance a little to the side for a moment then return to the camera, the gaze stays level, the head and shoulders stay still, the face evenly lit by the same soft front light",
+      "key_colour": "magenta",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid magenta background. Action: the person is facing the camera with lips gently closed, thoughtful, eyes open, the eyes glance a little to the side for a moment then return to the camera, the gaze stays level, the head and shoulders stay still, the face evenly lit by the same soft front light. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_take",
+      "description": "head makes small natural talking movements with tiny nods and tilts, lips stay gently closed, eyes open and bright",
+      "key_colour": "magenta",
+      "prompt": "Static locked shot, fixed framing, the camera never moves. A headshot from the top of the head to the upper chest, the same person with exactly the same face, skin, hair and clothes in every frame, the same size and place in the frame. Plain solid magenta background. Action: the person is facing the camera with lips gently closed, head makes small natural talking movements with tiny nods and tilts, lips stay gently closed, eyes open and bright. The face shape, skin tone and lighting stay exactly the same in every frame. Only the head, neck and upper chest are in frame. One calm continuous motion; the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a small but clear nod with a small overshoot and straight back up, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a small but clear nod with a small overshoot and straight back up, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight head tilt to the right and straight back, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight head tilt to the right and straight back, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a slight head tilt to the right and straight back, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a slight head tilt to the right and straight back, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight eye glance to the left for a moment and return, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight eye glance to the left for a moment and return, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight shoulder settle, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight shoulder settle, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight eye glance to the left for a moment and return, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight eye glance to the left for a moment and return, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight shoulder settle, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "green",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid green background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight shoulder settle, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a small but clear nod with a small overshoot and straight back up, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a small but clear nod with a small overshoot and straight back up, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight head tilt to the right and straight back, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight head tilt to the right and straight back, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a slight head tilt to the right and straight back, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a slight head tilt to the right and straight back, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight eye glance to the left for a moment and return, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight eye glance to the left for a moment and return, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight shoulder settle, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight shoulder settle, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight quick nod and straight back up, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight eye glance to the left for a moment and return, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight eye glance to the left for a moment and return, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    },
+    {
+      "kind": "pack_gesture",
+      "description": "Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight shoulder settle, then looks directly at the camera. the final frame matches the first frame",
+      "key_colour": "magenta",
+      "prompt": "Static locked headshot, fixed framing, camera remains still. The same person, face and lighting throughout; plain solid magenta background. Eyes open, gaze at the camera, face evenly lit, camera locked. The person makes a very slight shoulder settle, then looks directly at the camera. the final frame matches the first frame.",
+      "negative_prompt": "different character, changed colours, changed face, extra limbs, text, watermark, camera movement, background change, shadows, hands, fingers, arms, gestures, lower body, zoom, blinking, blink, closed eyes, half closed eyes, lowered eyes, looking down, sleepy, sigh, exhale, eye roll, head drop"
+    }
+  ],
+  "outputs_sha256": "f46a5d135174ce74aaa3e00c26bfcf2c6aa34231bd2f522dc4deea3161a749de"
+}

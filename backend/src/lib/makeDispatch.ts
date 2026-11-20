@@ -4,7 +4,7 @@
 import { sha256Hex } from "@/video/receipt";
 import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
 import type { MakePlan } from "@/lib/makePlan";
-import { fillRecipe, fillStyleRecipe } from "@/lib/recipe";
+import { fillRecipe, fillStyleRecipe, fillCompanionRecipe } from "@/lib/recipe";
 import { writePrompt, writerData } from "@/video/promptWriter";
 import { planClipRoute } from "@/lib/clipRoute";
 import { engineOfPart, rowsForJob } from "@/video/caps";
@@ -131,7 +131,8 @@ export function clipBody(request: ClipRequest, plan: Planned, route?: { name: st
 }
 
 export async function dispatchClip(request: ClipRequest, plan: Planned, forward: Forward, read?: PictureBytes): Promise<{ status: number; body: unknown }> {
-  const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"));
+  const companionRecipe = plan.serving.pack.recipes["recipes/companion_take.md"];
+  const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"), !!companionRecipe);
   if (!chosen.ok) return { status: 422, body: chosen.refusal };
   const savedTake = request.take_of ? readTake(request.take_of) : null;
   // VF-ROUTE-01 follow-up: a film shot is made at the best Max recipe this computer can hold (full HD when admitted), chosen here from the operation and the machine, never from a size field.
@@ -144,7 +145,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     else if (!hdRow) filmReason = "A film shot, made at this home's usual size.";
     else filmReason = picked?.recipe.size ? `A film shot at the standard Max size: full HD makes at most ${hdRow?.seconds.max ?? 5} seconds.` : "A film shot at the standard Max size, because this computer cannot hold full HD right now.";
   }
-  const route = request.operation === "retake_from" || request.operation === "extend" ? { name: request.operation, reason: chosen.reason } : { name: savedTake?.route ?? chosen.route, reason: savedTake ? "Another take from the saved clip route." : filmReason };
+  const route = request.operation === "retake_from" || request.operation === "extend" ? { name: request.operation, reason: chosen.reason } : { name: chosen.companionTake ? "companion_take" : savedTake?.route ?? chosen.route, reason: savedTake ? "Another take from the saved clip route." : chosen.companionTake ? chosen.reason : filmReason };
   if (request.operation === "retake_from" || request.operation === "extend") {
     const source = request.inputs?.find((input) => input.role === "edit_source")?.file;
     let sourcePath: string;
@@ -190,11 +191,20 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     return { status: sent.status, body: { id: reply.job, job: "clip", state: done ? "done" : "running", percent: done ? 100 : 0, status: done ? "Done" : "Restyling your clip", files: (reply.data ?? []).map((item) => item.url), poster: reply.data?.[0]?.poster_url ?? null, made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: reply.data?.[0]?.seconds ?? 5, sound: reply.data?.[0]?.audio ?? true, notes: reply.notes ?? [], receipt: reply.job, route: "restyle", route_reason: chosen.reason } } };
   }
   let body: Record<string, unknown>;
-  try { body = clipBody(request, plan, route); if (filmSize) body.size = filmSize; }
+  try {
+    body = clipBody(request, plan, route);
+    if (chosen.companionTake && companionRecipe) {
+      const filled = fillCompanionRecipe(companionRecipe, { description: request.description, key_colour: request.key_colour ?? "green", frame: request.take_frame ?? "state" });
+      body.prompt = filled.prompt;
+      const engine = engineOfPart(plan.serving.part.id);
+      if (engine === "ltx25" || engine === "ltx25max") body.negative_prompt = filled.negative;
+    }
+    if (filmSize) body.size = filmSize;
+  }
   catch (error) { return { status: 422, body: { code: "invalid_request", line: error instanceof Error ? error.message : "The clip's words could not be turned into a prompt. Describe what the clip shows and try again." } }; }
   if (request.start_picture || request.end_picture) {
     const first = request.start_picture && read ? await pictureDataUrl(request.start_picture, read) : null;
-    const last = request.end_picture && read ? await pictureDataUrl(request.end_picture, read) : null;
+    const last = chosen.companionTake && request.loop ? first : request.end_picture && read ? await pictureDataUrl(request.end_picture, read) : request.end_picture && read ? await pictureDataUrl(request.end_picture, read) : null;
     if ((request.start_picture && !first) || (request.end_picture && !last)) return { status: 409, body: { code: "not_available", line: PICTURE_UNREADABLE_LINE } };
     if (first) body.image = first;
     if (last) body.end_image = last;

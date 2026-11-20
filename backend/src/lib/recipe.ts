@@ -48,3 +48,17 @@ export function fillStyleRecipe(text: string, styleName: string, inputs: RecipeI
   // No words from the person: the part's own wording stands without a dangling comma.
   return fillRecipe(chosen, inputs).replace(/^[\s,]+/, "");
 }
+
+
+export interface CompanionRecipeInputs { description: string; key_colour: "green" | "magenta"; frame: "state" | "gesture" }
+export interface FilledCompanionRecipe { prompt: string; negative: string }
+/** VF-COMPANION-RECIPE-01: the pack owns the exact wording; only the typed description, colour and frame select blanks/sections. */
+export function fillCompanionRecipe(text: string, inputs: CompanionRecipeInputs): FilledCompanionRecipe {
+  const parts = text.split(/^---(frame:gesture|negative|negative:gesture)---$/m);
+  const sections: Record<string, string> = {};
+  for (let i = 0; i < parts.length; i += 2) sections[i === 0 ? "state" : parts[i - 1]!] = (parts[i] ?? "").trim();
+  const promptTemplate = inputs.frame === "gesture" ? sections["frame:gesture"] : sections.state;
+  const negative = inputs.frame === "gesture" ? sections["negative:gesture"] ?? sections.negative : sections.negative;
+  if (!promptTemplate || !negative) throw new Error("The companion recipe is incomplete.");
+  return { prompt: promptTemplate.replaceAll("{description}", inputs.description).replaceAll("{key_colour}", inputs.key_colour), negative };
+}
