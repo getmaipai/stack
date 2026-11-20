@@ -797,6 +797,7 @@ function urlBindingFor(role: RoleId): { kind: EngineKind; url: string } | null {
 }
 
 const preferredModels = new Map<RoleId, string>();
+export function __setPreferredModelForTests(role: RoleId, modelId: string | null): void { if (modelId) preferredModels.set(role, modelId); else preferredModels.delete(role); }
 
 /** Home's "load this model": the next start of the role uses it if it
  * is selectable; otherwise the first selectable model for the role. */

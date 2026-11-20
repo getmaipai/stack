@@ -1,9 +1,44 @@
-import { statfsSync, statSync } from "node:fs";
+import { existsSync, statfsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { diskLevel, diskLines } from "@maipai/spec/stack/ts/disk-levels.js";
 import { settingValues } from "@/settings";
 import { modelsDir, dataDir } from "@/lib/paths";
 import { engineRoot } from "@/lib/store/layout";
+import { selectedModel } from "@/lib/supervisor";
+import { ROLE_IDS } from "@/roles";
+import { getModel } from "@/lib/modelStore";
+import { STACK_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_H3_ID, STACK_VIDEO_H3_MODELS, STACK_VIDEO_H3_MODEL_ID, STACK_VIDEO_MODEL_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
+import { H3_LAYOUT } from "@/images/h3Layout";
+
+export interface MissingModelFiles { role: string; model: string; missing_paths: string[]; }
+/** Files the selected role model actually reads, following its pinned install layout. */
+export function missingModelFiles(): MissingModelFiles[] {
+  const result: MissingModelFiles[] = [];
+  for (const role of ROLE_IDS) {
+    const model = selectedModel(role);
+    if (!model) continue;
+    let required: string[];
+    if (role === "video" && process.env.MAIPAI_H3_VIDEO_HOME && model.id === STACK_VIDEO_H3_MODEL_ID) {
+      const home = process.env.MAIPAI_H3_VIDEO_HOME;
+      const models = join(home, "models/minimax_h3");
+      required = [join(home, "node/scripts/generate_staged.py"), join(home, ".venv/bin/python"), join(models, "upstream/FL2VA"), join(models, "qwen/8-bit"), join(models, "transformers/8-bit")];
+    } else {
+      const pin = [...STACK_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_VIDEO_H3_MODELS].find((candidate) => candidate.id === model.id);
+      if (pin && model.id === STACK_IMAGE_H3_ID) {
+        required = H3_LAYOUT.map((entry) => getModel(entry.id)?.modelPath ?? "");
+      } else if (role === "video" && model.id === STACK_VIDEO_MODEL_ID) {
+        const tokenizer = getModel(STACK_VIDEO_TOKENIZER_ID);
+        required = [model.modelPath ? join(model.modelPath, "model.safetensors") : "", tokenizer?.modelPath ? join(tokenizer.modelPath, "tokenizer.json") : ""];
+      } else if (model.modelPath) {
+        const download = pin?.download;
+        required = download?.files?.length ? download.files.map((file) => join(model.modelPath!, file.path)) : [model.modelPath];
+      } else required = [];
+    }
+    const missing = required.filter((path) => !existsSync(path));
+    if (missing.length) result.push({ role, model: model.id, missing_paths: missing });
+  }
+  return result;
+}
 
 export type DiskLevel = "normal" | "warn" | "critical";
 export interface DiskVolume { path: string; free_bytes: number; total_bytes: number; level: DiskLevel; warn_bytes: number; critical_bytes: number; }

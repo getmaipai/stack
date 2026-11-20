@@ -6,9 +6,10 @@ import { join } from "node:path";
 import { spawn } from "bun";
 import { engineNameTag, ENGINE_READY_MARKER, type EngineBinaryPin } from "@/lib/engineCatalog";
 import { engineBinaryPath, engineDir, ensureEngine } from "@/lib/engineInstall";
+import { __setDiskReaderForTests } from "@/lib/diskState";
 
 const testDirs: string[] = [];
-afterEach(() => { for (const dir of testDirs.splice(0)) rmSync(dir, { recursive: true, force: true }); delete process.env.STACK_DATA_DIR; });
+afterEach(() => { __setDiskReaderForTests(null); for (const dir of testDirs.splice(0)) rmSync(dir, { recursive: true, force: true }); delete process.env.STACK_DATA_DIR; });
 
 async function makeArchive(): Promise<{ bytes: Buffer; size: number; sha256: string }> {
   const root = mkdtempSync(join(tmpdir(), "maipai-engine-source-"));
@@ -29,6 +30,7 @@ function pin(id: string, url: string, size: number, sha256: string): EngineBinar
 }
 
 test("ensureEngine verifies, extracts, marks ready, and skips a ready install", async () => {
+  __setDiskReaderForTests(() => ({ free: 500_000_000_000, total: 1_000_000_000_000, device: 1 }));
   const dataDir = mkdtempSync(join(tmpdir(), "maipai-engine-data-"));
   testDirs.push(dataDir);
   process.env.STACK_DATA_DIR = dataDir;
@@ -49,6 +51,7 @@ test("ensureEngine verifies, extracts, marks ready, and skips a ready install", 
 });
 
 test("ensureEngine installs a verified raw file at the tool path", async () => {
+  __setDiskReaderForTests(() => ({ free: 500_000_000_000, total: 1_000_000_000_000, device: 1 }));
   const dataDir = mkdtempSync(join(tmpdir(), "maipai-engine-data-"));
   testDirs.push(dataDir);
   process.env.STACK_DATA_DIR = dataDir;
@@ -82,6 +85,7 @@ test("ensureEngine installs a verified raw file at the tool path", async () => {
 });
 
 test("a wrong checksum rejects and leaves no ready marker", async () => {
+  __setDiskReaderForTests(() => ({ free: 500_000_000_000, total: 1_000_000_000_000, device: 1 }));
   const dataDir = mkdtempSync(join(tmpdir(), "maipai-engine-data-"));
   testDirs.push(dataDir);
   process.env.STACK_DATA_DIR = dataDir;

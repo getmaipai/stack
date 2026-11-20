@@ -56,6 +56,30 @@ test("orphan folders are removed only when unreferenced, in-bounds, and not syml
   rmSync(outside, { recursive: true, force: true });
 });
 
+test("tidy blocks selected models, MAIPAI home folders, and symlink targets", async () => {
+  const { __setPreferredModelForTests } = await import("@/lib/supervisor");
+  const selectedId = "qwen3-8b-instruct-q4-k-m";
+  const selectedPath = join(modelsDir, selectedId, "weights");
+  const selectedDir = join(modelsDir, selectedId);
+  mkdirSync(selectedDir, { recursive: true }); writeFileSync(selectedPath, "keep");
+  upsertModel({ id: selectedId, roles: ["chat"], source: "catalog", provenance: {}, revision: "r1", sha256: "c".repeat(64), licence: "MIT", modelPath: selectedPath, verifiedAt: new Date().toISOString() });
+  const { setMachineTier } = await import("@/lib/supervisor");
+  setMachineTier("p16"); __setPreferredModelForTests("chat", selectedId);
+  expect((await import("@/lib/supervisor")).selectedModel("chat")?.id).toBe(selectedId);
+  const homeId = "tidy-home-override-fixture"; const home = join(modelsDir, homeId);
+  mkdirSync(home, { recursive: true }); writeFileSync(join(home, "weights.bin"), "keep");
+  process.env.MAIPAI_TEST_HOME = home;
+  const targetId = "tidy-symlink-target-fixture"; const target = join(modelsDir, targetId);
+  mkdirSync(target, { recursive: true }); writeFileSync(join(target, "weights.bin"), "keep");
+  symlinkSync(target, join(modelsDir, "tidy-symlink-link"));
+  upsertModel({ id: "tidy-symlink-ref", roles: ["video"], source: "catalog", provenance: {}, revision: "r1", modelPath: target, verifiedAt: new Date().toISOString() });
+  const plan = await planTidy();
+  expect(plan.items.find((item) => item.id === selectedDir)?.blocked ?? "").toContain("selected");
+  expect(plan.items.find((item) => item.id === home)?.blocked).toContain("MAIPAI_TEST_HOME");
+  expect(plan.items.find((item) => item.id === target)?.blocked ?? "").toContain("symbolic link");
+  delete process.env.MAIPAI_TEST_HOME; __setPreferredModelForTests("chat", null);
+});
+
 test("a record-referenced model directory is not listed as an orphan", async () => {
   const path = join(modelsDir, "kept-model"); mkdirSync(path); writeFileSync(join(path, "weights.bin"), "keep");
   upsertModel({ id: "kept-model", roles: ["video"], source: "catalog", provenance: {}, revision: "r1", modelPath: path, sizeBytes: 4 });

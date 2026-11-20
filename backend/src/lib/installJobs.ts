@@ -30,7 +30,7 @@ export const MISSING_PART_CODE = (id: string): string => `model-part-missing.${i
 
 /** Starts the install job for a pin. `done` settles when the install ends. */
 export function startModelInstall(model: Pin, role: RoleId, download?: DownloadModelOptions["download"]): { job: string; done: Promise<void> } {
-  const row = buildDiskPlan(PROFILE_TIERS.find((tier) => tier.id === "p128")!).rows.find((candidate) => candidate.model_ids.includes(model.id));
+  const row = PROFILE_TIERS.flatMap((tier) => buildDiskPlan(tier).rows).find((candidate) => candidate.model_ids.includes(model.id));
   const need = row ? row.download_bytes + row.installed_bytes + row.peak_temp_bytes : model.download.approx_bytes * 3;
   const admission = diskAdmission(need);
   if (!admission.ok) throw new Error(admission.reason);

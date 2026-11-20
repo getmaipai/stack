@@ -15,6 +15,7 @@ import { settingValues } from "@/settings";
 import { readModelManifest, listModelManifests } from "@/lib/store/manifests";
 import { listLoras } from "@/video/loras";
 import { selectedModel } from "@/lib/supervisor";
+import { ROLE_IDS } from "@/roles";
 
 export type TidyKind = "superseded" | "orphan_folder" | "partial_download";
 export interface TidyItem { id: string; kind: TidyKind; bytes: number; reason: string; blocked: string | null; }
@@ -45,8 +46,8 @@ function successorReadySince(successor: string, componentInstalled: boolean): nu
   return since;
 }
 function blockerFor(id: string, componentId: string, componentModelIds: string[]): string | null {
-  if (componentModelIds.some((modelId) => ["chat", "coding", "embed", "vision", "stt", "tts", "wakeword"].some((role) => selectedModel(role as import("@/roles").RoleId)?.id === modelId))) return "A role slot has selected this model; select another model before tidying it.";
-  const override = Object.entries(process.env).find(([key, value]) => key.startsWith("MAIPAI_") && key.endsWith("_HOME") && value && componentModelIds.some((modelId) => resolve(value) === resolve(join(modelsDir, modelId)) || resolve(value).startsWith(resolve(join(modelsDir, modelId)) + sep)));
+  if (componentModelIds.some((modelId) => ROLE_IDS.some((role) => selectedModel(role)?.id === modelId))) return "A role slot has selected this model; select another model before tidying it.";
+  const override = Object.entries(process.env).find(([key, value]) => key.startsWith("MAIPAI_") && key.endsWith("_HOME") && value && componentModelIds.some((modelId) => resolve(value) === resolve(join(modelsDir, modelId)) || resolve(join(value, "models")) === resolve(join(modelsDir, modelId)) || resolve(value).startsWith(resolve(join(modelsDir, modelId)) + sep)));
   if (override) return `The ${override[0]} environment setting points to this model.`;
   const depended = listLoras().filter((lora) => id === "ltx-2-5-q8-distilled-mlx" && lora.base_model === "ltx-2.5");
   if (depended.length) return `Installed video style${depended.length === 1 ? "" : "s"} ${depended.map((lora) => lora.name).join(", ")} depend on ${id}; remove those styles first.`;
@@ -68,7 +69,11 @@ function safeModelsPath(path: string): boolean {
 }
 function isSymlinkTarget(path: string): boolean {
   const absolute = resolve(path);
-  for (const candidate of [...referencedPaths()]) { try { if (lstatSync(candidate).isSymbolicLink() && resolve(candidate) === absolute) return true; } catch { /* Missing references are ignored. */ } }
+  try { if (lstatSync(absolute).isSymbolicLink()) return true; } catch { /* no direct link */ }
+  try { for (const entry of readdirSync(modelsDir)) { const candidate = join(modelsDir, entry); if (lstatSync(candidate).isSymbolicLink() && resolve(realpathSync(candidate)) === absolute) return true; } } catch { /* unreadable model root */ }
+  const candidates = new Set([...referencedPaths()]);
+  for (const model of listModels()) if (model.modelPath) candidates.add(resolve(model.modelPath));
+  for (const candidate of candidates) { try { if (lstatSync(candidate).isSymbolicLink() && resolve(realpathSync(candidate)) === absolute) return true; } catch { /* Missing references are ignored. */ } }
   return false;
 }
 function referencedPaths(): Set<string> {
@@ -97,17 +102,21 @@ function activeInputModelIds(): Set<string> {
 }
 function folderItems(now: number): TidyItem[] {
   const refs = referencedPaths(); const known = knownFolderNames(); const active = activeInputModelIds();
+  const selectedIds = new Set(ROLE_IDS.map((role) => selectedModel(role)?.id).filter((id): id is string => !!id));
   let entries: string[]; try { entries = readdirSync(modelsDir); } catch { return []; }
   const out: TidyItem[] = [];
   for (const entry of entries) {
     const path = join(modelsDir, entry); let info;
     try { info = lstatSync(path); } catch { continue; }
     if (!info.isDirectory() || info.isSymbolicLink() || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(entry)) continue;
-    if (known.has(entry) || active.has(entry)) continue;
+    if ((known.has(entry) && !selectedIds.has(entry)) || active.has(entry)) continue;
     const references = [...refs].some((ref) => ref === resolve(path) || ref.startsWith(resolve(path) + sep));
     const age = now - info.mtimeMs;
-    if (references) continue;
-    out.push({ id: path, kind: "orphan_folder", bytes: pathBytes(path), reason: age < graceHours() * HOUR ? `Unreferenced model folder; removable after ${new Date(info.mtimeMs + graceHours() * HOUR).toISOString()}.` : "Unreferenced model folder is past the grace period.", blocked: null });
+    const selected = selectedIds.has(entry);
+    const symlinkTarget = isSymlinkTarget(path);
+    if (references && !selected && !symlinkTarget) continue;
+    const blocked = blockerFor(path, entry, [entry]) ?? (symlinkTarget ? "This path is the target of a symbolic link; remove the link first." : null);
+    out.push({ id: path, kind: "orphan_folder", bytes: pathBytes(path), reason: age < graceHours() * HOUR ? `Unreferenced model folder; removable after ${new Date(info.mtimeMs + graceHours() * HOUR).toISOString()}.` : "Unreferenced model folder is past the grace period.", blocked });
   }
   return out;
 }
