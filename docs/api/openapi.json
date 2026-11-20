@@ -17665,6 +17665,20 @@
                         "minimum": 0,
                         "maximum": 2
                       },
+                      "key_colour": {
+                        "type": "string",
+                        "enum": [
+                          "green",
+                          "magenta"
+                        ]
+                      },
+                      "take_frame": {
+                        "type": "string",
+                        "enum": [
+                          "state",
+                          "gesture"
+                        ]
+                      },
                       "conditioning": {
                         "type": "string",
                         "enum": [
