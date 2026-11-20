@@ -12,7 +12,7 @@ import { videoRecipe } from "@/video/recipes";
 import { tierRoomBytes } from "@/lib/governor";
 import { resolveReadable } from "@/media/paths";
 import { videoPath, readResult, readTake } from "@/video/results";
-import { packFor } from "@/packs/loader";
+import { packFor, referenceClipRules } from "@/packs/loader";
 import { existsSync } from "node:fs";
 import { getLora, loraPath, LORA_BASE_LTX25 } from "@/video/loras";
 import { isLoraId } from "@/video/loras";
@@ -132,7 +132,7 @@ export function clipBody(request: ClipRequest, plan: Planned, route?: { name: st
 
 export async function dispatchClip(request: ClipRequest, plan: Planned, forward: Forward, read?: PictureBytes): Promise<{ status: number; body: unknown }> {
   const companionRecipe = plan.serving.pack.recipes["recipes/companion_take.md"];
-  const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"), !!companionRecipe);
+  const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"), !!companionRecipe, referenceClipRules(plan.serving.part.id));
   if (!chosen.ok) return { status: 422, body: chosen.refusal };
   const savedTake = request.take_of ? readTake(request.take_of) : null;
   // VF-ROUTE-01 follow-up: a film shot is made at the best Max recipe this computer can hold (full HD when admitted), chosen here from the operation and the machine, never from a size field.
@@ -145,7 +145,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     else if (!hdRow) filmReason = "A film shot, made at this home's usual size.";
     else filmReason = picked?.recipe.size ? `A film shot at the standard Max size: full HD makes at most ${hdRow?.seconds.max ?? 5} seconds.` : "A film shot at the standard Max size, because this computer cannot hold full HD right now.";
   }
-  const route = request.operation === "retake_from" || request.operation === "extend" ? { name: request.operation, reason: chosen.reason } : { name: chosen.companionTake ? "companion_take" : savedTake?.route ?? chosen.route, reason: savedTake ? "Another take from the saved clip route." : chosen.companionTake ? chosen.reason : filmReason };
+  const route = request.operation === "retake_from" || request.operation === "extend" ? { name: request.operation, reason: chosen.reason } : { name: chosen.referenceClip ? "reference_clip" : chosen.companionTake ? "companion_take" : savedTake?.route ?? chosen.route, reason: savedTake ? "Another take from the saved clip route." : chosen.companionTake || chosen.referenceClip ? chosen.reason : filmReason };
   if (request.operation === "retake_from" || request.operation === "extend") {
     const source = request.inputs?.find((input) => input.role === "edit_source")?.file;
     let sourcePath: string;

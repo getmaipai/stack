@@ -1,20 +1,38 @@
 import type { StackMakeRequest, StackMakeRefusal } from "@maipai/spec/stack/ts/stack-make.js";
 import type { StackOperationRow, StackCapabilityOperation } from "@maipai/spec/stack/ts/stack-model-pack.js";
 import { checkVideoInputs } from "@/video/caps";
+import type { StackReferenceClipRules } from "@maipai/spec/stack/ts/stack-model-pack.js";
 
 type ClipRequest = Extract<StackMakeRequest, { job: "clip" }>;
 export type PlannedClipRoute =
-  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend" | "restyle" | "companion_take"; identityUsed: number; reason: string; /** The request is a film shot: the dispatcher chooses the Max recipe from the machine (no size field). */ filmShot?: true; companionTake?: true }
+  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend" | "restyle" | "companion_take" | "reference_clip"; identityUsed: number; reason: string; roleCounts?: Record<"identity" | "object" | "place", number>; referenceClip?: true; /** The request is a film shot: the dispatcher chooses the Max recipe from the machine (no size field). */ filmShot?: true; companionTake?: true }
   | { ok: false; refusal: StackMakeRefusal };
 
 export const NEEDS_START_PICTURE_LINE = "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.";
 const refuse = (line: string): PlannedClipRoute => ({ ok: false, refusal: { code: "input_not_supported", line } });
 
-export function planClipRoute(request: ClipRequest, rows: readonly StackOperationRow[], hasCompanionRecipe = false): PlannedClipRoute {
+export function planClipRoute(request: ClipRequest, rows: readonly StackOperationRow[], hasCompanionRecipe = false, referenceRules?: StackReferenceClipRules | null): PlannedClipRoute {
   const identityCount = request.inputs?.filter((input) => input.role === "identity").length ?? 0;
   const hasVoice = request.inputs?.some((input) => input.role === "voice_reference") ?? false;
   const hasWardrobe = request.inputs?.some((input) => input.role === "wardrobe") ?? false;
   const hasEditSource = request.inputs?.some((input) => input.role === "edit_source") ?? false;
+  if (request.operation === "reference_clip") {
+    if (request.audience !== "adult") return refuse("Reference clips are not available for this viewer yet.");
+    if (!referenceRules) return refuse("Reference clips are not available with this clip model.");
+    const inputs = request.inputs ?? [];
+    const counts = { identity: inputs.filter((i) => i.role === "identity").length, object: inputs.filter((i) => i.role === "object").length, place: inputs.filter((i) => i.role === "place").length };
+    if (inputs.some((i) => !["identity", "object", "place"].includes(i.role))) return refuse("Send pictures for people, objects or places only.");
+    if (!inputs.length) return refuse("Send a picture with a usable role: person, object or place.");
+    if (request.end_picture) return refuse("A reference clip cannot use an end picture.");
+    if (counts.identity > referenceRules.max_people) return refuse(`Send no more than ${referenceRules.max_people} people pictures.`);
+    if (request.level !== "max") return refuse("Reference clips are available at Max quality only.");
+    if (request.seconds < referenceRules.seconds.min || request.seconds > referenceRules.seconds.max) return refuse(`Reference clips must be ${referenceRules.seconds.min} to ${referenceRules.seconds.max} seconds long.`);
+    if (counts.identity && !request.start_picture) return { ok: false, refusal: { code: "needs_start_picture", line: NEEDS_START_PICTURE_LINE, shape: request.shape, inputs: inputs.map((i) => i.role).filter((role, index, all) => all.indexOf(role) === index) } };
+    if (!counts.identity) return refuse("Object and place reference pictures need a prepared Ingredients sheet. The Stack cannot make that sheet yet.");
+    const selected = rows.find((candidate) => candidate.operation === "clip_start_picture" && candidate.level === "max" && candidate.available && candidate.inputs.start_picture);
+    if (!selected) return refuse("Reference clips are not available at Max quality here.");
+    return { ok: true, route: "start_picture", operation: "reference_clip", identityUsed: counts.identity, roleCounts: counts, reason: "The clip opens on the composed first picture, with the people, objects and places recorded as references.", referenceClip: true };
+  }
   if (request.operation === "companion_take") {
     if (request.audience !== "adult") return refuse("Companion takes are not available for this viewer yet.");
     if (!hasCompanionRecipe) return refuse("Companion takes are not available for this clip model.");

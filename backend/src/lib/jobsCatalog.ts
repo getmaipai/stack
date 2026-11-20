@@ -102,6 +102,11 @@ export function catalogOperations(rows: readonly StackOperationRow[], part: Stac
 }
 
 /** VF-CONTRACT-01: every key the pinned spec's request shape for this job has: what this Stack's make door accepts (its schema is strict), so a client sends only these. Empty when the job has no request shape. */
+/** The reference clip's roles and limits, read from the serving pack's `reference_clip` rules (empty when no serving pack offers it). */
+function referenceClipFields(serving: ReadonlyArray<{ pack: { pack: { jobs: ReadonlyArray<{ job: string; reference_clip?: { max_people: number; seconds: { min: number; max: number } } }> } } }>): string[] {
+  const rules = serving.map((item) => item.pack.pack.jobs.find((job) => job.job === "clip")?.reference_clip).find((found) => found);
+  return rules ? ["inputs.role.identity", "inputs.role.object", "inputs.role.place", `reference_clip.max_people=${rules.max_people}`, `reference_clip.seconds.min=${rules.seconds.min}`, `reference_clip.seconds.max=${rules.seconds.max}`] : [];
+}
 export function requestFieldsOf(name: StackJobName): string[] {
   const option = StackMakeRequest.options.find((item) => (item.shape.job as { value?: string }).value === name);
   return option ? Object.keys(option.shape) : [];
@@ -125,7 +130,7 @@ export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): P
       part: chosen ? { id: chosen.part.id, label: chosen.part.label } : null,
       limits: limits ? { levels: levelsOf(limits), ...(limits.max_seconds ? { max_seconds: limits.max_seconds } : {}), ...(limits.max_references !== undefined ? { max_references: limits.max_references } : {}), ...(limits.shapes ? { shapes: limits.shapes } : {}), ...(limits.max_words !== undefined ? { max_words: limits.max_words } : {}) } : { levels: ["standard" as Level] },
       capabilities: capabilities ?? { text: false, end_picture: false, sound: false, keeps_likeness: false },
-      ...(requestFieldsOf(name).length > 0 ? { request_fields: requestFieldsOf(name) } : {}),
+      ...(requestFieldsOf(name).length > 0 ? { request_fields: [...requestFieldsOf(name), ...(name === "clip" ? referenceClipFields(serving) : [])] } : {}),
       ...(rows.length > 0 ? { operations: catalogOperations(rows, shown!.part, { editSupported: ltx25MaxEditSupported(), audience }) } : {}),
       styles: { bases: shown?.pack.pack.style_bases?.filter((b) => !b.retired).map(({ browse: _browse, retired: _retired, ...served }) => served) ?? [], max: 0 },
       restyles: name === "clip" && rows.some((row) => row.operation === "retake") ? listLoras().filter((item) => (item.base_model ?? "") === LORA_BASE_LTX25).map((item) => ({ name: item.id, label: item.name })) : [] as Array<{ name: string; label: string }>,

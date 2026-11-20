@@ -35,6 +35,7 @@
         "keeps_likeness": false
       },
       "recipe": "recipes/clip.md",
+      "reference_clip": { "max_people": 2, "face_gate": 0.5, "clip_face_low": 0.35, "clip_face_frames": 6, "redraws": 2, "seconds": { "min": 4, "max": 8 } },
       "peaks": [
         {
           "shape": "landscape",

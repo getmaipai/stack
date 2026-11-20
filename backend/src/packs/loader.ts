@@ -39,3 +39,5 @@ let cached: LoadedPack[] | null = null;
 export function packs(): readonly LoadedPack[] { return (cached ??= loadPacks()); }
 export function packFor(part: string): LoadedPack | null { return packs().find((p) => p.pack.part === part) ?? null; }
 export function partsServing(job: StackModelPack["jobs"][number]["job"]): LoadedPack[] { return packs().filter((p) => p.pack.jobs.some((j) => j.job === job)); }
+/** The optional reference clip rules declared by a serving clip pack. */
+export function referenceClipRules(part: string) { return packFor(part)?.pack.jobs.find((job) => job.job === "clip")?.reference_clip ?? null; }

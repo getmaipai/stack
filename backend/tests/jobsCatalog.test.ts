@@ -80,7 +80,8 @@ test("the catalog says what this Stack speaks: the spec version it was built aga
     for (const job of catalog.jobs) {
       const option = StackMakeRequest.options.find((item) => (item.shape.job as { value?: string }).value === job.job);
       if (!option) { expect(job.request_fields, job.job).toBeUndefined(); continue; }
-      expect(job.request_fields, job.job).toEqual(Object.keys(option.shape));
+      const fields = job.request_fields ?? [];
+      expect(fields.filter((field) => !field.startsWith("inputs.role.") && !field.startsWith("reference_clip.")), job.job).toEqual(Object.keys(option.shape));
     }
   }
   const clip = (await jobsCatalog("adult")).jobs.find((job) => job.job === "clip")!;
