@@ -73,3 +73,35 @@ test("a song with no level is planned at the first level its model serves, and a
   expect(tooLong.ok).toBe(false);
   if (!tooLong.ok && "refusal" in tooLong) expect(tooLong.refusal).toMatchObject({ code: "too_long", limit: 120 });
 });
+
+const SONG_PARTS = ["ace-step-1-5-turbo", "ace-step-1-5-xl-turbo-bf16", "ace-step-1-5-xl-sft-bf16"];
+const songParts = (over: Record<string, Partial<StackPartView>> = {}, audience: "adult" | "minor" = "adult") => SONG_PARTS.flatMap((id) => { const v = view(id, audience, over[id]); return v ? [v] : []; });
+const song = (level?: "standard" | "boost" | "max", audience: "adult" | "minor" = "adult"): StackMakeRequest => ({ job: "song", audience, description: "a calm tune", seconds: 60, ...(level ? { level } : {}) }) as StackMakeRequest;
+
+test("a song that names a level is planned among the parts that serve it, not refused because the standard part is first", () => {
+  for (const [level, part] of [["standard", "ace-step-1-5-turbo"], ["boost", "ace-step-1-5-xl-turbo-bf16"], ["max", "ace-step-1-5-xl-sft-bf16"]] as const) {
+    const plan = planMake(song(level), songParts());
+    expect(plan.ok && [plan.serving.part.id, plan.level]).toEqual([part, level]);
+  }
+  const noLevel = planMake(song(), songParts());
+  expect(noLevel.ok && noLevel.serving.part.id).toBe("ace-step-1-5-turbo");
+});
+
+test("a song edit that names a level is planned among the parts that serve it too", () => {
+  const plan = planMake({ job: "song_edit", audience: "adult", song: "/v1/audio/music/s1/file", change: { kind: "extend", add_seconds: 20 }, level: "boost" }, songParts());
+  expect(plan.ok && plan.serving.part.id).toBe("ace-step-1-5-xl-turbo-bf16");
+});
+
+test("a level whose part is not installed or ready is answered in the Stack's words, and a minor's line names no model", () => {
+  const adult = planMake(song("max"), songParts({ "ace-step-1-5-xl-sft-bf16": { state: "missing" } }));
+  expect(!adult.ok && "unavailable" in adult && adult.unavailable).toBe("No model that can make songs at max quality is turned on and ready. An admin can turn one on or add one in Settings, AI and models.");
+  const minor = planMake(song("max", "minor"), songParts({ "ace-step-1-5-xl-sft-bf16": { state: "missing" } }, "minor"));
+  const line = !minor.ok && "unavailable" in minor ? minor.unavailable : "";
+  expect(line).toBe("No model that can make songs at max quality is turned on and ready.");
+  expect(line).not.toMatch(/ace|xl|sft/i);
+});
+
+test("a level no part's pack serves stays level_not_served", () => {
+  const plan = planMake({ job: "clip", audience: "adult", description: "x", shape: "landscape", level: "max", seconds: 5 }, parts("adult", { "ltx-2-5-bf16-distilled-mlx-max": { state: "missing" } }).filter((p) => p.id !== "ltx-2-5-bf16-distilled-mlx-max"));
+  expect(!plan.ok && "refusal" in plan && plan.refusal.code).toBe("level_not_served");
+});

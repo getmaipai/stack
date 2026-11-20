@@ -12,6 +12,12 @@ export type MakePlan =
 
 const SHAPES = ["landscape", "portrait", "square"] as const;
 
+/** The levels one pack job serves; a job whose limits name none serves Standard only. */
+const levelsServedBy = (limits: Serving["job"]["limits"]): Set<string> => {
+  const found = new Set<string>([...Object.keys(limits.max_seconds ?? {}), ...Object.values(limits.shapes ?? {}).flatMap((s) => Object.keys(s ?? {}))]);
+  return found.size ? found : new Set(["standard"]);
+};
+
 export function planMake(request: StackMakeRequest, parts: readonly StackPartView[]): MakePlan {
   const audience = request.audience;
   const all = servingFor(request.job, audience, parts);
@@ -30,7 +36,15 @@ export function planMake(request: StackMakeRequest, parts: readonly StackPartVie
       return { ok: false, refusal: { code: "not_on_this_model", line: others.length ? `${label} ${cannot}. Home can use ${others[0]!.part.label} instead.` : `${label} ${cannot}, and nothing else here can do this either.`, alternatives: others.map((s) => ({ part: s.part.id, label: s.part.label })) } };
     }
   } else {
-    chosen = fit.find((s) => isRunnable(s.part));
+    // A request that names a level is planned among the parts whose pack serves it (the song parts split the levels between them). When some
+    // pack serves it but no such part is turned on and ready (though another part is), the reason says the level is what is missing; when no pack serves it, the first
+    // ready part is chosen and refuses it below with `level_not_served`.
+    const asked = "level" in request ? request.level : undefined;
+    const servesAsked = asked ? fit.filter((s) => levelsServedBy(s.job.limits).has(asked)) : [];
+    if (asked && servesAsked.length && !servesAsked.some((s) => isRunnable(s.part)) && fit.some((s) => isRunnable(s.part))) {
+      return { ok: false, unavailable: `No model that can ${JOB_PHRASE[request.job]} at ${asked} quality is turned on and ready.${audience === "minor" ? "" : " An admin can turn one on or add one in Settings, AI and models."}` };
+    }
+    chosen = (servesAsked.length ? servesAsked : fit).find((s) => isRunnable(s.part));
     if (!chosen) return { ok: false, unavailable: wantsWords ? "No model that can spell words in a picture is turned on and ready." : `No model that can ${JOB_PHRASE[request.job]} is turned on and ready.` };
   }
 

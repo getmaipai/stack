@@ -86,3 +86,14 @@ test("the catalog says what this Stack speaks: the spec version it was built aga
   const clip = (await jobsCatalog("adult")).jobs.find((job) => job.job === "clip")!;
   for (const field of ["description", "shape", "level", "seconds", "inputs", "intent", "operation", "take_of", "wait"]) expect(clip.request_fields, field).toContain(field);
 });
+
+test("the song entry's levels and longest lengths cover every song part, installed or not, so a level is never hidden behind the first part", async () => {
+  const catalog = await jobsCatalog("adult");
+  const song = catalog.jobs.find((j) => j.job === "song")!;
+  expect(song.limits.levels).toEqual(["standard", "boost", "max"]);
+  expect(song.limits.max_seconds).toEqual({ standard: 120, boost: 240, max: 240 });
+  const edit = catalog.jobs.find((j) => j.job === "song_edit")!;
+  expect(edit.limits.levels).toEqual(["standard", "boost"]);
+  const minor = (await jobsCatalog("minor")).jobs.find((j) => j.job === "song")!;
+  expect(minor.limits.levels).toEqual(["standard", "boost", "max"]);
+});

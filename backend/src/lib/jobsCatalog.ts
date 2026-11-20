@@ -41,6 +41,23 @@ const levelsOf = (limits: PackJob["limits"]): Level[] => {
   const levels = order.filter((l) => found.has(l));
   return levels.length ? levels : ["standard"];
 };
+/** The limits a job shows: the shown part's own, plus the levels (and their lengths and pixel sizes) only another part serves, so a level is never hidden behind the first part (a request naming a level is planned among the parts that serve it). */
+const coverAllLevels = (shown: Serving, all: readonly Serving[]): PackJob["limits"] => {
+  const limits = { ...shown.job.limits };
+  const maxSeconds: Record<string, number> = { ...(limits.max_seconds ?? {}) };
+  const shapes: Record<string, Record<string, unknown>> = Object.fromEntries(Object.entries(limits.shapes ?? {}).map(([name, levels]) => [name, { ...levels }]));
+  for (const other of all) {
+    if (other === shown) continue;
+    for (const [level, seconds] of Object.entries(other.job.limits.max_seconds ?? {})) if (maxSeconds[level] === undefined) maxSeconds[level] = seconds as number;
+    for (const [name, levels] of Object.entries(other.job.limits.shapes ?? {})) for (const [level, size] of Object.entries(levels ?? {})) {
+      shapes[name] ??= {};
+      if (shapes[name]![level] === undefined) shapes[name]![level] = size;
+    }
+  }
+  if (Object.keys(maxSeconds).length) limits.max_seconds = maxSeconds as never;
+  if (Object.keys(shapes).length) limits.shapes = shapes as never;
+  return limits;
+};
 const runnable = (part: StackPartView): boolean => part.enabled && part.state === "ready" && (part.fits.standard || part.fits.boost || part.fits.max);
 
 export interface Serving { pack: LoadedPack; job: PackJob; part: StackPartView }
@@ -97,7 +114,7 @@ export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): P
     if (!serving.length && audience === "minor") return []; // a job a minor may not have is absent, never explained
     const chosen = WIRED_JOBS.has(name) ? (serving.find((s) => runnable(s.part)) ?? null) : null; // a job not wired through the generic door is never "available"
     const shown = chosen ?? serving[0] ?? null;
-    const limitsSource = shown?.job;
+    const limitsSource = shown ? { ...shown.job, limits: coverAllLevels(shown, serving) } : null;
     const rows = shown ? rowsForJob(shown.part.id, name) : [];
     const derived = rows.length > 0 && ROW_DERIVED_JOBS.has(name) ? jobLimitsFromRows(rows) : null;
     const limits = limitsSource && derived ? { ...limitsSource.limits, ...derived } : limitsSource?.limits;
