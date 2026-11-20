@@ -26,8 +26,8 @@ import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf }
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { getLora, listLoras, loraPath, LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
 import { deleteResult, isJobId, messagesPath, posterPath, readReceipt, readResult, receiptPath, videoPath, type VideoResultMeta } from "@/video/results";
-import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, type VideoQuality } from "@/video/videoGen";
-import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25PeakBytes } from "@/video/ltx25";
+import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, videoModelPaths, type VideoQuality } from "@/video/videoGen";
+import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25MaxCapBytes, ltx25PeakBytes } from "@/video/ltx25";
 import { checkEdit, EditSourceError, editRuntime, ltx25EditAdmitBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED, planSource, probeSource, type Ltx25EditKind } from "@/video/ltx25Edit";
 import { H3_MIN_SECONDS } from "@/video/h3";
 import { MediaPathError, resolveReadable } from "@/media/paths";
@@ -36,6 +36,8 @@ import { LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES, LTX25_INGREDIENT
 import { sha256OfFile } from "@/lib/fileHash";
 import { INGREDIENTS_ADAPTER_FILE } from "@/packs/videoNames";
 import { checkVideoInputs, engineOfQuality, operationOfInputs, resolveVideoSize, rowForRequest, rowsOfEngine, sizeRefusalLine, type VideoRefusal } from "@/video/caps";
+import { maxVideoRecipe } from "@/video/recipes";
+import { videoRecipe } from "@/video/recipes";
 
 const DEFAULT_WAIT_MS = 30_000;
 const MAX_WAIT_MS = 30 * 60_000;
@@ -43,6 +45,7 @@ const MAX_WAIT_MS = 30 * 60_000;
 const LoraEntry = z.object({ id: z.string().max(40), strength: z.number().min(0).max(2).optional() });
 const VideoRequestSchema = z.object({
   model: z.string().optional().openapi({ description: "Which video model: `video` or `quick` (default, Wan, silent up to 5 s), `ltx25-q8` (LTX-2.5 Standard and Boost), or `ltx25-max` (LTX-2.5 Max). A model id names it too. The retired `detailed` value and the retired LTX-2.3 model id answer 422: use `ltx25-q8` or `ltx25-max`. Unknown names answer 422; an uninstalled model answers 503.", example: "quick" }),
+  level: z.enum(["standard", "boost", "max"]).optional(),
   prompt: z.string().trim().min(1).max(VIDEO_MAX_PROMPT_CHARS),
   negative_prompt: z.string().max(VIDEO_MAX_PROMPT_CHARS).optional().openapi({ description: "Accepted. The distilled FastWan model runs without guidance, so it has no effect on the clip." }),
   image: z.string().optional().openapi({ description: "Image to video: the first frame, base64 (a data: URL is fine), PNG, JPEG or WebP, at most 20 MB. image_source is optional. On `ltx25-q8` and `ltx25-max` the picture is the first frame: it is fitted to the clip's true size (scaled to fill, centre-cropped, never stretched) by the Stack." }),
@@ -181,7 +184,11 @@ function entry(meta: VideoResultMeta) {
 export function parseVideoSize(size: string | undefined, quality: VideoQuality = "quick"): { width: number; height: number } | string {
   const spec = VIDEO_SPECS[quality];
   const engine = engineOfQuality(quality);
-  if (engine) return resolveVideoSize(engine, size);
+  if (engine) {
+    if (engine === "ltx25max" && size === "1920x1088") return { width: 1920, height: 1088 };
+    if (engine === "ltx25max" && size === "1088x1920") return { width: 1088, height: 1920 };
+    return resolveVideoSize(engine, size);
+  }
   const match = /^(\d{3,4})x(\d{3,4})$/.exec(size ?? spec.defaultSize);
   if (!match) return `The size must look like ${spec.defaultSize}.`;
   const width = Number(match[1]); const height = Number(match[2]);
@@ -272,14 +279,19 @@ videoV1Routes.openapi(postRoute, async (c) => {
     if (!ltx25Lora.supported) return fail(c, 422, "lora_unsupported", `${ltx25Lora.reason ?? "This video model takes no style files yet."} Leave the styles out, or ask for a Max video to use one.`);
     if ((body.loras ?? []).length > ltx25Lora.max) return fail(c, 422, "too_many_loras", `An LTX-2.5 clip can use at most ${ltx25Lora.max} styles. Leave one out.`);
   }
+  const requestedLevel = body.level ?? (quality === "h3" || quality === "h3stream" ? "standard" : quality === "ltx25max" ? "max" : quality === "ltx25" ? (body.size === "768x448" || body.size === "448x768" ? "boost" : "standard") : "standard");
   const size = parseVideoSize(body.size, quality);
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
+  if ((quality === "h3" || quality === "h3stream") && requestedLevel !== "standard" && requestedLevel !== "boost") return fail(c, 422, "level_not_served", `MiniMax H3 does not serve ${requestedLevel} quality. Choose Standard or Boost quality.`);
   // Legacy outcome kept (API changes are additive): H3 lifts a short request up to its 4 s floor and makes it; a length past the row is refused below.
   const seconds = quality === "h3" || quality === "h3stream" ? Math.max(H3_MIN_SECONDS, body.seconds ?? 5) : body.seconds ?? (quality === "quick" ? VIDEO_MAX_SECONDS : 5);
   if (engine) {
     // The row of this operation at this size says which sizes, lengths and pictures it takes; a length outside it is refused, never lifted or clamped.
     const operation = operationOfInputs({ start_picture: body.image !== undefined, end_picture: body.end_image !== undefined });
-    const row = rowForRequest(engine, operation, size);
+    const selectedOperation = engine === "ltx25max" && size.width === 1920 ? "clip_film_shot" : operation;
+    const row = rowForRequest(engine, selectedOperation, size);
+    if (engine === "ltx25max" && size.width === 1920 && size.height === 1088 && !maxVideoRecipe(engine, "clip_film_shot", `${size.width}x${size.height}`, 77_700_000_000)) return fail(c, 422, "input_not_supported", "Native HD Max is available only for film shots and enhance operations.");
+    if (engine === "h3" && (!row || row.level !== requestedLevel)) return fail(c, 422, "level_not_served", `MiniMax H3 does not serve ${requestedLevel} quality for this request. Choose Standard or Boost quality.`);
     const refused = row ? checkVideoInputs(row, { engine, size, seconds, start_picture: body.image !== undefined, end_picture: body.end_image !== undefined }) : { code: "bad_size" as const, line: sizeRefusalLine(engine) };
     if (refused) return refusal(c, refused, "reference_unsupported");
   } else if (seconds > spec.maxSeconds) return fail(c, 422, "bad_seconds", `This clip is at most ${spec.maxSeconds} seconds on this computer.`);
@@ -315,10 +327,16 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const frames = seconds * VIDEO_FPS + 1;
   const loraIds = loras.map((lora) => lora.record.id);
-  const basePeak = quality === "ltx25max" ? ltx25MaxPeakBytes(image !== null) : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1, image !== null) : undefined;
+  const basePeak = quality === "ltx25max" ? ltx25MaxPeakBytes(image !== null, `${size.width}x${size.height}`) : quality === "ltx25" ? ltx25PeakBytes(size.width, size.height, seconds * VIDEO_FPS + 1, image !== null) : undefined;
+  if (quality === "h3" || quality === "h3stream") {
+    const chosen = videoRecipe("h3", requestedLevel, operationOfInputs({ start_picture: image !== null, end_picture: endImage !== null }), `${size.width}x${size.height}`, VIDEO_SPECS[quality].peakBytes, quality);
+    if (!chosen) return fail(c, 422, "level_not_served", `MiniMax H3 does not serve ${requestedLevel} quality for this request. Choose Standard or Boost quality.`);
+    const h3Paths = videoModelPaths(quality);
+    if (chosen.recipe.adapter?.required && (!h3Paths || !existsSync(join(h3Paths.modelDir, `loras/${chosen.recipe.adapter.id}.safetensors`)))) return fail(c, 503, "not_installed", "The fast-draft adapter for MiniMax H3 is not installed. An admin can install it in Settings, AI and models, or ask for Boost quality.");
+  }
   const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
-  if (peak !== undefined && peak > LTX25_CLIP_CAP_BYTES) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
-  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, preview: body.preview !== false, ...(body.roles ? { roles: body.roles } : {}) }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
+  if (peak !== undefined && peak > ltx25MaxCapBytes(`${size.width}x${size.height}`)) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
+  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, level: requestedLevel, preview: body.preview !== false, ...(body.roles ? { roles: body.roles } : {}) }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", level: requestedLevel, ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
 });
 
 videoV1Routes.openapi(restyleRoute, async (c) => {

@@ -15,6 +15,8 @@ import { workDir, commitResult, type VideoResultMeta } from "./results";
 import { recordGeneratedImage } from "./provenance";
 import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
 import { overallPercent, VideoError, videoGen, VIDEO_SPECS, type VideoQuality, type VideoRunInput } from "./videoGen";
+import { engineOfQuality } from "./caps";
+import { videoRecipe } from "./recipes";
 import { ltx25MaxPeakBytes, ltx25PeakBytes, LTX25_ICLORA_PEAK_BYTES, LTX25_INGREDIENTS_PEAK_BYTES } from "./ltx25";
 import { checkEdit, EditSourceError, editRuntime, extendLatentFrames, extendPixelFrames, fitArgs, ltx25EditAdmitBytes, planSource, probeSource, retakeStartLatent, type Ltx25EditKind } from "./ltx25Edit";
 import { resolveReadable } from "@/media/paths";
@@ -29,9 +31,9 @@ import { LTX25_GEN_NAME, LTX25_GEN_VERSION, LTX25_MAX_GEN_NAME, LTX25_MAX_GEN_VE
 import { VIDEO_GEN_NAME, VIDEO_GEN_VERSION } from "./videoGen";
 
 export const VIDEO_JOB_KIND = "video_generation";
-export function videoAdmission(input: { quality?: VideoQuality; size?: string; seconds?: number; mode?: string; edit?: Ltx25EditKind; lora_admit_bytes?: number }): { requestedBytes: number; measuredPeakBytes: number; engine: string } {
+export function videoAdmission(input: { quality?: VideoQuality; size?: string; seconds?: number; mode?: string; edit?: Ltx25EditKind; lora_admit_bytes?: number; level?: string }): { requestedBytes: number; measuredPeakBytes: number; engine: string } {
   const withPicture = input.mode === "image-to-video"; const quality = input.quality ?? "quick"; const size = /^(\d+)x(\d+)$/.exec(input.size ?? "");
-  const peak = input.mode === "ic_lora" ? (input.size === "768x448" ? LTX25_INGREDIENTS_PEAK_BYTES : LTX25_ICLORA_PEAK_BYTES) : (input.lora_admit_bytes ?? 0) + (input.edit && quality === "ltx25max" ? ltx25EditAdmitBytes(input.edit, size ? `${size[1]}x${size[2]}` : null) : quality === "ltx25max" ? ltx25MaxPeakBytes(withPicture) : quality === "ltx25" && size && input.seconds ? ltx25PeakBytes(Number(size[1]), Number(size[2]), input.seconds * 24 + 1, withPicture) : VIDEO_SPECS[quality].peakBytes);
+  const peak = input.mode === "ic_lora" ? (input.size === "768x448" ? LTX25_INGREDIENTS_PEAK_BYTES : LTX25_ICLORA_PEAK_BYTES) : (input.lora_admit_bytes ?? 0) + (input.edit && quality === "ltx25max" ? ltx25EditAdmitBytes(input.edit, size ? `${size[1]}x${size[2]}` : null) : quality === "ltx25max" ? ltx25MaxPeakBytes(withPicture, input.size) : quality === "ltx25" && size && input.seconds ? ltx25PeakBytes(Number(size[1]), Number(size[2]), input.seconds * 24 + 1, withPicture) : VIDEO_SPECS[quality].peakBytes);
   return { requestedBytes: peak, measuredPeakBytes: peak, engine: "video-gen" };
 }
 
@@ -46,6 +48,9 @@ export interface StashedClip {
   loraIds: string[];
   /** Which model makes the clip (default Quick). */
   quality?: VideoQuality;
+  /** The level chosen by Home or the legacy route; old records without it replay as Standard. */
+  level?: "standard" | "boost" | "max";
+  recipe?: import("@maipai/spec/stack/ts/stack-model-pack.js").StackLevelRecipe;
   /** GENPREVIEW-01: draw the first-frame preview when the motion is done (default on). */
   preview?: boolean;
   /** LTX25-EDIT-01 (Max only): extend or retake the clip at `sourcePath` (already resolved inside a declared media folder). `seconds` is `extend_seconds` or `retake_from_seconds`. */
@@ -146,6 +151,8 @@ export function registerVideoJobs(): void {
       const outputDir = join(work, "out");
       const started = Date.now();
       const quality = clip.quality ?? "quick";
+      const storedInput = (job.input ?? {}) as { level?: "standard" | "boost" | "max" };
+      const level = clip.level ?? storedInput.level ?? (quality === "ltx25max" ? "max" : "standard");
       // VF-RECEIPT-01: what was asked (before an edit's source sets the real size), the order phases were entered in, and the inputs by role and hash.
       const requested = { width: clip.width, height: clip.height, frames: clip.frames, seconds: Math.max(0, Math.round(((clip.frames - 1) / 24) * 1000) / 1000) };
       const entered: Array<{ name: string; at: number }> = [{ name: "waiting", at: started }];
@@ -192,7 +199,10 @@ export function registerVideoJobs(): void {
           ? new GenTracker("video", historyKey("video", clip.width, clip.height, `${quality}-${clip.frames}${clip.image ? "-picture" : ""}`), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused)
           : new GenTracker("video", historyKey("video", clip.width, clip.height, clip.frames), pacing.now, Math.max(0.25, (clip.frames - 1) / 120), pacing.paused);
       remember(trackers, job.id, tracker);
-      const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, endImagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality, ...(editInput ? { edit: editInput } : {}), ...(icLoraInput ? { icLora: icLoraInput } : {}) }, {
+      const recipeEngine = engineOfQuality(quality) ?? "ltx25";
+      const recipeOperation = clip.width === 1920 ? "clip_film_shot" : clip.image && clip.endImage ? "clip_start_end_pictures" : clip.image ? "clip_start_picture" : "clip_text";
+      const chosenRecipe = clip.recipe ?? videoRecipe(recipeEngine, level, recipeOperation, `${clip.width}x${clip.height}`, videoAdmission({ quality, size: `${clip.width}x${clip.height}`, mode: clip.image ? "image-to-video" : "text-to-video" }).requestedBytes, quality === "h3stream" ? "h3stream" : "h3")?.recipe;
+      const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, endImagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality, level, ...(chosenRecipe ? { recipe: chosenRecipe } : {}), ...(editInput ? { edit: editInput } : {}), ...(icLoraInput ? { icLora: icLoraInput } : {}) }, {
         jobId: job.id, signal,
         onPhase: (phase, phasePercent) => { if (entered[entered.length - 1]?.name !== phase) entered.push({ name: phase, at: Date.now() }); remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
         onStage: (stage, n, of) => { tracker.enter(stage, n, of); update({ percent: Math.round(tracker.snapshot().fraction * 100) }); },

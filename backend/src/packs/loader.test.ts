@@ -30,6 +30,20 @@ describe("model packs: format and boot validation (MODELPACK-STACK-01)", () => {
     const [first] = PACK_SOURCES;
     expect(() => loadPacks([{ ...first!, recipes: {} }])).toThrow(/recipe/);
   });
+  test("validates profile level, duplicate size and finish operations", () => {
+    const source = PACK_SOURCES.find((p) => p.dir === "ltx-2-5-bf16-distilled-mlx-max")!;
+    const pack = structuredClone(source.pack) as any;
+    const job = pack.jobs.find((item: any) => item.job === "clip");
+    expect(() => loadPacks([{ ...source, pack }])).not.toThrow();
+    job.profiles.push({ ...job.profiles[0] });
+    expect(() => loadPacks([{ ...source, pack }])).toThrow(/two profiles/);
+    job.profiles.pop();
+    job.profiles[0].finish = [{ op: "mystery" }];
+    expect(() => loadPacks([{ ...source, pack }])).toThrow(/invalid/);
+    job.profiles[0].level = "boost";
+    job.profiles[0].finish = [];
+    expect(() => loadPacks([{ ...source, pack }])).toThrow(/profile level/);
+  });
   test("a pack folder is named for its part", () => {
     const [first] = PACK_SOURCES;
     expect(() => loadPacks([{ ...first!, dir: "other" }])).toThrow(/named for its part/);
@@ -77,12 +91,13 @@ describe("model packs: parity with today's LTX-2.5 tables", () => {
     expect(clip.limits.max_seconds!.boost).toBe(boost.maxSeconds);
     expect(clip.peaks.find((x) => x.level === "boost")!.bytes).toBe(Math.floor(boost.peakBytes));
   });
-  test("the Max pack row and the sheet clip equal the Max and Ingredients constants", () => {
+  test("the Max pack keeps the default size and declares the proof-of-concept HD row", () => {
     const max = LTX25_MAX_MEASURED[0]!;
     const clip = find("ltx-2-5-bf16-distilled-mlx-max", "clip");
-    expect(clip.limits.shapes!.landscape!.max).toEqual({ width: max.width, height: max.height });
-    expect(clip.limits.max_seconds!.max).toBe(max.maxSeconds);
+    expect(clip.limits.shapes!.landscape!.max).toEqual({ width: LTX25_MAX_MEASURED[0]!.width, height: LTX25_MAX_MEASURED[0]!.height });
+    expect(clip.limits.max_seconds!.max).toBe(10);
     expect(clip.peaks[0]!.bytes).toBe(Math.floor(max.peakBytes));
+    expect(clip.profiles!.find((recipe) => recipe.size?.width === 1920)).toMatchObject({ level: "max", size: { width: 1920, height: 1088 }, memory_floor_bytes: 77_700_000_000, steps: 11 });
     const sheet = find("ltx-2-5-bf16-distilled-mlx-max", "clip_from_sheet");
     expect(sheet.limits.max_seconds!.standard).toBe(LTX25_INGREDIENTS_MAX_SECONDS);
     expect(sheet.peaks[0]!.bytes).toBe(Math.floor(LTX25_INGREDIENTS_PEAK_MEASURED_BYTES));

@@ -59,11 +59,30 @@
           "status": "measured",
           "measured_on": "768x448, 5 s"
         }
+      ],
+      "profiles": [
+        {
+          "level": "standard",
+          "profile": "preview",
+          "steps": 11,
+          "checkpoint": "transformer-distilled.safetensors",
+          "schedule": "ltx-distilled-8-3",
+          "prompt_format": "ltx-paragraph",
+          "label": "Standard",
+          "description": "Quick, with sound"
+        },
+        {
+          "level": "boost",
+          "profile": "quality",
+          "steps": 11,
+          "checkpoint": "transformer-distilled.safetensors",
+          "schedule": "ltx-distilled-8-3",
+          "prompt_format": "ltx-paragraph",
+          "label": "Boost",
+          "description": "Sharper picture, a little slower"
+        }
       ]
     }
   ],
-  "notes": [
-    "A 640x320 clip (5 s, 32.4 GB) also runs at Boost; 5 s at the Standard size needs 25.3 GB.",
-    "Clips from a start picture need up to 27.1 GB at the Standard size."
-  ]
+  "notes": []
 }

@@ -47,7 +47,7 @@ FPS = 24
 MEASURED = {(512, 256): 10, (640, 320): 5, (768, 448): 5}
 # LTX25-MAX-01: the Max profile runs on the dgrauet runtime (0.18.0) and its bf16 pack, one size, measured at 48.6 GB (mirrored from
 # video/ltx25.ts, LTX25_MAX_MEASURED). A request says `profile: "max"`; every other request is the Standard/Boost table above.
-MEASURED_MAX = {(1024, 576): 10}
+MEASURED_MAX = {(1024, 576): 10, (1920, 1088): 5}
 # LTX25-EDIT-01: the sizes an extend or a retake was measured at (mirrored from video/ltx25Edit.ts, LTX25_MAX_EDIT_MEASURED) and the source
 # limits: the runtime carries the last 25 pixel frames of a source, and the longest source measured is 10 s (241 frames).
 MEASURED_EDIT = {(768, 448), (1024, 576)}

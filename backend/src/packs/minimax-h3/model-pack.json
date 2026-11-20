@@ -7,17 +7,26 @@
       "job": "clip",
       "limits": {
         "max_seconds": {
-          "standard": 5
+          "standard": 5,
+          "boost": 5
         },
         "shapes": {
           "landscape": {
             "standard": {
               "width": 864,
               "height": 480
+            },
+            "boost": {
+              "width": 864,
+              "height": 480
             }
           },
           "portrait": {
             "standard": {
+              "width": 480,
+              "height": 864
+            },
+            "boost": {
               "width": 480,
               "height": 864
             }
@@ -41,6 +50,59 @@
           "bytes": 34000000000,
           "status": "measured",
           "measured_on": "2026-11-15, 4-bit streaming build, 864x480, 5 s, 178 to 193 s"
+        },
+        {
+          "shape": "landscape",
+          "level": "boost",
+          "bytes": 34000000000,
+          "status": "unverified",
+          "measured_on": "Only the 5 s 4-bit streaming Standard run was measured; Boost took 13.0 min in the proof of concept, not a Stack run."
+        }
+      ],
+      "profiles": [
+        {
+          "level": "standard",
+          "profile": "preview",
+          "steps": 7,
+          "checkpoint": "FL2VA",
+          "schedule": "h3-turbo-7",
+          "prompt_format": "h3-sectioned",
+          "adapter": {
+            "id": "minimax_h3_turbo_v4_step600_ema",
+            "strength": 1.0,
+            "required": true
+          },
+          "label": "Standard",
+          "description": "Quick, with sound"
+        },
+        {
+          "level": "boost",
+          "profile": "quality",
+          "size": {
+            "width": 864,
+            "height": 480
+          },
+          "steps": 24,
+          "checkpoint": "FL2VA",
+          "schedule": "h3-24",
+          "prompt_format": "h3-sectioned",
+          "finish": [
+            {
+              "op": "model_upscale",
+              "params": {
+                "factor": 2
+              }
+            },
+            {
+              "op": "audio_lead_in",
+              "params": {
+                "mute_ms": 130,
+                "fade_ms": 50
+              }
+            }
+          ],
+          "label": "Boost",
+          "description": "Sharper picture, a little slower"
         }
       ]
     },
@@ -119,8 +181,7 @@
     }
   ],
   "notes": [
-    "Settled recipe (2026-11-17): 24 steps, handheld-camera wording, then a 1.5x lanczos upscale with a light sharpen.",
-    "Audio: high-pass at 70 Hz, a noise gate, a gentle compressor, then loudness to -15. The clip opens with about 1.2 seconds of very quiet room noise, so the gate must come before any loudness step.",
+    "Sound finishing is not part of the pack yet.",
     "Swap (2026-11-17): the model makes only a donor clip, 56 frames at 24 fps per call (about 2.33 s), guided by the original footage; the composite step keeps every original pixel outside the head. The numbers the swap reads are listed in recipes/swap.md after the measured line."
   ]
 }

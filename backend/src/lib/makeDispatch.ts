@@ -94,6 +94,7 @@ export function clipBody(request: ClipRequest, plan: Planned): Record<string, un
     audience: request.audience === "adult" ? "adult" : "all-ages",
     // VF-DOOR-01: the level is the job's tier, so a Boost or Max clip is admitted, governed and classed as one (a Standard clip keeps the untiered admission, as on the
     // old door); the household's quiet window passes through; a caller that will not wait (`wait` 0) gets the job id at once.
+    level: plan.level,
     ...(plan.level === "boost" || plan.level === "max" ? { tier: plan.level } : {}),
     ...(request.quiet_seconds !== undefined ? { quiet_seconds: request.quiet_seconds } : {}),
     ...(request.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: request.quiet_max_wait_seconds } : {}),

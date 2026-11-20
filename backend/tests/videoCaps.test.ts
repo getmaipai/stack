@@ -38,6 +38,7 @@ const PNG_B64 = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 
 const workerRequests: WorkerRequest[] = [];
 const h3Commands: string[][] = [];
 let h3Root = "";
+let previousH3Home: string | undefined;
 
 function scripted(): VideoGenDeps {
   return {
@@ -68,13 +69,19 @@ function clean(): void {
 beforeEach(() => {
   workerRequests.length = 0; h3Commands.length = 0;
   h3Root = mkdtempSync(join(tmpdir(), "caps-h3-"));
-  mkdirSync(join(h3Root, "models/minimax_h3"), { recursive: true });
+  previousH3Home = process.env.MAIPAI_H3_VIDEO_HOME;
+  process.env.MAIPAI_H3_VIDEO_HOME = h3Root;
+  mkdirSync(join(h3Root, "models/minimax_h3/loras"), { recursive: true });
+  writeFileSync(join(h3Root, "models/minimax_h3/loras/minimax_h3_turbo_v4_step600_ema.safetensors"), "fixture adapter");
+  for (const file of ["node/scripts/generate_staged.py", ".venv/bin/python", "models/minimax_h3/upstream/FL2VA", "models/minimax_h3/qwen/8-bit", "models/minimax_h3/transformers/8-bit"]) {
+    const full = join(h3Root, file); mkdirSync(full.slice(0, full.lastIndexOf("/")), { recursive: true }); writeFileSync(full, "fixture");
+  }
   clean();
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 90 * GB, tier: "p128" });
   registerVideoJobs();
   videoGen.useDeps(scripted());
 });
-afterEach(() => { clean(); rmSync(h3Root, { recursive: true, force: true }); });
+afterEach(() => { clean(); rmSync(h3Root, { recursive: true, force: true }); if (previousH3Home === undefined) delete process.env.MAIPAI_H3_VIDEO_HOME; else process.env.MAIPAI_H3_VIDEO_HOME = previousH3Home; });
 
 const post = (body: Record<string, unknown>) => app.request("/v1/videos/generations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 type Err = { code: string; error: string };

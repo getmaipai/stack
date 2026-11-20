@@ -212,7 +212,7 @@ test("REGRESSION: the worker refuses a Max request without the pack's own Gemma 
     expect(String(out.stderr)).toBe("");
     expect(lines[0]).toBe("refused refused refused missing");
     expect(lines[1]).toBe("accepted");
-    expect(lines[2]).toBe("None size must be one of 1024x576 size must be one of 512x256, 640x320, 768x448 None");
+    expect(lines[2]).toBe("None size must be one of 1024x576, 1920x1088 size must be one of 512x256, 640x320, 768x448 None");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -226,8 +226,9 @@ test("the status route reports the Max quality: its own pack, environment and th
   expect(max.install.models.map((model) => model.id)).toEqual([STACK_VIDEO_LTX25_MAX_MODEL_ID]);
   expect(max.install.download_bytes).toBe(STACK_VIDEO_LTX25_MAX_MODEL.download!.approx_bytes);
   const profiles = max.profiles as Array<Record<string, unknown>>;
-  expect(profiles).toHaveLength(1);
+  expect(profiles).toHaveLength(2);
   expect(profiles[0]).toMatchObject({ name: "max", size: "1024x576", width: 1024, height: 576, max_seconds: 10, max_frames: 241, peak_gb: 48.6, admit_gb: 51, short_peak_gb: null, peak_gb_picture: 58.6, admit_gb_picture: 61.5, short_peak_gb_picture: null });
+  expect(profiles[1]).toMatchObject({ name: "max", size: "1920x1088", width: 1920, height: 1088, max_seconds: 5, max_frames: 121, peak_gb: 74, admit_gb: 77.7, short_peak_gb: null });
   expect(Object.keys(profiles[0]!)).toEqual(expect.arrayContaining(["extend", "retake"])); // LTX25-EDIT-01 footprints (null where not measured)
   // Standard and Boost are unchanged and keep the fork runtime.
   const standard = body.video.qualities.ltx25!;

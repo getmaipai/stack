@@ -1,6 +1,7 @@
 // MODELPACK-STACK-01: loads and validates every model pack at boot. A pack that does not match `StackModelPack`, that names a part the
 // part table does not have, or whose recipe file is missing stops the Stack from starting. This file knows no model: only a pack does (rule E7).
 import { StackModelPack } from "@maipai/spec/stack/ts/stack-model-pack.js";
+import { StackFinishOp } from "@maipai/spec/stack/ts/stack-model-pack.js";
 import { PACK_SOURCES } from "@/packs/index.generated";
 import { PART_DEFS } from "@/lib/partDefs";
 
@@ -18,6 +19,16 @@ export function loadPacks(sources: typeof PACK_SOURCES = PACK_SOURCES, partIds: 
     seen.add(value.part);
     for (const job of value.jobs) {
       if (!(job.recipe in recipes)) throw new Error(`Model pack "${dir}" job "${job.job}" names recipe "${job.recipe}", which is not in the folder. Add the file.`);
+      const profileKeys = new Set<string>();
+      for (const recipe of job.profiles ?? []) {
+        const hasLevel = job.limits.max_seconds?.[recipe.level] !== undefined || Object.values(job.limits.shapes ?? {}).some((shape) => shape?.[recipe.level] !== undefined);
+        if (!hasLevel) throw new Error(`Model pack "${dir}" job "${job.job}" profile level "${recipe.level}" is missing from limits. Add its limits.`);
+        const key = `${recipe.level}:${recipe.size ? `${recipe.size.width}x${recipe.size.height}` : "default"}`;
+        if (profileKeys.has(key)) throw new Error(`Model pack "${dir}" job "${job.job}" has two profiles for ${key}. Keep one.`);
+        profileKeys.add(key);
+        if (recipe.adapter?.required && !recipe.adapter.id.trim()) throw new Error(`Model pack "${dir}" job "${job.job}" required adapter needs an id.`);
+        for (const step of recipe.finish ?? []) if (!StackFinishOp.safeParse(step.op).success) throw new Error(`Model pack "${dir}" job "${job.job}" has unknown finish operation "${step.op}".`);
+      }
     }
     return { dir, pack: value, recipes };
   });

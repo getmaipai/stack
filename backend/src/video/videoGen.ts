@@ -26,6 +26,7 @@
 import { engineIdleMs } from "@/lib/engineIdle";
 import { defaultToolbox } from "@/media/tools";
 import { H3_MAX_SECONDS, H3_VIDEO_ID, H3_VIDEO_VERSION, h3VideoCommand, type H3VideoBuild } from "./h3";
+import { videoRecipe, type VideoLevel } from "./recipes";
 import { spawnRunner } from "@/media/run";
 import { heavyGate, PausableProcess, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { TreeSnapshot } from "@/lib/processTree";
@@ -90,7 +91,7 @@ export const VIDEO_SPECS: Record<VideoQuality, VideoSpec> = {
   // LTX25-ENGINE-01: the sizes and lengths are the measured table in video/ltx25.ts (checked by the route and the worker), the peak is its largest row.
   ltx25: { quality: "ltx25", modelId: STACK_VIDEO_LTX25_MODEL_ID, maxSeconds: LTX25_MAX_SECONDS, frameStep: 8, defaultSize: LTX25_DEFAULT_SIZE, maxPixels: 768 * 448, sizeStep: 32, minSide: 256, audio: true, peakBytes: LTX25_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
   // LTX25-MAX-01: the Max profile (1024x576, 10 s) on the dgrauet runtime and the bf16 pack; the peak is its admission figure (measured footprint with headroom).
-  ltx25max: { quality: "ltx25max", modelId: STACK_VIDEO_LTX25_MAX_MODEL_ID, maxSeconds: LTX25_MAX_PROFILE_SECONDS, frameStep: 8, defaultSize: LTX25_MAX_DEFAULT_SIZE, maxPixels: 1024 * 576, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX25_MAX_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
+  ltx25max: { quality: "ltx25max", modelId: STACK_VIDEO_LTX25_MAX_MODEL_ID, maxSeconds: LTX25_MAX_PROFILE_SECONDS, frameStep: 8, defaultSize: LTX25_MAX_DEFAULT_SIZE, maxPixels: 1920 * 1088, sizeStep: 64, minSide: 256, audio: true, peakBytes: LTX25_MAX_PEAK_BYTES, loraBase: "ltx-2.5", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
   // VF-CAPS-01: H3 takes a first and a last picture (the route and `h3VideoCommand` carry them) and makes 4 to 5 s clips; video/caps.ts reads these flags into its rows.
   h3: { quality: "h3", modelId: H3_VIDEO_ID, maxSeconds: H3_MAX_SECONDS, frameStep: 1, defaultSize: "864x480", maxPixels: 864 * 480, sizeStep: 1, minSide: 1, audio: true, peakBytes: 42_100_000_000, loraBase: "minimax-h3", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
   h3stream: { quality: "h3stream", modelId: H3_VIDEO_ID, maxSeconds: H3_MAX_SECONDS, frameStep: 1, defaultSize: "864x480", maxPixels: 864 * 480, sizeStep: 1, minSide: 1, audio: true, peakBytes: 14_800_000_000, loraBase: "minimax-h3", worker: "ltx25_worker.py", imageToVideo: true, endImage: true },
@@ -329,6 +330,8 @@ export interface VideoRunInput {
   loras: Array<[string, number]>; outputDir: string;
   /** Which model makes the clip (default Quick). */
   quality?: VideoQuality;
+  level?: VideoLevel;
+  recipe?: import("@maipai/spec/stack/ts/stack-model-pack.js").StackLevelRecipe;
   /** LTX25-EDIT-01: extend or retake a source clip (Max only). `sourcePath` is the fitted private copy; `extendFrames` and `retakeStartLatent` are latent frames (video/ltx25Edit.ts maps seconds to them). */
   edit?: { kind: "extend" | "retake"; sourcePath: string; ffmpeg: string; ffprobe: string; extendFrames?: number; retakeStartLatent?: number };
   icLora?: { sourcePath: string; path: string; strength: number; conditioning: "source" | "edges"; /** INGREDIENTS-01: reference sheet pictures (private copies in the job folder) instead of a source clip; the worker loops each as a static reference video. */ sheets?: string[]; /** The Stack's own ffmpeg and ffprobe: the worker links both on PATH and refuses to run without them (an IC-LoRA clip, from a source clip or from sheets, never ran without ffprobe). */ ffmpeg?: string; ffprobe?: string };
@@ -454,15 +457,19 @@ export class VideoGenService {
         lease = heavyGate.attach({ role: "video", jobId: options.jobId, worker: undefined });
         mkdirSync(input.outputDir, { recursive: true, mode: 0o700 });
         const output = join(input.outputDir, "video.mp4");
-        const home = paths.h3Home!; const models = paths.modelDir;
-        const lora = join(models, "loras/minimax_h3_turbo_v4_step600_ema.safetensors");
-        const hasLora = existsSync(lora);
+          const home = paths.h3Home!; const models = paths.modelDir;
+        const level = input.level ?? "standard";
+        const selected = input.recipe ? { recipe: input.recipe, quality } : videoRecipe("h3", level, "clip_text", `${input.width}x${input.height}`, VIDEO_SPECS[quality].peakBytes, quality);
+        if (!selected) throw new VideoError("level_not_served", `MiniMax H3 does not serve ${level} quality for this request. Choose Standard or Boost quality.`, 422);
+        const adapter = selected.recipe.adapter;
+        const lora = adapter ? join(models, `loras/${adapter.id}.safetensors`) : null;
+        if (adapter?.required && (!lora || !existsSync(lora))) throw new VideoError("not_installed", "The fast-draft adapter for MiniMax H3 is not installed. An admin can install it in Settings, AI and models, or ask for Boost quality.", 503);
         const transformer = paths.h3Build === "streaming-24gb" ? join(models, "transformers/4-bit-pruned-stream2") : join(models, "transformers/8-bit");
         const argv = h3VideoCommand(join(home, ".venv/bin/python"), join(home, "node/scripts/generate_staged.py"), {
-          prompt: input.prompt, build: paths.h3Build!, checkpoint: join(models, "upstream/FL2VA"), transformer,
+          prompt: input.prompt, build: paths.h3Build!, checkpoint: join(models, selected.recipe.checkpoint), transformer,
           qwenDir: join(models, "qwen/8-bit"), output,
           seconds: Math.max(4, Math.min(10, Math.round(input.frames / VIDEO_FPS))), width: input.width, height: input.height,
-          seed: input.seed, steps: hasLora ? 7 : 12, ...(hasLora ? { lora } : {}),
+          seed: input.seed, steps: selected.recipe.steps, ...(adapter && lora ? { lora } : {}),
           ...(input.imagePath ? { firstImage: input.imagePath } : {}), ...(input.endImagePath ? { lastImage: input.endImagePath } : {}),
         });
         onPhase("loading", 0);
@@ -481,9 +488,9 @@ export class VideoGenService {
         this.lastSuccessAt = Date.now();
         // VF-RECEIPT-01: the reply is read from the file the runner wrote, not taken from the request (the generator's own report is the fallback only when the file cannot be probed).
         const made = await probeReceiptFile(output, options.signal);
-        const steps = hasLora ? 7 : 12;
+        const steps = selected.recipe.steps;
         return { width: made?.width ?? input.width, height: made?.height ?? input.height, frames: made?.frames ?? input.frames, fps: made?.fps ?? VIDEO_FPS, seed: input.seed, ms: 0, peakBytes: VIDEO_SPECS[quality].peakBytes, audio: made?.audio ?? true,
-          ran: { steps, schedule: null, adapter: hasLora ? { id: "turbo-adapter", strength: null } : null } };
+          ran: { steps, schedule: selected.recipe.schedule, adapter: adapter ? { id: adapter.id, strength: adapter.strength } : null } };
       }
       const worker = await this.ensureWorker(quality, onPhase, options.signal);
       lease = heavyGate.attach({ role: "video", jobId: options.jobId, worker: worker.pausable });

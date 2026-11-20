@@ -76,15 +76,33 @@ test("video status exposes honest H3 capabilities and becomes ready only with th
   } finally { if (previous === undefined) delete process.env.MAIPAI_H3_VIDEO_HOME; else process.env.MAIPAI_H3_VIDEO_HOME = previous; rmSync(root, { recursive: true, force: true }); videoGen.useDeps(null); }
 });
 
-test("H3 without the optional adapter uses twelve steps", async () => {
+test("H3 without its required Standard adapter refuses before starting the runner", async () => {
   let command: string[] = [];
   const fixture = h3Fixture(async (argv) => { if (!argv.includes("-frames:v")) command = argv; writeFileSync(argv.at(-1)!, argv.includes("-frames:v") ? "JPEG" : "MP4"); return { code: 0, stdout: "", stderr: "", aborted: false }; });
   rmSync(join(fixture.root, "models/minimax_h3/loras/minimax_h3_turbo_v4_step600_ema.safetensors"));
   try {
-    await fixture.service.run(fixture.input, { jobId: "h3-no-lora" });
-    expect(command.slice(command.indexOf("--steps") + 1, command.indexOf("--steps") + 2)).toEqual(["12"]);
-    expect(command).not.toContain("--lora");
+    await expect(fixture.service.run(fixture.input, { jobId: "h3-no-lora" })).rejects.toMatchObject({ code: "not_installed", status: 503 });
+    expect(command).toEqual([]);
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test("H3 boost always uses the declared 24-step recipe even when an adapter file exists", async () => {
+  let command: string[] = [];
+  const fixture = h3Fixture(async (argv) => { if (!argv.includes("-frames:v")) command = argv; writeFileSync(argv.at(-1)!, argv.includes("-frames:v") ? "JPEG" : "MP4"); return { code: 0, stdout: "", stderr: "", aborted: false }; });
+  fixture.input.level = "boost";
+  try {
+    const result = await fixture.service.run(fixture.input, { jobId: "h3-boost" });
+    expect(command.slice(command.indexOf("--steps") + 1, command.indexOf("--steps") + 2)).toEqual(["24"]);
+    expect(command).not.toContain("--lora");
+    expect(result.ran).toMatchObject({ steps: 24, adapter: null, schedule: "h3-24" });
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test("H3 Standard refuses when its required fast-draft adapter is absent", async () => {
+  const fixture = h3Fixture(async () => { throw new Error("runner must not start"); });
+  rmSync(join(fixture.root, "models/minimax_h3/loras/minimax_h3_turbo_v4_step600_ema.safetensors"));
+  try { await expect(fixture.service.run(fixture.input, { jobId: "h3-adapter-missing" })).rejects.toMatchObject({ code: "not_installed", status: 503 }); }
+  finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
 test("cancelling H3 aborts its one-shot child runner", async () => {

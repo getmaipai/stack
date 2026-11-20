@@ -44,8 +44,13 @@ const sizeText = (size: { width: number; height: number }): string => `${size.wi
 interface Draft { operation: StackCapabilityOperation; level: Level; reason: string | null; inputs?: Partial<Inputs>; seconds: { min: number; max: number }; sizes: Size[]; audio: boolean; keepsSourceAudio?: boolean; requires: string[] }
 /** One row, with its own copy of every list so no caller can change another's. */
 function row(draft: Draft): StackOperationRow {
+  const engine = draft.operation === "swap" || draft.sizes.some((size) => size.width === 864 || size.height === 864) ? "h3" : draft.level === "max" ? "ltx25max" : "ltx25";
+  const part = engine === "h3" ? VIDEO_SPECS.h3.modelId : VIDEO_SPECS[engine].modelId;
+  const recipes = packFor(part)?.pack.jobs.find((job) => job.job === "clip")?.profiles ?? [];
+  const recipe = recipes.find((item) => item.level === draft.level && (!item.operations || item.operations.includes(draft.operation)) && (!item.size || draft.sizes.some((size) => size.width === item.size!.width && size.height === item.size!.height))) ?? recipes.find((item) => item.level === draft.level && !item.size);
   return {
     operation: draft.operation, level: draft.level, available: draft.reason === null, ...(draft.reason === null ? {} : { unavailable_reason: draft.reason }),
+    ...(recipe?.label ? { label: recipe.label } : {}), ...(recipe?.description ? { description: recipe.description } : {}),
     inputs: { ...NONE, ...draft.inputs }, seconds: { ...draft.seconds }, sizes: draft.sizes.map((size) => ({ ...size })),
     sound: { generated: draft.audio, voice_reference: false, keeps_source_audio: draft.keepsSourceAudio === true }, requires: [...draft.requires],
   };
@@ -81,7 +86,8 @@ function ltx25MaxRows(): StackOperationRow[] {
   const requires = [VIDEO_ENGINE_NAMES.ltx25max.requires];
   const edit = (operation: "extend" | "retake", min: number, max: number) => row({ operation, level: "max", reason: null, inputs: { source_clip: true }, seconds: { min, max }, sizes: LTX25_MAX_EDIT_MEASURED.map((item) => sizeOf(item.width, item.height)), audio: spec.audio, keepsSourceAudio: true, requires });
   return [
-    ...generating("ltx25max", "max", LTX25_MAX_MEASURED.flatMap((item) => withTall(item.width, item.height)), { min: 1, max: Math.max(...LTX25_MAX_MEASURED.map((item) => item.maxSeconds)) }),
+    ...generating("ltx25max", "max", withTall(1024, 576), { min: 1, max: 10 }),
+    row({ operation: "clip_film_shot", level: "max", reason: null, seconds: { min: 1, max: 5 }, sizes: [{ width: 1920, height: 1088, orientation: "landscape" }, { width: 1088, height: 1920, orientation: "portrait" }], audio: spec.audio, requires }),
     edit("extend", LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_EXTEND_MAX_SECONDS),
     edit("retake", LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS),
     // INGREDIENTS-01: served only by POST /v1/videos/ingredients, never through the generic door, so the row is in the contract but off.
@@ -92,7 +98,10 @@ function ltx25MaxRows(): StackOperationRow[] {
 function h3Rows(): StackOperationRow[] {
   const spec = VIDEO_SPECS.h3;
   const [width, height] = spec.defaultSize.split("x").map(Number) as [number, number];
-  const rows = generating("h3", "standard", withTall(width, height), { min: H3_MIN_SECONDS, max: spec.maxSeconds });
+  const rows = [
+    ...generating("h3", "standard", withTall(width, height), { min: H3_MIN_SECONDS, max: spec.maxSeconds }),
+    ...generating("h3", "boost", withTall(width, height), { min: H3_MIN_SECONDS, max: spec.maxSeconds }),
+  ];
   // The swap limits are the pack's own: the levels, the sizes and the most references and seconds it names.
   const swap = packFor(partOfEngine("h3"))?.pack.jobs.find((job) => job.job === "swap");
   if (swap) {
@@ -115,7 +124,7 @@ export function videoOperationRows(): StackOperationRow[] { return VIDEO_ENGINES
 
 /** The operations each generic job publishes rows for. */
 export const JOB_OPERATIONS: Readonly<Partial<Record<StackJobName, readonly StackCapabilityOperation[]>>> = {
-  clip: ["clip_text", "clip_start_picture", "clip_start_end_pictures", "clip_references", "extend", "retake", "enhance"],
+  clip: ["clip_text", "clip_start_picture", "clip_start_end_pictures", "clip_references", "clip_film_shot", "extend", "retake", "enhance"],
   clip_from_sheet: ["clip_sheet"],
   swap: ["swap"],
 };
@@ -132,6 +141,7 @@ export function jobLimitsFromRows(rows: readonly StackOperationRow[]) {
   const max_seconds: Partial<Record<Level, number>> = {};
   const shapes: Partial<Record<Orientation, Partial<Record<Level, { width: number; height: number }>>>> = {};
   for (const item of rows) {
+    if (item.operation === "clip_film_shot" || item.operation === "enhance") continue;
     max_seconds[item.level] = Math.max(max_seconds[item.level] ?? 0, item.seconds.max);
     for (const size of item.sizes) {
       const level = (shapes[size.orientation] ??= {});
@@ -171,7 +181,7 @@ export function rowForRequest(engine: VideoEngine, operation: StackCapabilityOpe
 
 /** The sizes an engine makes from words (the other operations at a level make the same ones). */
 function engineSizes(engine: VideoEngine): Size[] {
-  return rowsOfEngine(engine).filter((item) => item.operation === "clip_text").flatMap((item) => item.sizes);
+  return rowsOfEngine(engine).filter((item) => item.operation === "clip_text" || item.operation === "clip_film_shot").flatMap((item) => item.sizes);
 }
 /** The plain refusal for a size the engine does not make. */
 export function sizeRefusalLine(engine: VideoEngine): string {
@@ -195,7 +205,8 @@ export function resolveVideoSize(engine: VideoEngine, text: string | undefined):
   let width = Number(found[1]); let height = Number(found[2]);
   if (engine === "ltx25") { if (width % 32 || height % 32) return line; ({ width, height } = ltx25TrueSize(width, height)); }
   if (engine === "ltx25max" && (width % 64 || height % 64)) return line;
-  return engineSizes(engine).some((size) => size.width === width && size.height === height) ? { width, height } : line;
+  const availableSizes = engine === "ltx25max" ? rowsOfEngine(engine).filter((item) => item.operation === "clip_text" || item.operation === "clip_film_shot").flatMap((item) => item.sizes) : engineSizes(engine);
+  return availableSizes.some((size) => size.width === width && size.height === height) ? { width, height } : line;
 }
 
 // ---- checking a request against its row ----

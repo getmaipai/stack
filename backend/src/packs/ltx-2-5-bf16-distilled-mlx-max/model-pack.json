@@ -42,6 +42,63 @@
           "bytes": 48600000000,
           "status": "measured",
           "measured_on": "2026-11-02, 1024x576, 10 s, OS footprint"
+        },
+        {
+          "shape": "landscape",
+          "level": "max",
+          "bytes": 74000000000,
+          "status": "unverified",
+          "measured_on": "1920x1088, 5 s, 121 frames, bf16; proof-of-concept run outside the Stack; about 74 GB peak and 6.5 to 8 minutes."
+        }
+      ],
+      "profiles": [
+        {
+          "level": "max",
+          "profile": "quality",
+          "steps": 11,
+          "checkpoint": "transformer-distilled.safetensors",
+          "schedule": "ltx-distilled-8-3",
+          "prompt_format": "ltx-paragraph",
+          "label": "Max",
+          "description": "Best picture; film shots are made in full HD when this computer can"
+        },
+        {
+          "level": "max",
+          "profile": "quality",
+          "size": {
+            "width": 1920,
+            "height": 1088
+          },
+          "operations": [
+            "clip_film_shot",
+            "enhance"
+          ],
+          "memory_floor_bytes": 77700000000,
+          "steps": 11,
+          "checkpoint": "transformer-distilled.safetensors",
+          "schedule": "ltx-distilled-8-3",
+          "prompt_format": "ltx-paragraph",
+          "finish": [
+            {
+              "op": "crop",
+              "params": {
+                "from_width": 1920,
+                "from_height": 1088,
+                "width": 1920,
+                "height": 1080
+              }
+            },
+            {
+              "op": "unsharp",
+              "params": {
+                "luma_x": 5,
+                "luma_y": 5,
+                "amount": 0.4
+              }
+            }
+          ],
+          "label": "Max",
+          "description": "Best picture; film shots are made in full HD when this computer can"
         }
       ]
     },
@@ -83,7 +140,6 @@
     }
   ],
   "notes": [
-    "The Max clip must be given the model's text-encoder folder or the prompt is silently ignored.",
     "A sheet clip runs 4 to 8 seconds at 768x448."
   ]
 }

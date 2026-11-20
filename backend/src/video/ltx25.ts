@@ -163,14 +163,21 @@ export interface Ltx25MaxRow { size: string; width: number; height: number; maxS
 export const LTX25_MAX_MEASURED: readonly Ltx25MaxRow[] = [
   // 1024x576 is already a multiple of 64 on both sides, so it is made at its nominal size. 10 s (241 frames): 191.5 s (mirror pack) and 272 s (official pack).
   { size: "1024x576", width: 1024, height: 576, maxSeconds: 10, peakBytes: 48.6 * GB, profile: "max" },
+  // Measured in the proof of concept, not yet re-measured by the Stack. 121 frames, bf16, 6.5 to 8 minutes, about 74 GB.
+  { size: "1920x1088", width: 1920, height: 1088, maxSeconds: 5, peakBytes: 74 * GB, profile: "max" },
 ];
 export const LTX25_MAX_DEFAULT_SIZE = "1024x576";
-export const LTX25_MAX_PROFILE_SECONDS = 10;
+export const LTX25_MAX_PROFILE_SECONDS = Math.max(...LTX25_MAX_MEASURED.map((row) => row.maxSeconds));
 /** Admission asks for the measured footprint plus 5 percent headroom (the figure is a single measurement on one machine); 51.0 GB, under the 64 GB per-clip cap. */
 export const LTX25_MAX_ADMIT_HEADROOM = 1.05;
-export const LTX25_MAX_PEAK_BYTES = Math.round(Math.max(...LTX25_MAX_MEASURED.map((row) => row.peakBytes)) * LTX25_MAX_ADMIT_HEADROOM);
-/** The per-clip footprint cap the owner set (2026-11-02). */
+export const LTX25_MAX_PEAK_BYTES = Math.round(LTX25_MAX_MEASURED[0]!.peakBytes * LTX25_MAX_ADMIT_HEADROOM);
+/** The per-clip cap for each measured Max size: 64 GB for 1024x576 and the admitted row for proof-of-concept HD (estimated headroom). */
 export const LTX25_CLIP_CAP_BYTES = 64 * GB;
+export function ltx25MaxAdmitBytes(size?: string): number {
+  const row = size ? LTX25_MAX_MEASURED.find((item) => item.size === size || `${item.height}x${item.width}` === size) : LTX25_MAX_MEASURED[0];
+  return row ? Math.round(row.peakBytes * LTX25_MAX_ADMIT_HEADROOM) : LTX25_MAX_PEAK_BYTES;
+}
+export function ltx25MaxCapBytes(size?: string): number { return size === "1920x1088" || size === "1088x1920" ? ltx25MaxAdmitBytes(size) : LTX25_CLIP_CAP_BYTES; }
 export function ltx25MaxRow(width: number, height: number): Ltx25MaxRow | null {
   const true_ = ltx25TrueSize(width, height);
   const wide = { width: Math.max(true_.width, true_.height), height: Math.min(true_.width, true_.height) };
@@ -181,7 +188,7 @@ export function ltx25MaxRefusal(width: number, height: number, frames: number): 
   const row = ltx25MaxRow(width, height);
   if (!row) return `The Max video model makes ${LTX25_MAX_MEASURED.map((item) => item.size).join(", ")} only (or tall, 576x1024). Pick that size.`;
   if (!Number.isInteger(frames) || frames < 9 || (frames - 1) % 8 !== 0) return "The length must be a whole number of frames that is one more than a multiple of 8 (for example 241 frames, 10 seconds at 24 a second).";
-  if (frames > row.maxSeconds * LTX25_FPS + 1) return `A Max clip is at most ${row.maxSeconds} seconds on this computer.`;
+  if (frames > row.maxSeconds * LTX25_FPS + 1) return `A ${row.size} Max clip is at most ${row.maxSeconds} seconds on this computer.`;
   return null;
 }
 /**
@@ -194,7 +201,12 @@ export function ltx25MaxRefusal(width: number, height: number, frames: number): 
 export const LTX25_MAX_PICTURE_PEAK_MEASURED_BYTES = 58.6 * GB;
 export const LTX25_MAX_PICTURE_PEAK_BYTES = Math.round(LTX25_MAX_PICTURE_PEAK_MEASURED_BYTES * LTX25_MAX_ADMIT_HEADROOM);
 /** The footprint a Max clip is admitted at (always the one measured row, with its headroom; a shorter clip never needs more). A clip that starts from a picture needs the larger figure. */
-export function ltx25MaxPeakBytes(withPicture = false): number { return withPicture ? LTX25_MAX_PICTURE_PEAK_BYTES : LTX25_MAX_PEAK_BYTES; }
+export function ltx25MaxPeakBytes(withPicture = false, size?: string): number {
+  const rowAdmit = ltx25MaxAdmitBytes(size);
+  if (!withPicture) return rowAdmit;
+  // HD picture admission is an estimate using the known additive picture delta from the 1024x576 measurement.
+  return size === "1920x1088" ? rowAdmit + (LTX25_MAX_PICTURE_PEAK_BYTES - LTX25_MAX_PEAK_BYTES) : LTX25_MAX_PICTURE_PEAK_BYTES;
+}
 
 export function ltx25MaxRequirementsFileFor(platform = process.platform, arch = process.arch): string | null {
   return platform === "darwin" && arch === "arm64" ? maxDarwinArm64Requirements : null;
