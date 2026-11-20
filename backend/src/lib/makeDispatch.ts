@@ -9,7 +9,8 @@ import { writePrompt, writerData } from "@/video/promptWriter";
 import { planClipRoute } from "@/lib/clipRoute";
 import { rowsForJob } from "@/video/caps";
 import { resolveReadable } from "@/media/paths";
-import { videoPath, readResult } from "@/video/results";
+import { videoPath, readResult, readTake } from "@/video/results";
+import { packFor } from "@/packs/loader";
 import { existsSync } from "node:fs";
 
 export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit", "clip", "swap", "song", "song_edit", "stems", "character_sheet", "contact_sheet"]);
@@ -126,7 +127,8 @@ export function clipBody(request: ClipRequest, plan: Planned, route?: { name: st
 export async function dispatchClip(request: ClipRequest, plan: Planned, forward: Forward, read?: PictureBytes): Promise<{ status: number; body: unknown }> {
   const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"));
   if (!chosen.ok) return { status: 422, body: chosen.refusal };
-  const route = request.operation === "retake_from" || request.operation === "extend" ? undefined : { name: chosen.route, reason: chosen.reason };
+  const savedTake = request.take_of ? readTake(request.take_of) : null;
+  const route = request.operation === "retake_from" || request.operation === "extend" ? undefined : { name: savedTake?.route ?? chosen.route, reason: savedTake ? "Another take from the saved clip route." : chosen.reason };
   if (request.operation === "retake_from" || request.operation === "extend") {
     const source = request.inputs?.find((input) => input.role === "edit_source")?.file;
     let sourcePath: string;
@@ -156,6 +158,16 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     if (first) body.image = first;
     if (last) body.end_image = last;
   }
+  let recipeChanged = false;
+  if (savedTake && body.take_of) {
+    const pack = packFor(plan.serving.part.id);
+    const clipJob = pack?.pack.jobs.find((job) => job.job === "clip");
+    const currentRecipe = clipJob?.profiles?.find((item) => item.level === savedTake.level);
+    recipeChanged = savedTake.pack_version !== plan.serving.pack.pack.version || !savedTake.recipe || !clipJob?.profiles?.some((item) => item.level === savedTake.recipe!.level && item.steps === savedTake.recipe!.steps);
+    body.take_facts = { part: plan.serving.part.id, pack_version: plan.serving.pack.pack.version, shape: savedTake.shape, operation: savedTake.operation };
+    body.take_level = savedTake.level;
+    if (recipeChanged && currentRecipe) body.take_recipe_steps = currentRecipe.steps;
+  }
   // VF-ROLES-01: typed inputs are validated by the spec, read, and handed on as a role and a hash for the receipt; nothing acts on them yet.
   // `dialogue` and `intent` are accepted and ignored (the plain description is what the model is given). An input that cannot be read is refused, never dropped.
   if (request.inputs?.length) {
@@ -174,7 +186,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
   const result: StackMakeResult = {
     id: reply.job, job: "clip", state: first ? "done" : "running", percent: first ? 100 : 0, status: first ? "Done" : "Making your clip",
     files: (reply.data ?? []).map((d) => d.url), poster: first?.poster_url ?? null,
-    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job, ...(chosen.operation === "retake" || chosen.operation === "extend" ? { route_reason: chosen.reason } : { route: chosen.route, route_reason: chosen.reason }) },
+    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job, ...(chosen.operation === "retake" || chosen.operation === "extend" ? { route_reason: chosen.reason } : { route: chosen.route, route_reason: recipeChanged ? "The recipe was updated since the first take, so the current one was used." : chosen.reason }) },
   };
   return { status: sent.status, body: result };
 }

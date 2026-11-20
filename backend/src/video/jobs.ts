@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { registerJobRunner } from "@/lib/jobs";
 import { heavyGate } from "@/lib/heavyGate";
 
-import { workDir, commitResult, type VideoResultMeta } from "./results";
+import { ownResultVideo, workDir, commitResult, type VideoResultMeta } from "./results";
 import { recordGeneratedImage } from "./provenance";
 import { GenTracker, historyKey, previewExists, previewFile, recordRun } from "@/lib/genProgress";
 import { overallPercent, VideoError, videoGen, VIDEO_SPECS, type VideoQuality, type VideoRunInput } from "./videoGen";
@@ -66,6 +66,8 @@ export interface StashedClip {
   promptHints?: string[];
   route?: { name: string; reason: string };
   takeOf?: string;
+  takeFacts?: { part: string; pack_version: string; shape: string; operation: string };
+  takeRecipeSteps?: number;
 }
 const pending = new Map<string, StashedClip & { at: number }>();
 const STASH_TTL_MS = 30 * 60_000;
@@ -103,7 +105,7 @@ function remember<T>(map: Map<string, T>, key: string, value: T): void {
 /** The job's copy of an edit's source, and what the worker is told about it. Throws a VideoError with a plain message for a source the table does not allow. */
 async function prepareEditSource(edit: NonNullable<StashedClip["edit"]>, work: string, signal: AbortSignal, status: (text: string) => void): Promise<{ edit: NonNullable<VideoRunInput["edit"]>; width: number; height: number; frames: number }> {
   try {
-    const source = resolveReadable(edit.sourcePath, "The source clip");
+    const source = ownResultVideo(edit.sourcePath) ?? resolveReadable(edit.sourcePath, "The source clip");
     const ffmpeg = await editRuntime.toolbox.path("ffmpeg", status, signal);
     const ffprobe = await editRuntime.toolbox.path("ffprobe", status, signal);
     const plan = planSource(await probeSource(ffprobe, source, editRuntime.run, signal));
@@ -208,6 +210,7 @@ export function registerVideoJobs(): void {
       const recipeEngine = engineOfQuality(quality) ?? "ltx25";
       const recipeOperation = clip.width === 1920 ? "clip_film_shot" : clip.image && clip.endImage ? "clip_start_end_pictures" : clip.image ? "clip_start_picture" : "clip_text";
       const chosenRecipe = clip.recipe ?? videoRecipe(recipeEngine, level, recipeOperation, `${clip.width}x${clip.height}`, videoAdmission({ quality, size: `${clip.width}x${clip.height}`, mode: clip.image ? "image-to-video" : "text-to-video" }).requestedBytes, quality === "h3stream" ? "h3stream" : "h3")?.recipe;
+      if (clip.takeRecipeSteps && chosenRecipe) chosenRecipe.steps = clip.takeRecipeSteps;
       const result = await videoGen.run({ ...(clip.preview !== false ? { previewPath: previewFile(outputDir) } : {}), prompt: clip.prompt, negativePrompt: clip.negativePrompt, imagePath, endImagePath, width: clip.width, height: clip.height, frames: clip.frames, seed: clip.seed, loras: clip.loras, outputDir, quality, level, ...(chosenRecipe ? { recipe: chosenRecipe } : {}), ...(editInput ? { edit: editInput } : {}), ...(icLoraInput ? { icLora: icLoraInput } : {}) }, {
         jobId: job.id, signal,
         onPhase: (phase, phasePercent) => { if (entered[entered.length - 1]?.name !== phase) entered.push({ name: phase, at: Date.now() }); remember(progress, job.id, { phase, phasePercent }); update({ status: phase, percent: tracker.started ? Math.round(tracker.snapshot().fraction * 100) : overallPercent(phase, phasePercent) }); },
@@ -251,7 +254,8 @@ export function registerVideoJobs(): void {
       update({ status: "ready", percent: 100 });
       // The poster of a clip the Stack made counts as a picture made here, except one that looks like a person: starting from it again needs a fresh proof.
       recordGeneratedImage(new Uint8Array(readFileSync(poster)));
-      commitResult(meta, outputDir, receipt);
+      const takeFacts = { route: clip.route?.name ?? "words", operation: clip.takeFacts?.operation ?? (clip.image && clip.endImage ? "clip_start_end_pictures" : clip.image ? "clip_start_picture" : "clip_text"), level, shape: clip.takeFacts?.shape ?? `${clip.width}x${clip.height}`, seed: result.seed, part: clip.takeFacts?.part ?? VIDEO_SPECS[quality].modelId, pack_version: clip.takeFacts?.pack_version ?? "unknown", ...(chosenRecipe ? { recipe: { level: chosenRecipe.level, steps: chosenRecipe.steps } } : {}) };
+      commitResult(meta, outputDir, receipt, takeFacts, new Date(job.createdAt).getTime());
       remember(progress, job.id, { phase: "ready", phasePercent: 100 });
       return { job: job.id, model: meta.model, width: meta.width, height: meta.height, frames: meta.frames, fps: meta.fps, seconds: meta.seconds, seed: meta.seed, lora_ids: meta.lora_ids, ms: meta.ms };
     } catch (error) {

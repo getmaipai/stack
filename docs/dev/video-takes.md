@@ -1,0 +1,1 @@
+Video take records live in `data/video/takes` after Home deletes or the result sweep removes a clip. The Stack keeps the newest 500 records and removes every record older than 30 days; `sweepResults` cleans them with the clip result store. A record contains route and model recipe facts only, never the prompt, image data, file names or other text from the person.

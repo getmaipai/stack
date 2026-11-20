@@ -25,7 +25,7 @@ import { MAX_DRAIN_STATUS, MAX_WAIT_STATUS, cancelJob, getJob, hasJobRunner, isJ
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { getLora, listLoras, loraPath, LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
-import { deleteResult, isJobId, messagesPath, posterPath, readReceipt, readResult, receiptPath, videoPath, type VideoResultMeta } from "@/video/results";
+import { deleteResult, isJobId, ownResultVideo, messagesPath, posterPath, readReceipt, readResult, readTake, receiptPath, videoPath, type VideoResultMeta } from "@/video/results";
 import { memoryVerdict, qualityOfModelName, tierAvailability, VIDEO_DEFAULT_SIZE, VIDEO_FPS, VIDEO_MAX_PIXELS, VIDEO_MAX_PROMPT_CHARS, VIDEO_MAX_REFERENCE_BYTES, VIDEO_MAX_SECONDS, VIDEO_MIN_SIDE, VIDEO_QUEUE_MAX, VIDEO_SIZE_STEP, VIDEO_SPECS, videoGen, videoGenRoot, videoModelPaths, type VideoQuality } from "@/video/videoGen";
 import { ltx25LoraAdmitBytes, ltx25LoraMode, ltx25LoraProfile, ltx25PackTransformer, LTX25_CLIP_CAP_BYTES, LTX25_LORAS_PER_CLIP, ltx25MaxPeakBytes, ltx25MaxCapBytes, ltx25PeakBytes } from "@/video/ltx25";
 import { checkEdit, EditSourceError, editRuntime, ltx25EditAdmitBytes, ltx25MaxEditSupported, LTX25_EDIT_EXTEND_MAX_SECONDS, LTX25_EDIT_EXTEND_MIN_SECONDS, LTX25_EDIT_RETAKE_MAX_SECONDS, LTX25_EDIT_RETAKE_MIN_SECONDS, LTX25_MAX_EDIT_MEASURED, planSource, probeSource, type Ltx25EditKind } from "@/video/ltx25Edit";
@@ -66,6 +66,9 @@ const VideoRequestSchema = z.object({
   prompt_hints: z.array(z.string().min(1)).max(16).optional().openapi({ description: "VF-PROMPT-01: the writer's hints (counts and advice, never text), written to the receipt." }),
   route: z.object({ name: z.string().min(1), reason: z.string().min(1) }).strict().optional(),
   take_of: z.string().min(1).optional(),
+  take_facts: z.object({ part: z.string(), pack_version: z.string(), shape: z.string(), operation: z.string() }).optional(),
+  take_level: z.enum(["standard", "boost", "max"]).optional(),
+  take_recipe_steps: z.number().int().positive().optional(),
   quiet_seconds: z.number().int().min(20).max(3600).optional(),
   quiet_max_wait_seconds: z.number().int().min(0).max(86400).nullable().optional(),
 });
@@ -343,8 +346,9 @@ videoV1Routes.openapi(postRoute, async (c) => {
   }
   const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
   if (peak !== undefined && peak > ltx25MaxCapBytes(`${size.width}x${size.height}`)) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
-  if (body.take_of && !readResult(body.take_of)) return fail(c, 409, "not_available", "The clip you want another take of could not be found.");
-  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, level: requestedLevel, preview: body.preview !== false, ...(body.roles ? { roles: body.roles } : {}), ...(body.prompt_writer ? { promptWriter: body.prompt_writer } : {}), ...(body.prompt_hints ? { promptHints: body.prompt_hints } : {}), ...(body.route ? { route: body.route } : {}), ...(body.take_of ? { takeOf: body.take_of } : {}) }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", level: requestedLevel, ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
+  const priorTake = body.take_of ? readTake(body.take_of) : null;
+  if (body.take_of && !readResult(body.take_of) && !priorTake) return fail(c, 409, "not_available", "The clip you want another take of could not be found.");
+  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, level: body.take_level ?? requestedLevel, ...(body.take_recipe_steps ? { takeRecipeSteps: body.take_recipe_steps } : {}), preview: body.preview !== false, ...(body.roles ? { roles: body.roles } : {}), ...(body.prompt_writer ? { promptWriter: body.prompt_writer } : {}), ...(body.prompt_hints ? { promptHints: body.prompt_hints } : {}), ...(body.route ? { route: body.route } : {}), ...(body.take_of ? { takeOf: body.take_of } : {}), ...(body.take_facts ? { takeFacts: body.take_facts } : {}) }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", level: body.take_level ?? requestedLevel, ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
 });
 
 videoV1Routes.openapi(restyleRoute, async (c) => {
@@ -486,7 +490,7 @@ async function submitEdit(c: Context, body: z.infer<typeof VideoRequestSchema>, 
   if (problem) return problem;
   const editKind = kind!;
   let sourcePath: string;
-  try { sourcePath = resolveReadable(body.source_video, "The source clip"); } catch (error) {
+  try { sourcePath = ownResultVideo(body.source_video) ?? resolveReadable(body.source_video, "The source clip"); } catch (error) {
     if (error instanceof MediaPathError) return fail(c, 422, error.code === "path_not_found" ? "source_not_found" : error.code, error.message);
     throw error;
   }
