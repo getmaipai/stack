@@ -270,16 +270,46 @@ export async function largestAdmittedContext(input: Omit<PlanInput, "contextToke
   // run (262,144 against 40,960) is never planned at that maximum on a
   // figure that left out the larger KV cache. Above it, the estimate
   // decides. A figure with no context of its own keeps its old reading.
-  const planAt = async (contextTokens: number) => buildFitPlan({
-    ...planInput,
-    measuredPeakBytes: measuredContextTokens && contextTokens > measuredContextTokens ? null : measuredPeakBytes,
-    contextTokens: contextTokens * memoryContextMultiplier,
-    estimate: await estimateAt(contextTokens),
-    cpuEstimate: await cpuEstimateAt?.(contextTokens) ?? null,
-  });
+  const planAt = async (contextTokens: number) => {
+    // A recorded footprint that applies at this context decides the plan alone (buildFitPlan reads it before any estimate), so the estimate tool is not asked.
+    const measuredApplies = (measuredPeakBytes ?? 0) > 0 && !(measuredContextTokens && contextTokens > measuredContextTokens);
+    return buildFitPlan({
+      ...planInput,
+      measuredPeakBytes: measuredApplies ? measuredPeakBytes : null,
+      contextTokens: contextTokens * memoryContextMultiplier,
+      estimate: measuredApplies ? planInput.estimate : await estimateAt(contextTokens),
+      cpuEstimate: measuredApplies ? null : await cpuEstimateAt?.(contextTokens) ?? null,
+    });
+  };
+  const admitted = (plan: Awaited<ReturnType<typeof planAt>>) => plan.verdict === "yes" || plan.verdict === "slow";
+  // The contexts are the maximum and every step below it down to the minimum. The memory a context needs only grows with it, so the largest admitted one is
+  // found by halving the range (about nine plans for a 262,144-token model) instead of walking down one step at a time (about four hundred estimate runs,
+  // 21 s on a cold start, one subprocess each).
+  const count = maximum >= minimum ? Math.floor((maximum - minimum) / step) + 1 : 0;   // index 0 is the maximum, index count-1 the last context at or above the minimum
+  if (count > 0) {
+    const first = await planAt(maximum);
+    if (admitted(first)) return { contextTokens: maximum, plan: first };
+    let low = 0; let high = count - 1; let best: { contextTokens: number; plan: Awaited<ReturnType<typeof planAt>> } | null = null;
+    // invariant: index `low` is not admitted; find the smallest admitted index in (low, high], if any
+    const last = await planAt(maximum - high * step);
+    if (last.verdict !== "unknown") {
+      if (admitted(last)) {
+        best = { contextTokens: maximum - high * step, plan: last };
+        let unknownSeen = false;
+        while (high - low > 1) {
+          const mid = Math.floor((low + high) / 2);
+          const midPlan = await planAt(maximum - mid * step);
+          if (midPlan.verdict === "unknown") { unknownSeen = true; break; }   // the tool has no figure for this context: do not halve over holes
+          if (admitted(midPlan)) { high = mid; best = { contextTokens: maximum - mid * step, plan: midPlan }; } else low = mid;
+        }
+        if (!unknownSeen) return best;
+      } else return { contextTokens: Math.min(minimum, maximum), plan: await planAt(Math.min(minimum, maximum)) };
+    }
+  }
+  // The one-step-at-a-time walk: used when the tool gave no figure at some context (a hole in its answers), exactly as before.
   for (let contextTokens = maximum; contextTokens >= minimum; contextTokens -= step) {
     const plan = await planAt(contextTokens);
-    if (plan.verdict === "yes" || plan.verdict === "slow") return { contextTokens, plan };
+    if (admitted(plan)) return { contextTokens, plan };
   }
   const contextTokens = Math.min(minimum, maximum);
   return { contextTokens, plan: await planAt(contextTokens) };

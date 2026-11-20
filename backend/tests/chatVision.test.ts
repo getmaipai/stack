@@ -231,3 +231,33 @@ test("the chat and vision role rows say whether they read pictures, and no other
   expect((await find("vision")).reads_pictures).toBe(true);
   expect((await find("embed")).reads_pictures).toBeUndefined();
 });
+
+test("the fit search asks the estimate tool a handful of times, not once per 512 tokens (a cold start spent 21 s there), and picks the same context a one-step-at-a-time search would", async () => {
+  const cap = WEIGHTS + 60_000 * KV_PER_TOKEN;
+  const measured = { bytes: WEIGHTS + 40_960 * KV_PER_TOKEN, context: 40_960 };
+  let calls = 0;
+  const counted = (contextTokens: number) => { calls += 1; return at(contextTokens); };
+  const chosen = await largestAdmittedContext({
+    modelId: "vl", kvCacheType: "q8_0", unifiedMemory: true, deviceBudgetsBytes: [], capBytes: cap, workingMarginBytes: 0, asOf: "2026-10-06", tool: { name: "gguf-parser", version: "test" },
+    estimate: null, modelContextTokens: 262_144, estimateAt: counted, measuredPeakBytes: measured.bytes, measuredContextTokens: measured.context,
+  });
+  // the reference: walk down one step at a time with the same plan rule
+  let reference = 0;
+  for (let contextTokens = 262_144; contextTokens >= 8_192; contextTokens -= 512) {
+    const verdict = (await plan(cap, measured).then(() => buildFitPlan({ modelId: "vl", kvCacheType: "q8_0", unifiedMemory: true, deviceBudgetsBytes: [], capBytes: cap, workingMarginBytes: 0, asOf: "2026-10-06", tool: { name: "gguf-parser", version: "test" }, measuredPeakBytes: contextTokens > measured.context ? null : measured.bytes, contextTokens, estimate: at(contextTokens), cpuEstimate: null }))).verdict;
+    if (verdict === "yes" || verdict === "slow") { reference = contextTokens; break; }
+  }
+  expect(chosen.contextTokens).toBe(reference);
+  expect(calls).toBeLessThanOrEqual(20);
+});
+
+test("a recorded footprint that applies at the asked context is read as is: the estimate tool is not asked at all", async () => {
+  let calls = 0;
+  const result = await largestAdmittedContext({
+    modelId: "vl", kvCacheType: "q8_0", unifiedMemory: true, deviceBudgetsBytes: [], capBytes: 64 * 1024 ** 3, workingMarginBytes: 0, asOf: "2026-10-06", tool: { name: "gguf-parser", version: "test" },
+    estimate: null, modelContextTokens: 32_768, estimateAt: (contextTokens: number) => { calls += 1; return at(contextTokens); }, measuredPeakBytes: 6_000_000_000, measuredContextTokens: 40_960,
+  });
+  expect(result.contextTokens).toBe(32_768);
+  expect(result.plan.roles[0]?.peak.source).toBe("measured");
+  expect(calls).toBe(0);
+});
