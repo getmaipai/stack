@@ -1117,11 +1117,29 @@ function declaredReadsPictures(model: ModelRecord): boolean {
   return launch?.readsPictures === true;
 }
 
+/** VISION-EVICT-01: how long a resident start waits for a just-in-time role that is serving a request before it unloads it anyway. */
+let jitYieldBoundMs = 30_000;
+/** Test seam: a shorter or longer bound (null restores the 30 s). */
+export function __setJitYieldBoundForTests(ms: number | null): void { jitYieldBoundMs = ms ?? 30_000; }
+/** Just-in-time roles a resident start is waiting on: they take no new request until the start has unloaded them. */
+const yieldingJit = new Set<RoleId>();
+
 /** A resident role about to start yields nothing: every loaded `jit`
  * role is unloaded first, so the resident's context is sized against
- * the residents alone and is never shrunk by a picture model (rule 4). */
+ * the residents alone and is never shrunk by a picture model (rule 4).
+ * VISION-EVICT-01: a `jit` role that is serving a request is not cut off:
+ * the resident waits for that request (at most `jitYieldBoundMs`), the role
+ * takes no new request meanwhile, then it is unloaded. An idle role goes at once. */
 async function yieldJitRolesTo(role: RoleId): Promise<void> {
   for (const jit of JIT_ROLES) {
+    const busy = runtimes.get(jit)?.process;
+    if (busy && busy.activeRequests > 0) {
+      yieldingJit.add(jit);
+      try {
+        const until = Date.now() + jitYieldBoundMs;
+        while ((runtimes.get(jit)?.process?.activeRequests ?? 0) > 0 && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 25));
+      } finally { yieldingJit.delete(jit); }
+    }
     const current = runtimes.get(jit);
     const launch = current?.starting ?? null;
     // The generation moves first, so a start in flight is no longer
@@ -1627,7 +1645,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
       : "No installed llama-server build is available for this machine.";
     throw new EngineUnavailableError(reason);
   }
-  if (!model?.modelPath) throw new EngineUnavailableError(`No verified and installed ${role} model is available.`);
+  if (!model?.modelPath) throw new EngineUnavailableError(modelMissingReason(role));
   const launchConfig = engineSettingValues("engines.llama_server") as Record<string, number | boolean | string | string[]>;
   // The coding role: its slots and its window come from its own settings, and the window steps down until the engine's dry run fits what the governor can admit without evicting anything.
   const coding = role === "coding" ? codingLaunchSettings() : null;
@@ -1840,9 +1858,24 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   }
 }
 
+const modelMissingReason = (role: RoleId): string => `No verified and installed ${role} model is available.`;
+const LLAMA_RESIDENTS: RoleId[] = ["chat", "embed", "judge", "router"];
+/** Why a resident llama-server role cannot start now (no installed engine build, no verified model), or null. A scripted engine stands in for both. */
+export function residentStartBlocker(role: RoleId, modelId?: string): string | null {
+  // A scripted engine stands in for an installed model, as it does for an installed engine, unless the test says it checks models.
+  if ((testFactory && !factoryChecksModels) || urlBindingFor(role) || !LLAMA_RESIDENTS.includes(role) || engineForRole(role) !== "llama-server") return null;
+  if (!engineInstalledFor(role)) return "No installed llama-server build is available for this machine.";
+  const model = modelId ? selectableModel(role, modelId) : selectedModel(role);
+  return model?.modelPath ? null : modelMissingReason(role);
+}
+
 async function startProcess(role: RoleId, modelId?: string): Promise<RoleProcess> {
   const resident = !JIT_ROLES.includes(role) && !GENERATOR_ROLES.includes(role);
   if (!resident) return startOne(role, modelId);
+  // VISION-EVICT-01: a start that cannot succeed evicts nothing. A llama-server resident with no installed, verified model (or no engine build) is refused
+  // here, with the same reason `startSpawnedProcess` gives, before any just-in-time role is touched.
+  const missing = residentStartBlocker(role, modelId);
+  if (missing) throw new EngineUnavailableError(missing);
   residentStarts++;
   try {
     await yieldJitRolesTo(role);
@@ -1951,6 +1984,7 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
   if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
   const current = runtime(role);
   if (current.manuallyStopped) throw new EngineUnavailableError(`The ${role} engine was stopped.`);
+  if (yieldingJit.has(role)) throw new EngineUnavailableError(`The ${role} engine is finishing its current request so a resident engine can start.`);
   if (!current.process && !current.starting && JIT_ROLES.includes(role) && residentStarts > 0) throw new EngineUnavailableError(`The ${role} engine waits while a resident engine starts.`);
   if (current.process) {
     if (!modelId || current.process.kind === "url" || current.process.modelId === modelId) return current.process;
@@ -2596,8 +2630,10 @@ export function resetSupervisorForTests(): void {
   scriptedInterrupts = 0;
 }
 
-export function setSupervisorFactoryForTests(factory: ProcessFactory | null): void {
+let factoryChecksModels = false;
+export function setSupervisorFactoryForTests(factory: ProcessFactory | null, options: { checksModels?: boolean } = {}): void {
   testFactory = factory;
+  factoryChecksModels = options.checksModels === true;
   resetSupervisorForTests();
 }
 

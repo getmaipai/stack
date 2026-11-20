@@ -25,7 +25,7 @@ import { isMemoryWaitReason } from "@/lib/admission";
 import { classifyCrash, HOST_FAULT_VERDICT, isHostFault, type CrashVerdict } from "@/lib/crashClassifier";
 import { getRunState } from "@/lib/governor";
 import { settingValues } from "@/settings";
-import { healStart, recycleRole, isStoppingAll, offlineRolesWithoutProcess, roleGeneration, roleHasProcess, roleManuallyStopped, setCrashListener, setRestartListener, type CrashReport } from "@/lib/supervisor";
+import { healStart, recycleRole, residentStartBlocker, isStoppingAll, offlineRolesWithoutProcess, roleGeneration, roleHasProcess, roleManuallyStopped, setCrashListener, setRestartListener, type CrashReport } from "@/lib/supervisor";
 import type { RoleId } from "@/roles";
 
 export const SELF_HEAL_RULES = {
@@ -282,6 +282,9 @@ export async function requestEngineRestart(role: RoleId, reason: string): Promis
   const heal = state(role);
   if (heal.open) return { accepted: false, why: "The engine stopped too often and the Stack stopped restarting it; use Restart engine in Repairs." };
   if (heal.cancel || heal.attempting) return { accepted: false, why: "A restart of this engine is already pending." };
+  // VISION-EVICT-01: a role with no installed model or engine is not crashed and cannot be restarted: it stays offline with its reason until the install finishes. Not a failure, no backoff, no loaded engine disturbed.
+  const blocker = residentStartBlocker(role);
+  if (blocker) return { accepted: false, why: blocker };
   const text = reason.replace(/\s+/g, " ").trim().slice(0, 200);
   const verdict: CrashVerdict = { kind: "unknown", cause: text || "A health check failed.", fix: "The Stack restarts it; the check that failed is named above.", retryHelps: true };
   record({ id: `${role}:${clock.now()}:canary`, kind: "requested_by_canary", at: new Date(clock.now()).toISOString(), role, cause: verdict.cause, causeKind: "canary" });
