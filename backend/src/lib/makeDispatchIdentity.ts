@@ -7,10 +7,10 @@ import { deflateSync } from "node:zlib";
 import type { StackMakeRequest, StackMakeResult } from "@maipai/spec/stack/ts/stack-make.js";
 import type { StackPartView } from "@maipai/spec/stack/ts/stack-part-view.js";
 import { dispatchPictureEdit, type FormForward, type PictureBytes } from "@/lib/makeDispatch";
-import { servingFor } from "@/lib/jobsCatalog";
 import { planMake } from "@/lib/makePlan";
 import { fillRecipe } from "@/lib/recipe";
 
+type Shapes = Record<string, Record<string, { width: number; height: number } | undefined> | undefined>;
 type PictureRequest = Extract<StackMakeRequest, { job: "picture" }>;
 export const IDENTITY_NOT_USABLE_LINE = "Nothing turned on here can make a picture of a person from their picture. An admin can turn on a picture model that keeps a likeness in Settings, AI and models.";
 export const IDENTITY_NOTE = "An identity picture was used to make this picture.";
@@ -47,8 +47,9 @@ export async function dispatchIdentityPicture(request: PictureRequest, parts: re
   const probe = { job: "picture_edit", audience: request.audience, picture: identity[0]!.file, description: request.description, ...(request.words ? { words: request.words } : {}), references: references.slice(1), level: request.level, ...(request.part ? { part: request.part } : {}) } as Extract<StackMakeRequest, { job: "picture_edit" }>;
   const plan = planMake(probe, parts);
   if (!plan.ok || !plan.serving.job.capabilities.keeps_likeness) return refuse(IDENTITY_NOT_USABLE_LINE);
-  const maker = servingFor("picture", request.audience, parts).find((serving) => serving.part.id === plan.serving.part.id);
-  const pixels = (maker?.job.limits.shapes as Record<string, Record<string, { width: number; height: number } | undefined> | undefined> | undefined)?.[request.shape]?.[plan.level];
+  // The first picture is made at the shape the clip needs: the pack's `first_picture_shapes` (declared for this use only), else its ordinary shapes. The Stack scales it once to the clip's start size; Home never does.
+  const limits = plan.serving.job.limits as { shapes?: Shapes; first_picture_shapes?: Shapes };
+  const pixels = limits.first_picture_shapes?.[request.shape]?.[plan.level] ?? limits.shapes?.[request.shape]?.[plan.level];
   if (!pixels) return refuse("This model cannot make that shape of picture from a person's picture. Choose another shape.");
   const canvas = `data:image/png;base64,${Buffer.from(blankCanvasPng(pixels.width, pixels.height)).toString("base64")}`;
   const edit = { ...probe, picture: canvas, references } as Extract<StackMakeRequest, { job: "picture_edit" }>;

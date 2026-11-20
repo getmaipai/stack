@@ -63,6 +63,20 @@
             }
           }
         },
+        "first_picture_shapes": {
+          "landscape": {
+            "standard": {
+              "width": 1344,
+              "height": 768
+            }
+          },
+          "portrait": {
+            "standard": {
+              "width": 768,
+              "height": 1344
+            }
+          }
+        },
         "steps_fixed": true,
         "max_references": 16
       },

@@ -55,11 +55,23 @@ test("the Stack draws the person into a blank canvas of the request's shape, wit
   expect(body.made_with!.notes).toContain(IDENTITY_NOTE);
 });
 
-test("a shape the picture pack does not declare is refused plainly, never answered with another shape (the packs declare square only today)", async () => {
-  const f = fake();
-  for (const shape of ["landscape", "portrait"] as const) {
-    expect(await dispatchIdentityPicture(req({ shape }), parts, read, f.forwardForm), shape).toEqual({ status: 422, body: { code: "input_not_supported", line: "This model cannot make that shape of picture from a person's picture. Choose another shape." } });
+test("a first picture has the clip's shape: landscape and portrait come from the pack's first_picture_shapes, which ordinary shapes never list", async () => {
+  for (const [shape, size] of [["landscape", [1344, 768]], ["portrait", [768, 1344]]] as const) {
+    const f = fake();
+    expect((await dispatchIdentityPicture(req({ shape }), parts, read, f.forwardForm)).status, shape).toBe(200);
+    const png = new Uint8Array(await f.calls[0]!.files.image!.arrayBuffer()); const view = new DataView(png.buffer, png.byteOffset);
+    expect([view.getUint32(16), view.getUint32(20)], shape).toEqual([...size]);
   }
+  // the screens read `shapes` only: the picture packs' ordinary limits stay square
+  const { packs } = await import("@/packs/loader");
+  for (const pack of packs().filter((item) => ["flux3-image-klein", "minimax-h3-image"].includes(item.pack.part))) {
+    for (const name of ["picture", "picture_edit"]) expect(Object.keys(pack.pack.jobs.find((job) => job.job === name)!.limits.shapes ?? {}), `${pack.pack.part} ${name}`).toEqual(["square"]);
+  }
+});
+
+test("a level the first-picture shapes do not declare is refused plainly, never answered with another size", async () => {
+  const f = fake();
+  expect(await dispatchIdentityPicture(req({ shape: "landscape", level: "max" }), parts, read, f.forwardForm)).toMatchObject({ status: 422, body: { code: "input_not_supported" } });
   expect(f.calls).toHaveLength(0);
 });
 
