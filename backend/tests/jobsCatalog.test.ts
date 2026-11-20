@@ -70,3 +70,19 @@ test("the catalog route is not read as a job id", async () => {
   const response = await app.request("/stack/v1/jobs/catalog?audience=adult");
   expect((await response.json() as { jobs?: unknown }).jobs).toBeDefined();
 });
+
+test("the catalog says what this Stack speaks: the spec version it was built against and, per job, the request fields its strict make door accepts (so a client never pays a failed call)", async () => {
+  const { StackMakeRequest } = await import("@maipai/spec/stack/ts/stack-make.js");
+  const specVersion = (await import("@maipai/spec/package.json")).default.version;
+  for (const audience of ["adult", "minor"] as const) {
+    const catalog = await jobsCatalog(audience);
+    expect(catalog.spec).toBe(specVersion);
+    for (const job of catalog.jobs) {
+      const option = StackMakeRequest.options.find((item) => (item.shape.job as { value?: string }).value === job.job);
+      if (!option) { expect(job.request_fields, job.job).toBeUndefined(); continue; }
+      expect(job.request_fields, job.job).toEqual(Object.keys(option.shape));
+    }
+  }
+  const clip = (await jobsCatalog("adult")).jobs.find((job) => job.job === "clip")!;
+  for (const field of ["description", "shape", "level", "seconds", "inputs", "intent", "operation", "take_of", "wait"]) expect(clip.request_fields, field).toContain(field);
+});

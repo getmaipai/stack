@@ -3,6 +3,8 @@
 // view: a minor's catalog lists only the jobs some part in the minor's list serves, with neutral labels, and carries no reason and no
 // alternative (rule C10); a minor's candidates are ordered by the shipped priority and never by the household's order (rule E6).
 import { StackJobsCatalog, type StackJobsCatalog as Catalog } from "@maipai/spec/stack/ts/stack-jobs-catalog.js";
+import { StackMakeRequest } from "@maipai/spec/stack/ts/stack-make.js";
+import specPackage from "@maipai/spec/package.json";
 import type { StackJobName } from "@maipai/spec/stack/ts/stack-model-pack.js";
 import type { StackPartView } from "@maipai/spec/stack/ts/stack-part-view.js";
 import { packs, type LoadedPack } from "@/packs/loader";
@@ -81,6 +83,12 @@ export function catalogOperations(rows: readonly StackOperationRow[], part: Stac
   });
 }
 
+/** VF-CONTRACT-01: every key the pinned spec's request shape for this job has: what this Stack's make door accepts (its schema is strict), so a client sends only these. Empty when the job has no request shape. */
+export function requestFieldsOf(name: StackJobName): string[] {
+  const option = StackMakeRequest.options.find((item) => (item.shape.job as { value?: string }).value === name);
+  return option ? Object.keys(option.shape) : [];
+}
+
 export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): Promise<Catalog> {
   const list = await listParts({ audience, kind: "model" }, hw);
 
@@ -99,6 +107,7 @@ export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): P
       part: chosen ? { id: chosen.part.id, label: chosen.part.label } : null,
       limits: limits ? { levels: levelsOf(limits), ...(limits.max_seconds ? { max_seconds: limits.max_seconds } : {}), ...(limits.max_references !== undefined ? { max_references: limits.max_references } : {}), ...(limits.shapes ? { shapes: limits.shapes } : {}), ...(limits.max_words !== undefined ? { max_words: limits.max_words } : {}) } : { levels: ["standard" as Level] },
       capabilities: capabilities ?? { text: false, end_picture: false, sound: false, keeps_likeness: false },
+      ...(requestFieldsOf(name).length > 0 ? { request_fields: requestFieldsOf(name) } : {}),
       ...(rows.length > 0 ? { operations: catalogOperations(rows, shown!.part, { editSupported: ltx25MaxEditSupported(), audience }) } : {}),
       styles: { bases: shown?.pack.pack.style_bases?.filter((b) => !b.retired).map((b) => ({ id: b.id, label: b.label })) ?? [], max: 0 },
       restyles: [] as Array<{ name: string; label: string }>,
@@ -109,7 +118,7 @@ export async function jobsCatalog(audience: PartsAudience, hw?: HardwareInfo): P
       : `No model that can ${JOB_PHRASE[name]} is installed here. An admin can add one in Settings, AI and models.`;
     return [{ ...entry, why_not: why, alternatives: serving.filter((s) => s !== chosen).map((s) => ({ part: s.part.id, label: s.part.label })) }];
   });
-  const parsed = StackJobsCatalog.safeParse({ audience, jobs });
+  const parsed = StackJobsCatalog.safeParse({ audience, jobs, spec: specPackage.version });
   if (!parsed.success) throw new Error(`The jobs catalog does not match the spec: ${parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
   return parsed.data;
 }
