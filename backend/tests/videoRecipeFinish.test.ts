@@ -50,12 +50,13 @@ describe("the packs declare the finishers the design measured", () => {
     expect(withFinish.length).toBeGreaterThan(0);
     for (const recipe of withFinish) expect(recipe.finish!.map((s) => s.op)).toEqual(["crop", "unsharp"]);
   });
-  test("the H3 pack's quality recipe upscales then lead-ins the audio; a preview recipe has no finish", () => {
+  test("every H3 clip recipe (Standard with the adapter, Standard without it, Boost) enlarges, then silences the opening burst: the old outcome kept", () => {
     const recipes = packFor("minimax-h3")!.pack.jobs.find((job) => job.job === "clip")!.profiles ?? [];
-    const withFinish = recipes.filter((r) => r.finish?.length);
-    expect(withFinish.length).toBeGreaterThan(0);
-    for (const recipe of withFinish) expect(recipe.finish!.map((s) => s.op)).toEqual(["model_upscale", "audio_lead_in"]);
-    expect(recipes.filter((r) => r.profile === "preview").every((r) => !r.finish?.length)).toBe(true);
+    expect(recipes.map((r) => [r.level, r.steps])).toEqual([["standard", 7], ["standard", 12], ["boost", 24]]);
+    for (const recipe of recipes) {
+      expect(recipe.finish!.map((s) => s.op), `${recipe.level} ${recipe.steps}`).toEqual(["model_upscale", "audio_lead_in"]);
+      expect(recipe.finish![1]!.params).toEqual({ mute_ms: 130, fade_ms: 50 });
+    }
   });
 });
 

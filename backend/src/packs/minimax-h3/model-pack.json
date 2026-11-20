@@ -73,7 +73,22 @@
             "required": true
           },
           "label": "Standard",
-          "description": "Quick, with sound"
+          "description": "Quick, with sound",
+          "finish": [
+            {
+              "op": "model_upscale",
+              "params": {
+                "factor": 2
+              }
+            },
+            {
+              "op": "audio_lead_in",
+              "params": {
+                "mute_ms": 130,
+                "fade_ms": 50
+              }
+            }
+          ]
         },
         {
           "level": "standard",
@@ -83,7 +98,22 @@
           "schedule": "h3-12",
           "prompt_format": "h3-sectioned",
           "label": "Standard",
-          "description": "Quick, with sound"
+          "description": "Quick, with sound",
+          "finish": [
+            {
+              "op": "model_upscale",
+              "params": {
+                "factor": 2
+              }
+            },
+            {
+              "op": "audio_lead_in",
+              "params": {
+                "mute_ms": 130,
+                "fade_ms": 50
+              }
+            }
+          ]
         },
         {
           "level": "boost",
