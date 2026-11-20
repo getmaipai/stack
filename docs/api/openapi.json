@@ -4646,6 +4646,38 @@
                     ],
                     "description": "Which level the job runs at: `standard` (the default), `boost` or `max`. Boost and Max may use more of the computer's memory than Standard; a Max job opens the Max window (other jobs wait, chat may run on its smaller model until the job ends). A job too big for its level is refused with the reason. Home decides who may ask for Boost or Max; the Stack takes the word as given. The status and GET /stack/v1/jobs/{id} report it."
                   },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "identity",
+                            "wardrobe",
+                            "voice_reference",
+                            "edit_source"
+                          ]
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "bytes": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "sha256",
+                        "bytes"
+                      ]
+                    },
+                    "maxItems": 8,
+                    "description": "VF-ROLES-01, set by the generic door only: the typed inputs of a clip request, each as a role and the hash of the file. They are written to the job's receipt and not acted on yet (the capability and route rows do that)."
+                  },
                   "quiet_seconds": {
                     "type": "integer",
                     "minimum": 20,
@@ -4740,7 +4772,8 @@
                               "image-to-video",
                               "extend",
                               "retake",
-                              "ic_lora"
+                              "ic_lora",
+                              "swap"
                             ]
                           },
                           "lora_ids": {
@@ -4757,6 +4790,47 @@
                           },
                           "poster_bytes": {
                             "type": "integer"
+                          },
+                          "receipt_url": {
+                            "type": "string",
+                            "description": "VF-RECEIPT-01: GET this for the job's receipt (JSON), on the owner's route only. Absent on a result made before receipts."
+                          },
+                          "native": {
+                            "type": "object",
+                            "properties": {
+                              "width": {
+                                "type": "integer"
+                              },
+                              "height": {
+                                "type": "integer"
+                              },
+                              "frames": {
+                                "type": "integer"
+                              },
+                              "bytes": {
+                                "type": "integer"
+                              },
+                              "kept": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "width",
+                              "height",
+                              "frames",
+                              "bytes",
+                              "kept"
+                            ],
+                            "description": "The file the model made, with its true size; `kept` says it is stored as it was beside the delivered file."
+                          },
+                          "delivered_is": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "finished",
+                              "messaging_copy"
+                            ],
+                            "description": "Whether the delivered video.mp4 is the model's own file, a finished (sharpened or enlarged) copy, or the messaging-ready copy."
                           }
                         },
                         "required": [
@@ -4891,7 +4965,8 @@
                               "image-to-video",
                               "extend",
                               "retake",
-                              "ic_lora"
+                              "ic_lora",
+                              "swap"
                             ]
                           },
                           "lora_ids": {
@@ -4908,6 +4983,47 @@
                           },
                           "poster_bytes": {
                             "type": "integer"
+                          },
+                          "receipt_url": {
+                            "type": "string",
+                            "description": "VF-RECEIPT-01: GET this for the job's receipt (JSON), on the owner's route only. Absent on a result made before receipts."
+                          },
+                          "native": {
+                            "type": "object",
+                            "properties": {
+                              "width": {
+                                "type": "integer"
+                              },
+                              "height": {
+                                "type": "integer"
+                              },
+                              "frames": {
+                                "type": "integer"
+                              },
+                              "bytes": {
+                                "type": "integer"
+                              },
+                              "kept": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "width",
+                              "height",
+                              "frames",
+                              "bytes",
+                              "kept"
+                            ],
+                            "description": "The file the model made, with its true size; `kept` says it is stored as it was beside the delivered file."
+                          },
+                          "delivered_is": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "finished",
+                              "messaging_copy"
+                            ],
+                            "description": "Whether the delivered video.mp4 is the model's own file, a finished (sharpened or enlarged) copy, or the messaging-ready copy."
                           }
                         },
                         "required": [
@@ -5344,7 +5460,8 @@
                               "image-to-video",
                               "extend",
                               "retake",
-                              "ic_lora"
+                              "ic_lora",
+                              "swap"
                             ]
                           },
                           "lora_ids": {
@@ -5361,6 +5478,47 @@
                           },
                           "poster_bytes": {
                             "type": "integer"
+                          },
+                          "receipt_url": {
+                            "type": "string",
+                            "description": "VF-RECEIPT-01: GET this for the job's receipt (JSON), on the owner's route only. Absent on a result made before receipts."
+                          },
+                          "native": {
+                            "type": "object",
+                            "properties": {
+                              "width": {
+                                "type": "integer"
+                              },
+                              "height": {
+                                "type": "integer"
+                              },
+                              "frames": {
+                                "type": "integer"
+                              },
+                              "bytes": {
+                                "type": "integer"
+                              },
+                              "kept": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "width",
+                              "height",
+                              "frames",
+                              "bytes",
+                              "kept"
+                            ],
+                            "description": "The file the model made, with its true size; `kept` says it is stored as it was beside the delivered file."
+                          },
+                          "delivered_is": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "finished",
+                              "messaging_copy"
+                            ],
+                            "description": "Whether the delivered video.mp4 is the model's own file, a finished (sharpened or enlarged) copy, or the messaging-ready copy."
                           }
                         },
                         "required": [
@@ -5495,7 +5653,8 @@
                               "image-to-video",
                               "extend",
                               "retake",
-                              "ic_lora"
+                              "ic_lora",
+                              "swap"
                             ]
                           },
                           "lora_ids": {
@@ -5512,6 +5671,47 @@
                           },
                           "poster_bytes": {
                             "type": "integer"
+                          },
+                          "receipt_url": {
+                            "type": "string",
+                            "description": "VF-RECEIPT-01: GET this for the job's receipt (JSON), on the owner's route only. Absent on a result made before receipts."
+                          },
+                          "native": {
+                            "type": "object",
+                            "properties": {
+                              "width": {
+                                "type": "integer"
+                              },
+                              "height": {
+                                "type": "integer"
+                              },
+                              "frames": {
+                                "type": "integer"
+                              },
+                              "bytes": {
+                                "type": "integer"
+                              },
+                              "kept": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "width",
+                              "height",
+                              "frames",
+                              "bytes",
+                              "kept"
+                            ],
+                            "description": "The file the model made, with its true size; `kept` says it is stored as it was beside the delivered file."
+                          },
+                          "delivered_is": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "finished",
+                              "messaging_copy"
+                            ],
+                            "description": "Whether the delivered video.mp4 is the model's own file, a finished (sharpened or enlarged) copy, or the messaging-ready copy."
                           }
                         },
                         "required": [
@@ -5761,7 +5961,8 @@
                               "image-to-video",
                               "extend",
                               "retake",
-                              "ic_lora"
+                              "ic_lora",
+                              "swap"
                             ]
                           },
                           "lora_ids": {
@@ -5778,6 +5979,47 @@
                           },
                           "poster_bytes": {
                             "type": "integer"
+                          },
+                          "receipt_url": {
+                            "type": "string",
+                            "description": "VF-RECEIPT-01: GET this for the job's receipt (JSON), on the owner's route only. Absent on a result made before receipts."
+                          },
+                          "native": {
+                            "type": "object",
+                            "properties": {
+                              "width": {
+                                "type": "integer"
+                              },
+                              "height": {
+                                "type": "integer"
+                              },
+                              "frames": {
+                                "type": "integer"
+                              },
+                              "bytes": {
+                                "type": "integer"
+                              },
+                              "kept": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "width",
+                              "height",
+                              "frames",
+                              "bytes",
+                              "kept"
+                            ],
+                            "description": "The file the model made, with its true size; `kept` says it is stored as it was beside the delivered file."
+                          },
+                          "delivered_is": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "finished",
+                              "messaging_copy"
+                            ],
+                            "description": "Whether the delivered video.mp4 is the model's own file, a finished (sharpened or enlarged) copy, or the messaging-ready copy."
                           }
                         },
                         "required": [
@@ -5912,7 +6154,8 @@
                               "image-to-video",
                               "extend",
                               "retake",
-                              "ic_lora"
+                              "ic_lora",
+                              "swap"
                             ]
                           },
                           "lora_ids": {
@@ -5929,6 +6172,47 @@
                           },
                           "poster_bytes": {
                             "type": "integer"
+                          },
+                          "receipt_url": {
+                            "type": "string",
+                            "description": "VF-RECEIPT-01: GET this for the job's receipt (JSON), on the owner's route only. Absent on a result made before receipts."
+                          },
+                          "native": {
+                            "type": "object",
+                            "properties": {
+                              "width": {
+                                "type": "integer"
+                              },
+                              "height": {
+                                "type": "integer"
+                              },
+                              "frames": {
+                                "type": "integer"
+                              },
+                              "bytes": {
+                                "type": "integer"
+                              },
+                              "kept": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "width",
+                              "height",
+                              "frames",
+                              "bytes",
+                              "kept"
+                            ],
+                            "description": "The file the model made, with its true size; `kept` says it is stored as it was beside the delivered file."
+                          },
+                          "delivered_is": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "finished",
+                              "messaging_copy"
+                            ],
+                            "description": "Whether the delivered video.mp4 is the model's own file, a finished (sharpened or enlarged) copy, or the messaging-ready copy."
                           }
                         },
                         "required": [
@@ -6315,7 +6599,8 @@
                               "image-to-video",
                               "extend",
                               "retake",
-                              "ic_lora"
+                              "ic_lora",
+                              "swap"
                             ]
                           },
                           "lora_ids": {
@@ -6332,6 +6617,47 @@
                           },
                           "poster_bytes": {
                             "type": "integer"
+                          },
+                          "receipt_url": {
+                            "type": "string",
+                            "description": "VF-RECEIPT-01: GET this for the job's receipt (JSON), on the owner's route only. Absent on a result made before receipts."
+                          },
+                          "native": {
+                            "type": "object",
+                            "properties": {
+                              "width": {
+                                "type": "integer"
+                              },
+                              "height": {
+                                "type": "integer"
+                              },
+                              "frames": {
+                                "type": "integer"
+                              },
+                              "bytes": {
+                                "type": "integer"
+                              },
+                              "kept": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "width",
+                              "height",
+                              "frames",
+                              "bytes",
+                              "kept"
+                            ],
+                            "description": "The file the model made, with its true size; `kept` says it is stored as it was beside the delivered file."
+                          },
+                          "delivered_is": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "finished",
+                              "messaging_copy"
+                            ],
+                            "description": "Whether the delivered video.mp4 is the model's own file, a finished (sharpened or enlarged) copy, or the messaging-ready copy."
                           }
                         },
                         "required": [
@@ -6654,6 +6980,70 @@
           },
           "404": {
             "description": "The poster is gone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "disk"
+                      ]
+                    },
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/generations/{job}/receipt.json": {
+      "get": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "The job's receipt (VF-RECEIPT-01)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "job",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What made the clip: runtime and model, steps, adapter, inputs by role and hash, requested and delivered sizes probed from the files, the finish that ran, the prompt as a byte count and hash. Part of the owner's record: it is not logged and no status route carries it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No receipt: the clip is gone, or it was made before receipts.",
             "content": {
               "application/json": {
                 "schema": {
@@ -15584,6 +15974,162 @@
                                 ],
                                 "additionalProperties": false
                               },
+                              "operations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "operation": {
+                                      "type": "string",
+                                      "enum": [
+                                        "clip_text",
+                                        "clip_start_picture",
+                                        "clip_start_end_pictures",
+                                        "clip_sheet",
+                                        "clip_references",
+                                        "clip_film_shot",
+                                        "extend",
+                                        "retake",
+                                        "swap",
+                                        "enhance"
+                                      ]
+                                    },
+                                    "level": {
+                                      "type": "string",
+                                      "enum": [
+                                        "standard",
+                                        "boost",
+                                        "max"
+                                      ]
+                                    },
+                                    "available": {
+                                      "type": "boolean"
+                                    },
+                                    "unavailable_reason": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "inputs": {
+                                      "type": "object",
+                                      "properties": {
+                                        "start_picture": {
+                                          "type": "boolean"
+                                        },
+                                        "end_picture": {
+                                          "type": "boolean"
+                                        },
+                                        "references": {
+                                          "type": "integer",
+                                          "minimum": 0
+                                        },
+                                        "sheets": {
+                                          "type": "integer",
+                                          "minimum": 0
+                                        },
+                                        "source_clip": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      "required": [
+                                        "start_picture",
+                                        "end_picture",
+                                        "references",
+                                        "sheets",
+                                        "source_clip"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "seconds": {
+                                      "type": "object",
+                                      "properties": {
+                                        "min": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "exclusiveMinimum": true
+                                        },
+                                        "max": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "exclusiveMinimum": true
+                                        }
+                                      },
+                                      "required": [
+                                        "min",
+                                        "max"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "sizes": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "width": {
+                                            "type": "integer",
+                                            "minimum": 1
+                                          },
+                                          "height": {
+                                            "type": "integer",
+                                            "minimum": 1
+                                          },
+                                          "orientation": {
+                                            "type": "string",
+                                            "enum": [
+                                              "landscape",
+                                              "portrait",
+                                              "square"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "width",
+                                          "height",
+                                          "orientation"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "sound": {
+                                      "type": "object",
+                                      "properties": {
+                                        "generated": {
+                                          "type": "boolean"
+                                        },
+                                        "voice_reference": {
+                                          "type": "boolean"
+                                        },
+                                        "keeps_source_audio": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      "required": [
+                                        "generated",
+                                        "voice_reference",
+                                        "keeps_source_audio"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "requires": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "operation",
+                                    "level",
+                                    "available",
+                                    "inputs",
+                                    "seconds",
+                                    "sizes",
+                                    "sound",
+                                    "requires"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "styles": {
                                 "type": "object",
                                 "properties": {
@@ -15600,6 +16146,38 @@
                                         "label": {
                                           "type": "string",
                                           "minLength": 1
+                                        },
+                                        "short": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "media": {
+                                          "type": "string",
+                                          "enum": [
+                                            "picture",
+                                            "video"
+                                          ]
+                                        },
+                                        "civitai_labels": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "text_patterns": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "generic_labels": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
                                         }
                                       },
                                       "required": [
@@ -16031,6 +16609,162 @@
                                 ],
                                 "additionalProperties": false
                               },
+                              "operations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "operation": {
+                                      "type": "string",
+                                      "enum": [
+                                        "clip_text",
+                                        "clip_start_picture",
+                                        "clip_start_end_pictures",
+                                        "clip_sheet",
+                                        "clip_references",
+                                        "clip_film_shot",
+                                        "extend",
+                                        "retake",
+                                        "swap",
+                                        "enhance"
+                                      ]
+                                    },
+                                    "level": {
+                                      "type": "string",
+                                      "enum": [
+                                        "standard",
+                                        "boost",
+                                        "max"
+                                      ]
+                                    },
+                                    "available": {
+                                      "type": "boolean"
+                                    },
+                                    "unavailable_reason": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "inputs": {
+                                      "type": "object",
+                                      "properties": {
+                                        "start_picture": {
+                                          "type": "boolean"
+                                        },
+                                        "end_picture": {
+                                          "type": "boolean"
+                                        },
+                                        "references": {
+                                          "type": "integer",
+                                          "minimum": 0
+                                        },
+                                        "sheets": {
+                                          "type": "integer",
+                                          "minimum": 0
+                                        },
+                                        "source_clip": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      "required": [
+                                        "start_picture",
+                                        "end_picture",
+                                        "references",
+                                        "sheets",
+                                        "source_clip"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "seconds": {
+                                      "type": "object",
+                                      "properties": {
+                                        "min": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "exclusiveMinimum": true
+                                        },
+                                        "max": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "exclusiveMinimum": true
+                                        }
+                                      },
+                                      "required": [
+                                        "min",
+                                        "max"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "sizes": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "width": {
+                                            "type": "integer",
+                                            "minimum": 1
+                                          },
+                                          "height": {
+                                            "type": "integer",
+                                            "minimum": 1
+                                          },
+                                          "orientation": {
+                                            "type": "string",
+                                            "enum": [
+                                              "landscape",
+                                              "portrait",
+                                              "square"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "width",
+                                          "height",
+                                          "orientation"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "sound": {
+                                      "type": "object",
+                                      "properties": {
+                                        "generated": {
+                                          "type": "boolean"
+                                        },
+                                        "voice_reference": {
+                                          "type": "boolean"
+                                        },
+                                        "keeps_source_audio": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      "required": [
+                                        "generated",
+                                        "voice_reference",
+                                        "keeps_source_audio"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "requires": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "operation",
+                                    "level",
+                                    "available",
+                                    "inputs",
+                                    "seconds",
+                                    "sizes",
+                                    "sound",
+                                    "requires"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
                               "styles": {
                                 "type": "object",
                                 "properties": {
@@ -16047,6 +16781,38 @@
                                         "label": {
                                           "type": "string",
                                           "minLength": 1
+                                        },
+                                        "short": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "media": {
+                                          "type": "string",
+                                          "enum": [
+                                            "picture",
+                                            "video"
+                                          ]
+                                        },
+                                        "civitai_labels": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "text_patterns": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "generic_labels": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
                                         }
                                       },
                                       "required": [
@@ -16172,6 +16938,11 @@
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
                       },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
+                      },
                       "description": {
                         "type": "string",
                         "minLength": 1
@@ -16240,6 +17011,11 @@
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
                       },
                       "picture": {
                         "type": "string",
@@ -16310,6 +17086,11 @@
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
                       },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
+                      },
                       "description": {
                         "type": "string",
                         "minLength": 1
@@ -16352,6 +17133,64 @@
                       },
                       "seed": {
                         "type": "integer"
+                      },
+                      "inputs": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "identity",
+                                "wardrobe",
+                                "voice_reference",
+                                "edit_source"
+                              ]
+                            },
+                            "file": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "role",
+                            "file"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "dialogue": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "speaker": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "text": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "language": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "speaker",
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "intent": {
+                        "type": "string",
+                        "enum": [
+                          "open_on_picture",
+                          "new_shot"
+                        ]
                       }
                     },
                     "required": [
@@ -16384,6 +17223,11 @@
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
                       },
                       "sheet": {
                         "type": "string",
@@ -16447,6 +17291,11 @@
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
                       },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
+                      },
                       "clip": {
                         "type": "string",
                         "minLength": 1
@@ -16488,6 +17337,11 @@
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
                       },
                       "clip": {
                         "type": "string",
@@ -16554,6 +17408,11 @@
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
                       },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
+                      },
                       "references": {
                         "type": "array",
                         "items": {
@@ -16613,6 +17472,11 @@
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
                       },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
+                      },
                       "references": {
                         "type": "array",
                         "items": {
@@ -16668,6 +17532,11 @@
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
                       },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
+                      },
                       "description": {
                         "type": "string",
                         "minLength": 1
@@ -16699,6 +17568,19 @@
                       "seed": {
                         "type": "integer",
                         "minimum": 0
+                      },
+                      "bpm": {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMinimum": true
+                      },
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "language": {
+                        "type": "string",
+                        "minLength": 1
                       }
                     },
                     "required": [
@@ -16730,6 +17612,11 @@
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
                       },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
+                      },
                       "song": {
                         "type": "string",
                         "minLength": 1
@@ -16757,6 +17644,14 @@
                                   "type": "string",
                                   "minLength": 1
                                 }
+                              },
+                              "description": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "lyrics": {
+                                "type": "string",
+                                "minLength": 1
                               }
                             },
                             "required": [
@@ -16866,6 +17761,11 @@
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
                       },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
+                      },
                       "description": {
                         "type": "string",
                         "minLength": 1
@@ -16905,6 +17805,11 @@
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
                       },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
+                      },
                       "song": {
                         "type": "string",
                         "minLength": 1
@@ -16916,6 +17821,12 @@
                           "minLength": 1
                         },
                         "minItems": 1
+                      },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "owned_file"
+                        ]
                       }
                     },
                     "required": [
@@ -16946,6 +17857,11 @@
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
                       },
                       "vocal": {
                         "type": "string",
@@ -16992,6 +17908,11 @@
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                      },
+                      "wait": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 120
                       },
                       "song": {
                         "type": "string",
@@ -17103,6 +18024,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -17125,10 +18050,125 @@
                             "clip_from_sheet",
                             "restyle",
                             "swap",
-                            "song",
-                            "song_edit",
                             "sound_effect",
                             "vocal_swap"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "state",
+                        "percent",
+                        "status",
+                        "files",
+                        "poster",
+                        "made_with",
+                        "job"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "waiting_for_you",
+                            "paused",
+                            "stalled",
+                            "done",
+                            "failed",
+                            "cancelled"
+                          ]
+                        },
+                        "percent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "poster": {
+                          "type": "string",
+                          "nullable": true,
+                          "minLength": 1
+                        },
+                        "made_with": {
+                          "type": "object",
+                          "properties": {
+                            "part": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pack_version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "shape": {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                "landscape",
+                                "portrait",
+                                "square",
+                                null
+                              ]
+                            },
+                            "seconds": {
+                              "type": "number",
+                              "nullable": true,
+                              "minimum": 0
+                            },
+                            "sound": {
+                              "type": "boolean"
+                            },
+                            "notes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "part",
+                            "label",
+                            "pack_version",
+                            "shape",
+                            "seconds",
+                            "sound",
+                            "notes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "job": {
+                          "type": "string",
+                          "enum": [
+                            "song",
+                            "song_edit"
                           ]
                         }
                       },
@@ -17225,6 +18265,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -17346,6 +18390,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -17428,7 +18476,6 @@
                         },
                         "made_with": {
                           "type": "object",
-                          "nullable": true,
                           "properties": {
                             "part": {
                               "type": "string",
@@ -17467,6 +18514,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -17602,6 +18653,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -17748,6 +18803,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -17770,10 +18829,125 @@
                             "clip_from_sheet",
                             "restyle",
                             "swap",
-                            "song",
-                            "song_edit",
                             "sound_effect",
                             "vocal_swap"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "state",
+                        "percent",
+                        "status",
+                        "files",
+                        "poster",
+                        "made_with",
+                        "job"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "waiting_for_you",
+                            "paused",
+                            "stalled",
+                            "done",
+                            "failed",
+                            "cancelled"
+                          ]
+                        },
+                        "percent": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "files": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "poster": {
+                          "type": "string",
+                          "nullable": true,
+                          "minLength": 1
+                        },
+                        "made_with": {
+                          "type": "object",
+                          "properties": {
+                            "part": {
+                              "type": "string",
+                              "minLength": 1,
+                              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pack_version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "shape": {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                "landscape",
+                                "portrait",
+                                "square",
+                                null
+                              ]
+                            },
+                            "seconds": {
+                              "type": "number",
+                              "nullable": true,
+                              "minimum": 0
+                            },
+                            "sound": {
+                              "type": "boolean"
+                            },
+                            "notes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "part",
+                            "label",
+                            "pack_version",
+                            "shape",
+                            "seconds",
+                            "sound",
+                            "notes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "job": {
+                          "type": "string",
+                          "enum": [
+                            "song",
+                            "song_edit"
                           ]
                         }
                       },
@@ -17870,6 +19044,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -17991,6 +19169,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -18073,7 +19255,6 @@
                         },
                         "made_with": {
                           "type": "object",
-                          "nullable": true,
                           "properties": {
                             "part": {
                               "type": "string",
@@ -18112,6 +19293,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -18247,6 +19432,10 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "receipt": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -18345,7 +19534,9 @@
                           "type": "string",
                           "enum": [
                             "shape_not_served",
-                            "level_not_served"
+                            "level_not_served",
+                            "input_not_supported",
+                            "not_installed"
                           ]
                         },
                         "line": {
