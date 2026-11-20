@@ -34,6 +34,6 @@ export async function h3PinStatus(home = process.env.MAIPAI_H3_VIDEO_HOME || eng
     if (!hash) { hash = await sha256(path); hashCache.set(key, hash); }
     (hash === file.sha256 ? matched : mismatched).push(file.local);
   }
-  const state = absent.length || mismatched.length || unchecked.length ? (fromVariable || existsSync(home) ? "existing_unverified" : "missing") : fromVariable ? "adopted_existing" : "pinned";
+  const state = absent.length || mismatched.length || unchecked.length ? (existsSync(home) ? "existing_unverified" : "missing") : fromVariable ? "adopted_existing" : "pinned";
   return { state, matched, mismatched, absent, unpublished_local: ["transformers/4-bit-pruned-stream2", "loras/minimax_h3_turbo_v4_step600_ema.safetensors"] };
 }

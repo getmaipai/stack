@@ -44,6 +44,13 @@ test("recognizes complete and changed environment-only installs without blocking
   expect(videoModelPaths("h3")?.h3Home).toBe(home);
 });
 
+test("a variable pointing at a folder that does not exist reads missing, not existing_unverified", async () => {
+  const gone = join(root(), "not-mounted");
+  process.env.MAIPAI_H3_VIDEO_HOME = gone;
+  const files = [{ repo: "test/repo", revision: "a".repeat(40), path: "x", local: "weights/x", bytes: 1, sha256: "0".repeat(64) }];
+  expect((await h3PinStatus(gone, files)).state).toBe("missing");
+});
+
 test("uses source-root or legacy node script and follows the documented language", async () => {
   const home = root();
   const make = () => { mkdirSync(join(home, ".venv/bin"), { recursive: true }); writeFileSync(join(home, ".venv/bin/python"), ""); mkdirSync(join(home, "models/minimax_h3/upstream/FL2VA"), { recursive: true }); mkdirSync(join(home, "models/minimax_h3/qwen/8-bit"), { recursive: true }); mkdirSync(join(home, "models/minimax_h3/transformers/8-bit"), { recursive: true }); };

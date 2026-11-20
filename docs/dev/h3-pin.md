@@ -8,4 +8,8 @@ The Stack recognizes an existing H3 install by checking the published pinned fil
 
 `MAIPAI_H3_VIDEO_HOME` continues to select the runtime folder. This is a softer rule than ignored until a pinned part replaces what a hub runs: the existing install keeps working while its folder is recognized, and new installs use only the published pinned files.
 
+`pinned` means the published files are all present and verified; it does not mean the engine can run. Runtime readiness is separate (the video model paths and the engine's own checks), so never read `pinned` or `adopted_existing` as "runnable".
+
+The status check reads the folder with synchronous file calls. On an unmounted or stalled volume a stat can hang the caller until the volume answers, so a caller that must stay responsive should run it off the request path. A variable that points at a folder that does not exist reads `missing`.
+
 Real cold timings and a real download have not been measured.
