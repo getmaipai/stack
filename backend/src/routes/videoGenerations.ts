@@ -510,7 +510,7 @@ async function submitEdit(c: Context, body: z.infer<typeof VideoRequestSchema>, 
   }
   const seed = body.seed ?? Math.floor(Math.random() * 2 ** 32);
   const [width, height] = (size ?? LTX25_MAX_EDIT_MEASURED[0]!.size).split("x").map(Number) as [number, number];
-  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image: null, endImage: null, width, height, frames: sourceFrames, seed, loras: [], loraIds: [], quality, preview: body.preview !== false, edit: { kind: editKind, sourcePath, seconds } }, { size: size ?? "", seconds: Math.round(seconds), mode: editKind, edit: editKind }, ltx25EditAdmitBytes(editKind, size));
+  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image: null, endImage: null, width, height, frames: sourceFrames, seed, loras: [], loraIds: [], quality, preview: body.preview !== false, edit: { kind: editKind, sourcePath, seconds }, ...(body.route ? { route: body.route } : {}) }, { size: size ?? "", seconds: Math.round(seconds), mode: editKind, edit: editKind }, ltx25EditAdmitBytes(editKind, size));
 }
 
 videoV1Routes.openapi(getRoute, (c) => {

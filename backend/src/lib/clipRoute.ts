@@ -4,7 +4,7 @@ import { checkVideoInputs } from "@/video/caps";
 
 type ClipRequest = Extract<StackMakeRequest, { job: "clip" }>;
 export type PlannedClipRoute =
-  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend"; identityUsed: number; reason: string }
+  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend"; identityUsed: number; reason: string; /** The request is a film shot: the dispatcher chooses the Max recipe from the machine (no size field). */ filmShot?: true }
   | { ok: false; refusal: StackMakeRefusal };
 
 export const NEEDS_START_PICTURE_LINE = "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.";
@@ -16,6 +16,7 @@ export function planClipRoute(request: ClipRequest, rows: readonly StackOperatio
   const hasWardrobe = request.inputs?.some((input) => input.role === "wardrobe") ?? false;
   const hasEditSource = request.inputs?.some((input) => input.role === "edit_source") ?? false;
   if (request.operation === "enhance") return refuse("Enhancing a clip has its own request.");
+  if (request.operation === "clip_film_shot" && !rows.some((candidate) => candidate.operation === "clip_film_shot" && candidate.available)) return refuse("This model does not make film shots in full HD. Ask for a plain clip, or use a model that does.");
   if (request.operation === "retake_from" || request.operation === "extend") {
     if (request.start_picture || request.end_picture || identityCount || hasVoice || hasWardrobe || (request.inputs ?? []).some((input) => input.role !== "edit_source")) return refuse("Retaking or extending a clip cannot be combined with pictures or other inputs.");
     if (!hasEditSource) return refuse("Send an edit_source clip to retake or extend.");
@@ -65,5 +66,5 @@ export function planClipRoute(request: ClipRequest, rows: readonly StackOperatio
   if (rowRefusal) return { ok: false, refusal: { code: "input_not_supported", line: rowRefusal.line } };
   if (hasWardrobe && route !== "references") return refuse("Wardrobe pictures are only supported with reference-picture clips.");
   if (hasVoice && !selected.sound.voice_reference) return refuse("This clip operation does not support a voice reference.");
-  return { ok: true, route, operation, identityUsed, reason };
+  return { ok: true, route, operation, identityUsed, reason, ...(request.operation === "clip_film_shot" ? { filmShot: true as const } : {}) };
 }

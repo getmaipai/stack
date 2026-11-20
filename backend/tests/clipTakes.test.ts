@@ -5,6 +5,8 @@ import { planMake } from "@/lib/makePlan";
 import { planClipRoute } from "@/lib/clipRoute";
 import { rowsForJob } from "@/video/caps";
 import { PART_DEFS } from "@/lib/partDefs";
+import { __resetGovernorForTests, setMetalCapBytes, tierRoomBytes } from "@/lib/governor";
+import { setMachineTier } from "@/lib/supervisor";
 import { __setPartsHardwareForTests } from "@/lib/partsList";
 import { __resetPartChoicesForTests } from "@/lib/partChoices";
 import { StackMakeRequest } from "@maipai/spec/stack/ts/stack-make.js";
@@ -66,4 +68,42 @@ test("a plain request without take_of sends no take_of and no source fields (the
   expect(body.take_of).toBeUndefined();
   expect(body.source_video).toBeUndefined();
   expect(body.extend_seconds).toBeUndefined();
+});
+
+test("a film shot is planned on a Max pack with a film-shot row, refused with a plain line elsewhere, and carries no size field in the request", () => {
+  expect(planClipRoute(clip({ operation: "clip_film_shot" }), max)).toMatchObject({ ok: true, filmShot: true });
+  for (const [part, level] of [["ltx-2-5-q8-distilled-mlx", "standard"], ["minimax-h3", "standard"]] as const) {
+    expect(planClipRoute(clip({ level, operation: "clip_film_shot" }), rowsForJob(part, "clip")), part).toMatchObject({ ok: false, refusal: { code: "input_not_supported" } });
+  }
+  expect(StackMakeRequest.safeParse(clip({ operation: "clip_film_shot" })).success).toBe(true);
+  expect(StackMakeRequest.safeParse(clip({ operation: "clip_film_shot", size: "1920x1088" })).success).toBe(false);
+});
+
+test("a film shot goes to the legacy door at full HD only when the Max room holds it and the clip is within full HD's seconds; otherwise at the standard Max size, and the route reason says which", async () => {
+  const plan = planMake(clip({ operation: "clip_film_shot", seconds: 5 }), [ready("ltx-2-5-bf16-distilled-mlx-max")]);
+  if (!plan.ok) throw new Error("not planned");
+  const run = async (seconds: number) => {
+    let body: Record<string, unknown> = {};
+    await dispatchClip(clip({ operation: "clip_film_shot", seconds }), plan, async (_path, sent) => { body = sent as Record<string, unknown>; return { status: 200, json: { job: "j", data: [] } }; }, async () => null);
+    return body as { size?: string; route?: { name: string; reason: string } };
+  };
+  const hd = await run(5);
+  expect(hd.size).toBe("1920x1088");
+  expect(hd.route?.reason).toContain("full HD because this computer can hold it");
+  const long = await run(8);
+  expect(long.size).toBe("1024x576");
+  expect(long.route?.reason).toContain("at most 5 seconds");
+});
+
+test("a film shot falls back to the standard Max size, never full HD, when the Max room cannot hold full HD (the receipt reason says so)", async () => {
+  setMachineTier("p128"); setMetalCapBytes(60 * GB);
+  try {
+    expect(tierRoomBytes("max")).toBeLessThan(77_700_000_000);
+    const plan = planMake(clip({ operation: "clip_film_shot", seconds: 5 }), [ready("ltx-2-5-bf16-distilled-mlx-max")]);
+    if (!plan.ok) throw new Error("not planned");
+    let body: Record<string, unknown> = {};
+    await dispatchClip(clip({ operation: "clip_film_shot", seconds: 5 }), plan, async (_path, sent) => { body = sent as Record<string, unknown>; return { status: 200, json: { job: "j", data: [] } }; }, async () => null);
+    expect((body as { size?: string }).size).toBe("1024x576");
+    expect((body as { route?: { reason: string } }).route?.reason).toContain("cannot hold full HD right now");
+  } finally { setMachineTier(null); __resetGovernorForTests(); }
 });

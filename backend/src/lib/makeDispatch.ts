@@ -7,7 +7,9 @@ import type { MakePlan } from "@/lib/makePlan";
 import { fillRecipe } from "@/lib/recipe";
 import { writePrompt, writerData } from "@/video/promptWriter";
 import { planClipRoute } from "@/lib/clipRoute";
-import { rowsForJob } from "@/video/caps";
+import { engineOfPart, rowsForJob } from "@/video/caps";
+import { videoRecipe } from "@/video/recipes";
+import { tierRoomBytes } from "@/lib/governor";
 import { resolveReadable } from "@/media/paths";
 import { videoPath, readResult, readTake } from "@/video/results";
 import { packFor } from "@/packs/loader";
@@ -128,7 +130,16 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
   const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"));
   if (!chosen.ok) return { status: 422, body: chosen.refusal };
   const savedTake = request.take_of ? readTake(request.take_of) : null;
-  const route = request.operation === "retake_from" || request.operation === "extend" ? undefined : { name: savedTake?.route ?? chosen.route, reason: savedTake ? "Another take from the saved clip route." : chosen.reason };
+  // VF-ROUTE-01 follow-up: a film shot is made at the best Max recipe this computer can hold (full HD when admitted), chosen here from the operation and the machine, never from a size field.
+  let filmSize: string | null = null; let filmReason = chosen.reason;
+  if (chosen.filmShot) {
+    const engine = engineOfPart(plan.serving.part.id);
+    const hdRow = rowsForJob(plan.serving.part.id, "clip").find((row) => row.operation === "clip_film_shot" && row.available);
+    const picked = engine ? videoRecipe(engine, "max", "clip_film_shot", undefined, tierRoomBytes("max")) : null;
+    if (picked?.recipe.size && hdRow && request.seconds <= hdRow.seconds.max) { filmSize = `${picked.recipe.size.width}x${picked.recipe.size.height}`; filmReason = "A film shot, made in full HD because this computer can hold it."; }
+    else filmReason = picked?.recipe.size ? `A film shot at the standard Max size: full HD makes at most ${hdRow?.seconds.max ?? 5} seconds.` : "A film shot at the standard Max size, because this computer cannot hold full HD right now.";
+  }
+  const route = request.operation === "retake_from" || request.operation === "extend" ? { name: request.operation, reason: chosen.reason } : { name: savedTake?.route ?? chosen.route, reason: savedTake ? "Another take from the saved clip route." : filmReason };
   if (request.operation === "retake_from" || request.operation === "extend") {
     const source = request.inputs?.find((input) => input.role === "edit_source")?.file;
     let sourcePath: string;
@@ -149,7 +160,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
     return { status: sent.status, body: { id: reply.job, job: "clip", state: first ? "done" : "running", percent: first ? 100 : 0, status: first ? "Done" : "Making your clip", files: (reply.data ?? []).map((d) => d.url), poster: first?.poster_url ?? null, made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job } } };
   }
   let body: Record<string, unknown>;
-  try { body = clipBody(request, plan, route); }
+  try { body = clipBody(request, plan, route); if (filmSize) body.size = filmSize; }
   catch (error) { return { status: 422, body: { code: "invalid_request", line: error instanceof Error ? error.message : "The clip's words could not be turned into a prompt. Describe what the clip shows and try again." } }; }
   if (request.start_picture || request.end_picture) {
     const first = request.start_picture && read ? await pictureDataUrl(request.start_picture, read) : null;
