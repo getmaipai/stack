@@ -17,6 +17,9 @@ export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit
 type Forward = (path: string, body: unknown) => Promise<{ status: number; json: unknown }>;
 type Planned = Extract<MakePlan, { ok: true }>;
 
+/** The request's `styles` (library ids of the household's style files) as the old routes' `loras`; the route checks the file fits the part. */
+const stylesAsLoras = (styles: string[] | undefined): Record<string, unknown> => (styles?.length ? { loras: styles.map((id) => ({ id })) } : {});
+
 /** The request's `wait` (whole seconds) as the old route's `timeout_ms`. Zero is the shortest wait the route takes, so the answer is 202 with the job id. */
 export function withWait(body: Record<string, unknown>, wait: number | undefined): Record<string, unknown> {
   return wait === undefined ? body : { ...body, timeout_ms: Math.max(1, wait * 1000) };
@@ -28,7 +31,7 @@ export function pictureBody(request: Extract<StackMakeRequest, { job: "picture" 
   return {
     model: plan.serving.part.id, prompt: fillRecipe(recipe, { description: request.description, words: request.words }),
     ...(pixels ? { size: `${pixels.width}x${pixels.height}` } : {}), ...(request.count ? { n: request.count } : {}), ...(request.seed !== undefined ? { seed: request.seed } : {}),
-    audience: request.audience === "adult" ? "adult" : "all-ages",
+    audience: request.audience === "adult" ? "adult" : "all-ages", ...stylesAsLoras(request.styles),
   };
 }
 
@@ -107,7 +110,7 @@ export function clipBody(request: ClipRequest, plan: Planned, route?: { name: st
     model: plan.serving.part.id, prompt: written ? written.text : fillRecipe(recipe, { description: request.description }),
     ...(written ? { prompt_writer: written.writer, prompt_hints: written.hints } : {}),
     ...(pixels ? { size: `${pixels.width}x${pixels.height}` } : {}), seconds: Math.round(request.seconds), ...(request.seed !== undefined ? { seed: request.seed } : {}),
-    audience: request.audience === "adult" ? "adult" : "all-ages",
+    audience: request.audience === "adult" ? "adult" : "all-ages", ...stylesAsLoras(request.styles),
     // VF-DOOR-01: the level is the job's tier, so a Boost or Max clip is admitted, governed and classed as one (a Standard clip keeps the untiered admission, as on the
     // old door); the household's quiet window passes through; a caller that will not wait (`wait` 0) gets the job id at once.
     level: plan.level,
