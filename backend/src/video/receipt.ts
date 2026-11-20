@@ -70,6 +70,7 @@ export interface BuildReceiptInput extends ReceiptFacts {
   promptHints?: readonly string[] | undefined;
   inputs: Receipt["inputs"];
   route?: Receipt["route"];
+  takeOf?: string;
 }
 
 /** The receipt, validated against the spec's shape so a wrong one is never written. */
@@ -82,6 +83,7 @@ export function buildReceipt(input: BuildReceiptInput): Receipt {
     seed: input.seed, phases: input.phases.map((phase) => ({ name: phase.name, ms: Math.max(0, Math.round(phase.ms)) })),
     peak_memory_bytes: input.peakBytes, finish: input.finish, prompt: { bytes: prompt.length, sha256: sha256Hex(prompt), ...(input.promptWriter ? { writer: input.promptWriter } : {}), ...(input.promptHints?.length ? { hints: [...input.promptHints] } : {}) },
     ...(input.route ? { route: input.route } : {}),
+    ...(input.takeOf ? { take_of: input.takeOf } : {}),
   });
 }
 

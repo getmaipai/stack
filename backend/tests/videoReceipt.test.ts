@@ -44,6 +44,12 @@ test("a receipt with a bad hash is refused rather than written", () => {
   })).toThrow();
 });
 
+test("legacy receipt builders omit take_of and take receipts record their first job", () => {
+  const base = { job: "job-1", operation: "generate" as const, madeAt: new Date(), runtime: { id: "r", revision: "1" }, model: { id: "m", build: "b", quantization: null }, steps: { count: null, schedule: null }, adapter: null, inputs: [], requested: { width: 1, height: 1, frames: 0, seconds: 0 }, native: file(1, 1), delivered: file(1, 1), deliveredIs: "native" as const, seed: null, phases: [], peakBytes: null, finish: [], prompt: "" };
+  expect(buildReceipt(base)).not.toHaveProperty("take_of");
+  expect(buildReceipt({ ...base, takeOf: "job-first" })).toHaveProperty("take_of", "job-first");
+});
+
 test("phase times add up the time each phase was in, in the order entered", () => {
   expect(phaseDurations([{ name: "waiting", at: 0 }, { name: "loading", at: 100 }, { name: "rendering", at: 300 }, { name: "rendering", at: 400 }], 1000)).toEqual([{ name: "waiting", ms: 100 }, { name: "loading", ms: 200 }, { name: "rendering", ms: 700 }]);
 });

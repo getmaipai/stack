@@ -430,3 +430,11 @@ test("the model listing keeps every field it had: qualities.h3 and qualities.ltx
   expect(q.ltx25!.limits).toMatchObject({ max_seconds: 10, fps: 24, default_size: "512x256", size_step: 32, max_frames: 241 });
   expect(Object.keys(q.ltx25max!.limits).sort()).toEqual(["default_size", "fps", "max_frames", "max_pixels", "max_seconds", "min_side", "size_step"]);
 });
+
+test("another take of a clip that does not exist is refused 409 not_available with a plain line, before any work starts", async () => {
+  const response = await post({ prompt: "x", model: MODEL.h3, take_of: "no-such-job", timeout_ms: 5000 });
+  const body = await response.json() as Err;
+  expect([response.status, body.code]).toEqual([409, "not_available"]);
+  expect(body.error).toContain("another take of could not be found");
+  expect(h3Commands).toEqual([]);
+});

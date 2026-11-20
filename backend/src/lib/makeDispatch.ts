@@ -8,6 +8,9 @@ import { fillRecipe } from "@/lib/recipe";
 import { writePrompt, writerData } from "@/video/promptWriter";
 import { planClipRoute } from "@/lib/clipRoute";
 import { rowsForJob } from "@/video/caps";
+import { resolveReadable } from "@/media/paths";
+import { videoPath, readResult } from "@/video/results";
+import { existsSync } from "node:fs";
 
 export const WIRED_JOBS: ReadonlySet<string> = new Set(["picture", "picture_edit", "clip", "swap", "song", "song_edit", "stems", "character_sheet", "contact_sheet"]);
 
@@ -107,6 +110,7 @@ export function clipBody(request: ClipRequest, plan: Planned, route?: { name: st
     ...(request.quiet_seconds !== undefined ? { quiet_seconds: request.quiet_seconds } : {}),
     ...(request.quiet_max_wait_seconds !== undefined ? { quiet_max_wait_seconds: request.quiet_max_wait_seconds } : {}),
     ...(request.wait !== undefined ? { timeout_ms: Math.max(1, request.wait * 1000) } : {}),
+    ...(request.take_of ? { take_of: request.take_of } : {}),
     ...(route ? { route } : {}),
   };
 }
@@ -114,7 +118,26 @@ export function clipBody(request: ClipRequest, plan: Planned, route?: { name: st
 export async function dispatchClip(request: ClipRequest, plan: Planned, forward: Forward, read?: PictureBytes): Promise<{ status: number; body: unknown }> {
   const chosen = planClipRoute(request, rowsForJob(plan.serving.part.id, "clip").filter((row) => row.level === plan.level || row.operation === "clip_film_shot"));
   if (!chosen.ok) return { status: 422, body: chosen.refusal };
-  const route = { name: chosen.route, reason: chosen.reason };
+  const route = request.operation === "retake_from" || request.operation === "extend" ? undefined : { name: chosen.route, reason: chosen.reason };
+  if (request.operation === "retake_from" || request.operation === "extend") {
+    const source = request.inputs?.find((input) => input.role === "edit_source")?.file;
+    let sourcePath: string;
+    try {
+      const match = source?.match(/^\/v1\/videos\/generations\/([^/]+)\/video\.mp4$/);
+      const job = match?.[1];
+      if (job) {
+        if (!readResult(job) || !existsSync(videoPath(job))) throw new Error("missing video result");
+        sourcePath = videoPath(job);
+      } else sourcePath = resolveReadable(source ?? "");
+    } catch { return { status: 409, body: { code: "not_available", line: INPUT_UNREADABLE_LINE } }; }
+    const recipe = plan.serving.pack.recipes[plan.serving.job.recipe] ?? "{description}";
+    const body = { model: plan.serving.part.id, prompt: fillRecipe(recipe, { description: request.description }), source_video: sourcePath, ...(request.operation === "extend" ? { extend_seconds: request.seconds } : { retake_from_seconds: request.at_seconds }), level: plan.level, ...(request.seed !== undefined ? { seed: request.seed } : {}), audience: request.audience === "adult" ? "adult" : "all-ages", ...(request.wait !== undefined ? { timeout_ms: Math.max(1, request.wait * 1000) } : {}), route: { name: request.operation, reason: chosen.reason } };
+    const sent = await forward("/v1/videos/generations", body);
+    if (sent.status !== 200 && sent.status !== 202) return { status: sent.status, body: sent.json };
+    const reply = sent.json as { job: string; data?: Array<{ url: string; poster_url?: string; seconds?: number; audio?: boolean }>; notes?: string[] };
+    const first = reply.data?.[0];
+    return { status: sent.status, body: { id: reply.job, job: "clip", state: first ? "done" : "running", percent: first ? 100 : 0, status: first ? "Done" : "Making your clip", files: (reply.data ?? []).map((d) => d.url), poster: first?.poster_url ?? null, made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job } } };
+  }
   let body: Record<string, unknown>;
   try { body = clipBody(request, plan, route); }
   catch (error) { return { status: 422, body: { code: "invalid_request", line: error instanceof Error ? error.message : "The clip's words could not be turned into a prompt. Describe what the clip shows and try again." } }; }
@@ -143,7 +166,7 @@ export async function dispatchClip(request: ClipRequest, plan: Planned, forward:
   const result: StackMakeResult = {
     id: reply.job, job: "clip", state: first ? "done" : "running", percent: first ? 100 : 0, status: first ? "Done" : "Making your clip",
     files: (reply.data ?? []).map((d) => d.url), poster: first?.poster_url ?? null,
-    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job, route: chosen.route, route_reason: chosen.reason },
+    made_with: { part: plan.serving.part.id, label: plan.serving.part.label, pack_version: plan.serving.pack.pack.version, shape: request.shape, seconds: first?.seconds ?? request.seconds, sound: first?.audio ?? plan.serving.job.capabilities.sound, notes: reply.notes ?? [], receipt: reply.job, ...(chosen.operation === "retake" || chosen.operation === "extend" ? { route_reason: chosen.reason } : { route: chosen.route, route_reason: chosen.reason }) },
   };
   return { status: sent.status, body: result };
 }

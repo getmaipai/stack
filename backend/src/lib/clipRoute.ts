@@ -4,7 +4,7 @@ import { checkVideoInputs } from "@/video/caps";
 
 type ClipRequest = Extract<StackMakeRequest, { job: "clip" }>;
 export type PlannedClipRoute =
-  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation; identityUsed: number; reason: string }
+  | { ok: true; route: "words" | "start_picture" | "start_end_pictures" | "references"; operation: StackCapabilityOperation | "retake" | "extend"; identityUsed: number; reason: string }
   | { ok: false; refusal: StackMakeRefusal };
 
 export const NEEDS_START_PICTURE_LINE = "This model holds a person only from a first picture. Make one from the person's picture and send it as the start picture.";
@@ -15,6 +15,26 @@ export function planClipRoute(request: ClipRequest, rows: readonly StackOperatio
   const hasVoice = request.inputs?.some((input) => input.role === "voice_reference") ?? false;
   const hasWardrobe = request.inputs?.some((input) => input.role === "wardrobe") ?? false;
   const hasEditSource = request.inputs?.some((input) => input.role === "edit_source") ?? false;
+  if (request.operation === "enhance") return refuse("Enhancing a clip has its own request.");
+  if (request.operation === "retake_from" || request.operation === "extend") {
+    if (request.start_picture || request.end_picture || identityCount || hasVoice || hasWardrobe || (request.inputs ?? []).some((input) => input.role !== "edit_source")) return refuse("Retaking or extending a clip cannot be combined with pictures or other inputs.");
+    if (!hasEditSource) return refuse("Send an edit_source clip to retake or extend.");
+    if (request.operation === "retake_from" && request.at_seconds === undefined) return refuse("Send at_seconds to choose where the retake starts.");
+    if (request.operation === "extend" && request.seconds === undefined) return refuse("Send seconds to choose how much to add.");
+    const operation = request.operation === "retake_from" ? "retake" : "extend";
+    const selected = rows.find((candidate) => candidate.operation === operation && candidate.level === request.level);
+    if (!selected) return refuse("This clip operation is not available at the chosen quality.");
+    const rowRefusal = checkVideoInputs(selected, { source_clip: true, seconds: request.operation === "retake_from" ? request.at_seconds : request.seconds });
+    if (rowRefusal) return { ok: false, refusal: { code: "input_not_supported", line: rowRefusal.line } };
+    return { ok: true, route: "words", operation, identityUsed: 0, reason: request.operation === "retake_from" ? `Retaking from ${request.at_seconds} seconds on the clip you sent.` : `Extending the clip you sent by ${request.seconds} seconds.` };
+  }
+  if (request.take_of) {
+    const selected = rows.find((candidate) => candidate.operation === "clip_text" && candidate.level === request.level);
+    if (!selected) return refuse("This clip operation is not available at the chosen quality.");
+    const rowRefusal = checkVideoInputs(selected, { seconds: request.seconds });
+    if (rowRefusal) return { ok: false, refusal: { code: "input_not_supported", line: rowRefusal.line } };
+    return { ok: true, route: "words", operation: "clip_text", identityUsed: 0, reason: "The clip is made from words." };
+  }
   if (hasEditSource) return refuse("Use the retake, extend or enhance operations for an existing clip.");
 
   let route: "words" | "start_picture" | "start_end_pictures" | "references";

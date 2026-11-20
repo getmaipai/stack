@@ -33,6 +33,16 @@ test("unsupported voice, wardrobe and edit source are refused", () => {
   for (const role of ["voice_reference", "wardrobe", "edit_source"]) expect(planClipRoute(req({ inputs: [{ role, file: "x" }] }), h3)).toMatchObject({ ok: false, refusal: { code: "input_not_supported" } });
 });
 
+test("retake and extend select available Max edit rows and explain their routes", () => {
+  const max = rowsForJob("ltx-2-5-bf16-distilled-mlx-max", "clip");
+  expect(planClipRoute(req({ level: "max", operation: "retake_from", at_seconds: 2.5, inputs: [{ role: "edit_source", file: "/tmp/a.mp4" }] }), max)).toMatchObject({ ok: true, operation: "retake", reason: "Retaking from 2.5 seconds on the clip you sent." });
+  expect(planClipRoute(req({ level: "max", operation: "extend", seconds: 3, inputs: [{ role: "edit_source", file: "/tmp/a.mp4" }] }), max)).toMatchObject({ ok: true, operation: "extend", reason: "Extending the clip you sent by 3 seconds." });
+  expect(planClipRoute(req({ level: "max", operation: "extend", seconds: 3, inputs: [{ role: "edit_source", file: "/tmp/a.mp4" }], start_picture: "p" }), max)).toMatchObject({ ok: false, refusal: { code: "input_not_supported" } });
+  expect(planClipRoute(req({ level: "max", operation: "retake_from", inputs: [{ role: "edit_source", file: "x" }] }), max)).toMatchObject({ ok: false, refusal: { line: expect.stringContaining("at_seconds") } });
+  expect(planClipRoute(req({ level: "max", operation: "extend", seconds: 3 }), max)).toMatchObject({ ok: false, refusal: { line: expect.stringContaining("edit_source") } });
+  expect(planClipRoute(req({ level: "max", operation: "enhance" }), max)).toMatchObject({ ok: false, refusal: { line: "Enhancing a clip has its own request." } });
+});
+
 test("every available clip operation row accepts the input shape it advertises", () => {
   for (const r of videoOperationRows().filter((x) => x.available && x.operation.startsWith("clip_") && x.operation !== "clip_film_shot")) {
     const inputs = [ ...(r.inputs.references ? [{ role: "identity", file: "i" }] : []) ];

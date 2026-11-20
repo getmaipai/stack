@@ -65,6 +65,7 @@ const VideoRequestSchema = z.object({
   prompt_writer: z.object({ id: z.string().min(1), version: z.string().min(1) }).optional().openapi({ description: "VF-PROMPT-01, set by the generic door when a pack's prompt writer made `prompt`: its id and version, written to the receipt." }),
   prompt_hints: z.array(z.string().min(1)).max(16).optional().openapi({ description: "VF-PROMPT-01: the writer's hints (counts and advice, never text), written to the receipt." }),
   route: z.object({ name: z.string().min(1), reason: z.string().min(1) }).strict().optional(),
+  take_of: z.string().min(1).optional(),
   quiet_seconds: z.number().int().min(20).max(3600).optional(),
   quiet_max_wait_seconds: z.number().int().min(0).max(86400).nullable().optional(),
 });
@@ -342,7 +343,8 @@ videoV1Routes.openapi(postRoute, async (c) => {
   }
   const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
   if (peak !== undefined && peak > ltx25MaxCapBytes(`${size.width}x${size.height}`)) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");
-  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, level: requestedLevel, preview: body.preview !== false, ...(body.roles ? { roles: body.roles } : {}), ...(body.prompt_writer ? { promptWriter: body.prompt_writer } : {}), ...(body.prompt_hints ? { promptHints: body.prompt_hints } : {}), ...(body.route ? { route: body.route } : {}) }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", level: requestedLevel, ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}), ...(loras.some((lora) => lora.warnings.length > 0) ? { lora_warnings: loras.flatMap((lora) => lora.warnings) } : {}) }, peak);
+  if (body.take_of && !readResult(body.take_of)) return fail(c, 409, "not_available", "The clip you want another take of could not be found.");
+  return await runClip(c, body, quality, { prompt: body.prompt, negativePrompt: body.negative_prompt ?? null, image, endImage, width: size.width, height: size.height, frames, seed, loras: loras.map((lora) => [lora.path, lora.strength]), loraIds, quality, level: requestedLevel, preview: body.preview !== false, ...(body.roles ? { roles: body.roles } : {}), ...(body.prompt_writer ? { promptWriter: body.prompt_writer } : {}), ...(body.prompt_hints ? { promptHints: body.prompt_hints } : {}), ...(body.route ? { route: body.route } : {}), ...(body.take_of ? { takeOf: body.take_of } : {}) }, { size: `${size.width}x${size.height}`, seconds, mode: image ? "image-to-video" : "text-to-video", level: requestedLevel, ...(loraMode && loras.length > 0 ? { lora_mode: loraMode, lora_admit_bytes: loraAdmit } : {}) }, peak);
 });
 
 videoV1Routes.openapi(restyleRoute, async (c) => {
