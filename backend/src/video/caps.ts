@@ -3,7 +3,7 @@
 // discovery views, the request validators and the pack JSON read the same numbers and cannot drift apart. A request is checked against the
 // row of the operation it asks for (`checkVideoInputs`); the jobs catalog publishes the rows; a test asserts the pack JSON equals what the
 // rows derive (`jobLimitsFromRows`, `jobCapabilitiesFromRows`). Pure: no files, no processes, no clock.
-import type { StackJobName, StackOperationRow, StackVideoOperation } from "@maipai/spec/stack/ts/stack-model-pack.js";
+import type { StackJobName, StackOperationRow, StackCapabilityOperation } from "@maipai/spec/stack/ts/stack-model-pack.js";
 import { INGREDIENTS_ADAPTER_FILE, VIDEO_ENGINE_NAMES } from "@/packs/videoNames";
 import { packFor } from "@/packs/loader";
 import { H3_MIN_SECONDS } from "@/video/h3";
@@ -41,7 +41,7 @@ const sizeOf = (width: number, height: number): Size => ({ width, height, orient
 const withTall = (width: number, height: number): Size[] => (width === height ? [sizeOf(width, height)] : [sizeOf(width, height), sizeOf(height, width)]);
 const sizeText = (size: { width: number; height: number }): string => `${size.width}x${size.height}`;
 
-interface Draft { operation: StackVideoOperation; level: Level; reason: string | null; inputs?: Partial<Inputs>; seconds: { min: number; max: number }; sizes: Size[]; audio: boolean; keepsSourceAudio?: boolean; requires: string[] }
+interface Draft { operation: StackCapabilityOperation; level: Level; reason: string | null; inputs?: Partial<Inputs>; seconds: { min: number; max: number }; sizes: Size[]; audio: boolean; keepsSourceAudio?: boolean; requires: string[] }
 /** One row, with its own copy of every list so no caller can change another's. */
 function row(draft: Draft): StackOperationRow {
   return {
@@ -114,7 +114,7 @@ export function rowsOfEngine(engine: VideoEngine): StackOperationRow[] {
 export function videoOperationRows(): StackOperationRow[] { return VIDEO_ENGINES.flatMap(rowsOfEngine); }
 
 /** The operations each generic job publishes rows for. */
-export const JOB_OPERATIONS: Readonly<Partial<Record<StackJobName, readonly StackVideoOperation[]>>> = {
+export const JOB_OPERATIONS: Readonly<Partial<Record<StackJobName, readonly StackCapabilityOperation[]>>> = {
   clip: ["clip_text", "clip_start_picture", "clip_start_end_pictures", "clip_references", "extend", "retake", "enhance"],
   clip_from_sheet: ["clip_sheet"],
   swap: ["swap"],
@@ -160,12 +160,12 @@ export function engineFacts(engine: VideoEngine): { max_seconds: number; audio: 
 
 export interface VideoPictures { start_picture?: boolean; end_picture?: boolean; references?: number }
 /** The operation a request asks for, from the pictures it sends. References win: they are a different operation. */
-export function operationOfInputs(input: VideoPictures): StackVideoOperation {
+export function operationOfInputs(input: VideoPictures): StackCapabilityOperation {
   if ((input.references ?? 0) > 0) return "clip_references";
   return input.start_picture && input.end_picture ? "clip_start_end_pictures" : input.start_picture ? "clip_start_picture" : "clip_text";
 }
 /** The row of an operation at a size (a size names its level: 512x256 is Standard and 768x448 is Boost). Null when no row of the engine has that operation at that size. */
-export function rowForRequest(engine: VideoEngine, operation: StackVideoOperation, size: { width: number; height: number }): StackOperationRow | null {
+export function rowForRequest(engine: VideoEngine, operation: StackCapabilityOperation, size: { width: number; height: number }): StackOperationRow | null {
   return rowsOfEngine(engine).find((item) => item.operation === operation && item.sizes.some((s) => s.width === size.width && s.height === size.height)) ?? null;
 }
 
@@ -214,7 +214,7 @@ export interface VideoRefusal { code: "input_not_supported" | "not_installed" | 
 
 const COMBINATION_LINE = "This model cannot use a start picture and reference pictures together yet. Send one or the other.";
 /** What each operation needs sent: the control, and the words naming it. */
-const REQUIRED: Partial<Record<StackVideoOperation, Array<[keyof Inputs, string, string]>>> = {
+const REQUIRED: Partial<Record<StackCapabilityOperation, Array<[keyof Inputs, string, string]>>> = {
   clip_start_picture: [["start_picture", "start picture", "Send one, or ask for a clip from words only."]],
   clip_start_end_pictures: [["start_picture", "start picture", "Send one, or ask for a clip from words only."], ["end_picture", "end picture", "Send one, or send only a start picture."]],
   clip_sheet: [["sheets", "character sheet", "Send one or two."]],
