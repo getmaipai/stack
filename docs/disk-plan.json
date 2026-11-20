@@ -22,12 +22,12 @@
     "p64.needed_bytes": 163132484664,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 191231792656,
-    "p128.required_free_bytes": 229074434482,
+    "p128.required_free_bytes": 197949623094,
     "p128.minimum_required_free_bytes": 37187187977,
     "p128.everything_required_free_bytes": 555024898618,
-    "p128.needed_bytes": 192147547232,
+    "p128.needed_bytes": 166083740632,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 225898111205
+    "p128.ai_required_free_bytes": 194773299817
   },
   "tiers": {
     "p16": {
@@ -2403,7 +2403,7 @@
           "label": "Silent video",
           "note": "Makes short silent clips.",
           "kind": "model",
-          "need": "recommended",
+          "need": "optional",
           "selectable": true,
           "download_bytes": 24201700801,
           "installed_bytes": 24201700801,
@@ -3075,11 +3075,11 @@
         }
       ],
       "default": {
-        "download_bytes": 180619878998,
-        "installed_bytes": 184634436246,
-        "peak_temp_bytes": 7513110986,
-        "needed_bytes": 192147547232,
-        "required_free_bytes": 229074434482
+        "download_bytes": 155659395534,
+        "installed_bytes": 159329412309,
+        "peak_temp_bytes": 6754328323,
+        "needed_bytes": 166083740632,
+        "required_free_bytes": 197949623094
       },
       "minimum": {
         "download_bytes": 26431375129,
@@ -3111,7 +3111,6 @@
         "pictures",
         "pictures-ernie",
         "pictures-h3",
-        "video",
         "stems",
         "recorded-speech",
         "ffmpeg",

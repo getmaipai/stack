@@ -182,9 +182,10 @@ test("pictures is required on every tier that makes pictures", () => {
   }
 });
 
-test("the p128 video row is recommended and no Detailed row or pin is planned", () => {
+test("the p128 video row (the minors-only silent model) is optional, so it is not in default_selected (WAN-DEFAULT-01); no Detailed row or pin is planned", () => {
   const plan = buildDiskPlan(PROFILE_TIERS.find((t) => t.id === "p128")!);
-  expect(plan.rows.find((r) => r.id === "video")!).toMatchObject({ label: partDef("fastwan2-2-ti2v-5b-mlx-bf16")!.neutralLabel, need: "recommended", selectable: true });
+  expect(plan.rows.find((r) => r.id === "video")!).toMatchObject({ label: partDef("fastwan2-2-ti2v-5b-mlx-bf16")!.neutralLabel, need: "optional", selectable: true });
+  expect(plan.default_selected).not.toContain("video");
   expect(plan.rows.some((r) => r.id === "video-detailed")).toBe(false);
   expect(plan.default_selected).not.toContain("video-detailed");
   const planned = new Set(plannedPinsFor(PROFILE_TIERS.find((t) => t.id === "p128")!).map((entry) => entry.pin.id));
