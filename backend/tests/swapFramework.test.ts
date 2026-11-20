@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  kindNotServedLine, servedKinds, blendWeights, buildRegionTrack, convexHull, isSwapKind, likenessFrames, planWindows, polygonArea, regionFileBody, simplifyHull, swapVerdict,
+  kindNotServedLine, servedKinds, windowRulesFromRecipe, blendWeights, buildRegionTrack, convexHull, isSwapKind, likenessFrames, planWindows, polygonArea, regionFileBody, simplifyHull, swapVerdict,
   type Outline, type OutlineProvider, type Point, type WindowRules,
 } from "@/lib/swapFramework";
 
@@ -154,4 +154,13 @@ describe("which kinds a pack serves", () => {
   test("a kinds line lists them", () => { expect(servedKinds("x\n---measured---\nkinds: head, person")).toEqual(["head", "person"]); });
   test("an unknown kind says which recipe line to fix", () => { expect(() => servedKinds("x\n---measured---\nkinds: head, body")).toThrow("recipes/swap.md"); });
   test("the refusal line names what to ask for", () => { expect(kindNotServedLine("face", ["head"])).toBe("Swapping only the face is not available on this computer yet. Ask for a swap of the whole head instead."); });
+});
+
+describe("the pack's window numbers", () => {
+  test("the bundled swap recipe gives 56, 22, 17 and 8 and serves the head", async () => {
+    const recipe = await Bun.file(new URL("../src/packs/minimax-h3/recipes/swap.md", import.meta.url)).text();
+    expect(windowRulesFromRecipe(recipe)).toEqual({ maxFrames: 56, baseFrames: 22, stepFrames: 17, blendFrames: 8 });
+    expect(servedKinds(recipe)).toEqual(["head"]);
+  });
+  test("a missing number says which line to add", () => { expect(() => windowRulesFromRecipe("x\n---measured---\nsegment_frames: 56")).toThrow("window_base_frames"); });
 });

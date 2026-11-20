@@ -41,4 +41,8 @@ fps: 24
 adapter_strength: 1.0
 retake_seeds: 42, 43, 44
 canvas_margin: 0.1
+kinds: head
+window_base_frames: 22
+window_step_frames: 17
+window_blend_frames: 8
 Settled 2026-11-17 for the swap that composites the donor over the original footage. The model only draws a donor clip, one 56-frame call per segment, guided by the original. The Stack puts the donor's head inside a tracked head mask and keeps every other original pixel. Measured shapes: 384x288 at 66 GB and 512x384 at 85 to 90 GB while one segment runs. A donor whose picture is within about 30 dB of its guide did not change the head and is retaken with the next seed. The "name: value" lines above this note are numbers the Stack uses. The rest is a note and is never sent to the model.

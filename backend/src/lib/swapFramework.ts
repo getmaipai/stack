@@ -33,6 +33,20 @@ export function kindNotServedLine(kind: SwapKind, served: readonly SwapKind[]): 
   return `Swapping ${KIND_WORDS[kind]} is not available on this computer yet. Ask for a swap of ${alternatives} instead.`;
 }
 
+/** The window numbers from a pack's swap recipe: the longest window is its `segment_frames`; `window_base_frames`, `window_step_frames` and `window_blend_frames` say which lengths the engine draws and how much neighbors share. */
+export function windowRulesFromRecipe(recipe: string): WindowRules {
+  const after = recipe.split("---measured---")[1] ?? "";
+  const read = (key: string): number => {
+    const raw = new RegExp(`^${key}:\\s*(.+)$`, "m").exec(after)?.[1];
+    const value = Number(raw);
+    if (raw === undefined || !Number.isFinite(value)) throw new Error(`The swap recipe lacks a number for "${key}". Add the line after the measured marker in recipes/swap.md.`);
+    return value;
+  };
+  const rules: WindowRules = { maxFrames: read("segment_frames"), baseFrames: read("window_base_frames"), stepFrames: read("window_step_frames"), blendFrames: read("window_blend_frames") };
+  checkWindowRules(rules);
+  return rules;
+}
+
 // ---- the declared region -------------------------------------------------------------------------------------------------------------------
 export type RegionEntry = { polygon: [number, number][] } | null;
 export interface RegionOptions {
