@@ -110,6 +110,12 @@ describe.skipIf(!have)("media.verify on fixtures built with ffmpeg", () => {
     const wrong = await run(file, shots, {}, scripted(["good bye for now", "hello there it is me", "see you soon friend"]));
     expect(fails(wrong, "speech.line").map((c) => [c.shot_id, c.other_shot_id])).toEqual([["s1", "s2"], ["s2", "s1"]]);
   }, 120_000);
+  it("takes a line as spec-shaped dialogue (speaker and text) as well as a plain line", async () => {
+    const file = build("dialogue.mp4", ["move", "move", "move"], TONES);
+    const shots = [shot(0, { dialogue: { speaker: "iris", text: "Hello there, it is me." } }), shot(1, { line: "Good bye for now." }), shot(2)];
+    const r = await run(file, shots, {}, scripted(["hello there it is me", "good bye for now"]));
+    expect(r.verdict).toBe("pass"); expect(r.shots[0]!.heard).toBe("hello there it is me");
+  }, 60_000);
   it("is incomplete, never a pass, when lines are expected and no listening engine exists", async () => {
     const r = await run(build("nolisten.mp4", ["move", "move", "move"], TONES), [shot(0, { line: "Hello there." })], {}, null);
     expect(r.verdict).toBe("incomplete"); expect(r.checks.find((c) => c.check === "speech")?.status).toBe("skipped");

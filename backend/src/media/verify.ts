@@ -27,6 +27,8 @@ export const VerifyShot = z.object({
   kind: z.enum(["moving", "held_still"]).default("moving"),
   /** The exact line spoken in this shot. Its presence means the shot must have sound and the line must be heard in this shot. */
   line: z.string().min(1).max(2000).optional(),
+  /** The same, in the shape of the spec's `StackClipDialogue` (spec 0.1.431: speaker, text, language). Takes the place of `line` when both are sent. This Stack still pins an older spec, so the shape is mirrored here and becomes the spec import when the pin is bumped. */
+  dialogue: z.object({ speaker: z.string().min(1), text: z.string().min(1).max(2000), language: z.string().min(1).optional() }).strict().optional(),
   /** Sound expected in this shot. Default: true when there is a line, false otherwise. */
   sound: z.boolean().optional(),
 }).strict().refine((shot) => shot.end_s > shot.start_s, "A shot's end must be after its start.");
@@ -194,7 +196,8 @@ const decimate = (samples: Float32Array, by: number): Float32Array => { const ou
 
 export async function verifyFile(rawInput: VerifyInput, deps: VerifyDeps): Promise<VerifyResult> {
   const started = (deps.now ?? Date.now)();
-  const input = VerifyInput.parse(rawInput);
+  const parsed = VerifyInput.parse(rawInput);
+  const input = { ...parsed, expect: { ...parsed.expect, shots: parsed.expect.shots.map((shot) => ({ ...shot, line: shot.dialogue?.text ?? shot.line })) } };
   const path = input.path; const exp = input.expect;
   const rules = { ...VERIFY_RULES, ...input.rules };
   const checks: VerifyCheck[] = []; const incomplete: string[] = [];
@@ -271,11 +274,13 @@ export async function verifyFile(rawInput: VerifyInput, deps: VerifyDeps): Promi
             : { check: "sound.silent", status: "pass", shot_id: shot.id, message: `Shot ${shot.id} has sound.` });
         }
       }
-      const levels = shotReports.map((s, i) => ({ s, i })).filter(({ s, i }) => s.loudness_lufs !== null && hasSound(shots[i]!) && s.loudness_lufs > -69);
-      if (levels.length >= 3) {
+      // Spoken shots and ambient-only shots are compared within their own kind: a quiet room-tone shot beside dialogue is intended, not a fault.
+      for (const spoken of [true, false]) {
+        const levels = shotReports.map((s, i) => ({ s, i })).filter(({ s, i }) => s.loudness_lufs !== null && hasSound(shots[i]!) && (shots[i]!.line !== undefined) === spoken && s.loudness_lufs > -69);
+        if (levels.length < 3) continue;
         for (const { s, i } of levels) {
           const others = median(levels.filter((x) => x.i !== i).map((x) => x.s.loudness_lufs!));
-          if (s.loudness_lufs! < others - VERIFY_AUDIO.quietLu) add({ check: "sound.quiet", status: "fail", shot_id: s.id, at_s: s.start_s, end_s: s.end_s, value: s.loudness_lufs!, message: `Shot ${s.id} is much quieter (${s.loudness_lufs} LUFS) than the other shots (about ${Math.round(others)} LUFS). Raise its level or make its sound again.` });
+          if (s.loudness_lufs! < others - VERIFY_AUDIO.quietLu) add({ check: "sound.quiet", status: "fail", shot_id: s.id, at_s: s.start_s, end_s: s.end_s, value: s.loudness_lufs!, message: `Shot ${s.id} is much quieter (${s.loudness_lufs} LUFS) than the other ${spoken ? "spoken" : "ambient"} shots (about ${Math.round(others)} LUFS). Raise its level or make its sound again.` });
         }
       }
     }
