@@ -4771,6 +4771,24 @@
                     "minimum": 0,
                     "exclusiveMinimum": true
                   },
+                  "receiptRecipe": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
                   "quiet_seconds": {
                     "type": "integer",
                     "minimum": 20,
@@ -16442,6 +16460,17 @@
                                   "minLength": 1
                                 }
                               },
+                              "minor_ratings": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "G",
+                                    "PG-13"
+                                  ]
+                                },
+                                "minItems": 1
+                              },
                               "styles": {
                                 "type": "object",
                                 "properties": {
@@ -17281,6 +17310,17 @@
                                   "type": "string",
                                   "minLength": 1
                                 }
+                              },
+                              "minor_ratings": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "G",
+                                    "PG-13"
+                                  ]
+                                },
+                                "minItems": 1
                               },
                               "styles": {
                                 "type": "object",
