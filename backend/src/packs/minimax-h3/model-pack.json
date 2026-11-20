@@ -76,6 +76,16 @@
           "description": "Quick, with sound"
         },
         {
+          "level": "standard",
+          "profile": "preview",
+          "steps": 12,
+          "checkpoint": "FL2VA",
+          "schedule": "h3-12",
+          "prompt_format": "h3-sectioned",
+          "label": "Standard",
+          "description": "Quick, with sound"
+        },
+        {
           "level": "boost",
           "profile": "quality",
           "size": {

@@ -14,6 +14,15 @@ describe("videoRecipe (VF-PROFILE-01): the chosen recipe is read from the pack",
     expect(boost.adapter).toBeUndefined();
     expect(boost.finish!.map((step) => step.op)).toEqual(["model_upscale", "audio_lead_in"]);
   });
+  test("with the turbo adapter missing, Standard falls back to the declared 12-step recipe; present, it is the 7-step one; Boost never needs it", () => {
+    const none = () => false;
+    const all = () => true;
+    expect(videoRecipe("h3", "standard", "clip_text", undefined, Number.MAX_SAFE_INTEGER, "h3", none)!.recipe).toMatchObject({ steps: 12, schedule: "h3-12" });
+    expect(videoRecipe("h3", "standard", "clip_text", undefined, Number.MAX_SAFE_INTEGER, "h3", none)!.recipe.adapter).toBeUndefined();
+    expect(videoRecipe("h3", "standard", "clip_text", undefined, Number.MAX_SAFE_INTEGER, "h3", all)!.recipe.steps).toBe(7);
+    expect(videoRecipe("h3", "standard", "clip_text")!.recipe.steps).toBe(7);
+    expect(videoRecipe("h3", "boost", "clip_text", undefined, Number.MAX_SAFE_INTEGER, "h3", none)!.recipe.steps).toBe(24);
+  });
   test("the build follows the caller's choice: resident h3 or streaming h3stream", () => {
     expect(videoRecipe("h3", "standard", "clip_text", undefined, Number.MAX_SAFE_INTEGER, "h3")!.quality).toBe("h3");
     expect(videoRecipe("h3", "standard", "clip_text", undefined, Number.MAX_SAFE_INTEGER, "h3stream")!.quality).toBe("h3stream");

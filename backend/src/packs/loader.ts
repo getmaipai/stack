@@ -23,7 +23,7 @@ export function loadPacks(sources: typeof PACK_SOURCES = PACK_SOURCES, partIds: 
       for (const recipe of job.profiles ?? []) {
         const hasLevel = job.limits.max_seconds?.[recipe.level] !== undefined || Object.values(job.limits.shapes ?? {}).some((shape) => shape?.[recipe.level] !== undefined);
         if (!hasLevel) throw new Error(`Model pack "${dir}" job "${job.job}" profile level "${recipe.level}" is missing from limits. Add its limits.`);
-        const key = `${recipe.level}:${recipe.size ? `${recipe.size.width}x${recipe.size.height}` : "default"}`;
+        const key = `${recipe.level}:${recipe.size ? `${recipe.size.width}x${recipe.size.height}` : "default"}:${recipe.adapter?.required ? `adapter ${recipe.adapter.id}` : "no adapter"}`;
         if (profileKeys.has(key)) throw new Error(`Model pack "${dir}" job "${job.job}" has two profiles for ${key}. Keep one.`);
         profileKeys.add(key);
         if (recipe.adapter?.required && !recipe.adapter.id.trim()) throw new Error(`Model pack "${dir}" job "${job.job}" required adapter needs an id.`);

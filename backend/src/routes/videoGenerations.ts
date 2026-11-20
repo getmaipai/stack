@@ -332,7 +332,10 @@ videoV1Routes.openapi(postRoute, async (c) => {
     const chosen = videoRecipe("h3", requestedLevel, operationOfInputs({ start_picture: image !== null, end_picture: endImage !== null }), `${size.width}x${size.height}`, VIDEO_SPECS[quality].peakBytes, quality);
     if (!chosen) return fail(c, 422, "level_not_served", `MiniMax H3 does not serve ${requestedLevel} quality for this request. Choose Standard or Boost quality.`);
     const h3Paths = videoModelPaths(quality);
-    if (chosen.recipe.adapter?.required && (!h3Paths || !existsSync(join(h3Paths.modelDir, `loras/${chosen.recipe.adapter.id}.safetensors`)))) return fail(c, 503, "not_installed", "The fast-draft adapter for MiniMax H3 is not installed. An admin can install it in Settings, AI and models, or ask for Boost quality.");
+    // Legacy outcome kept: a missing turbo adapter runs the pack's no-adapter recipe for the level (12 steps) instead of refusing; not_installed only when nothing can run.
+    const installed = (id: string) => !!h3Paths && existsSync(join(h3Paths.modelDir, `loras/${id}.safetensors`));
+    const runnable = videoRecipe("h3", requestedLevel, operationOfInputs({ start_picture: image !== null, end_picture: endImage !== null }), `${size.width}x${size.height}`, VIDEO_SPECS[quality].peakBytes, quality, installed);
+    if (!runnable) return fail(c, 503, "not_installed", "The fast-draft adapter for MiniMax H3 is not installed. An admin can install it in Settings, AI and models, or ask for Boost quality.");
   }
   const peak = basePeak === undefined ? undefined : basePeak + loraAdmit;
   if (peak !== undefined && peak > ltx25MaxCapBytes(`${size.width}x${size.height}`)) return fail(c, 422, "lora_too_large", "These styles are too large to run with this clip on this computer. Use a smaller style, or only one.");

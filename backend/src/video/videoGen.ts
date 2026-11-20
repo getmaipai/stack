@@ -459,7 +459,8 @@ export class VideoGenService {
         const output = join(input.outputDir, "video.mp4");
           const home = paths.h3Home!; const models = paths.modelDir;
         const level = input.level ?? "standard";
-        const selected = input.recipe ? { recipe: input.recipe, quality } : videoRecipe("h3", level, "clip_text", `${input.width}x${input.height}`, VIDEO_SPECS[quality].peakBytes, quality);
+        const adapterOnDisk = (id: string) => existsSync(join(models, `loras/${id}.safetensors`));
+        const selected = input.recipe ? { recipe: input.recipe, quality } : videoRecipe("h3", level, "clip_text", `${input.width}x${input.height}`, VIDEO_SPECS[quality].peakBytes, quality, adapterOnDisk);
         if (!selected) throw new VideoError("level_not_served", `MiniMax H3 does not serve ${level} quality for this request. Choose Standard or Boost quality.`, 422);
         const adapter = selected.recipe.adapter;
         const lora = adapter ? join(models, `loras/${adapter.id}.safetensors`) : null;
