@@ -8,8 +8,8 @@ import { hfBlobsRoot } from "@/lib/store/layout";
 import { POCKET_TTS_PRESET_VOICES, POCKET_TTS_VOICES_REVISION, presetVoiceModel, voiceLicence } from "@/speech/voices";
 import { POCKET_TTS_UNGATED_REPO } from "@/speech/pocketTts";
 import { ttsEngineInEffect, ttsEngineInstalled } from "@/lib/supervisor";
-import { STACK_TTS_CHATTERBOX_MODEL } from "@/lib/modelCatalog";
-import { TTS_ENGINES, type TtsEngineId } from "@/speech/ttsEngines";
+import { STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_VOXCPM2_MODELS } from "@/lib/modelCatalog";
+import { isVoxcpm2Engine, TTS_ENGINES, type TtsEngineId } from "@/speech/ttsEngines";
 import type { Voice } from "@/wire/voice";
 
 export const CHATTERBOX_DEFAULT_VOICE_ID = "chatterbox-turbo-voice-default";
@@ -33,6 +33,16 @@ export function listVoices(engine: TtsEngineId = ttsEngineInEffect()): Voice[] {
     return [{
       id: CHATTERBOX_DEFAULT_VOICE_ID, name: "Chatterbox default", description: "unknown", language: "en", country: "unknown", gender: "unknown", source: "preset",
       onDisk: ttsEngineInstalled(engine), licence: pin.license ?? null, revision: pin.revision ?? "unknown",
+      engine: definition.catalogEngine, tts: { engine: definition.catalogEngine, tags: [...definition.tags] },
+    }];
+  }
+  if (isVoxcpm2Engine(engine)) {
+    // VOICE-VOXCPM2-01: the VoxCPM2 engine speaks one built-in voice and copies any clip, like Chatterbox Turbo; Home reads the engine name to offer clip voices.
+    const definition = TTS_ENGINES[engine];
+    const pin = STACK_TTS_VOXCPM2_MODELS.find((model) => model.engine === engine);
+    return [{
+      id: `${engine}-voice-default`, name: "VoxCPM2 default", description: "unknown", language: "en", country: "unknown", gender: "unknown", source: "preset",
+      onDisk: ttsEngineInstalled(engine), licence: pin?.license ?? null, revision: pin?.revision ?? "unknown",
       engine: definition.catalogEngine, tts: { engine: definition.catalogEngine, tags: [...definition.tags] },
     }];
   }
