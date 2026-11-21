@@ -31,6 +31,49 @@
           "error"
         ]
       },
+      "Sandbox": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "stopped"
+            ]
+          },
+          "workspace": {
+            "type": "string"
+          },
+          "cpus": {
+            "type": "number"
+          },
+          "memory_gb": {
+            "type": "number"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "last_active_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "machine",
+          "state",
+          "workspace",
+          "cpus",
+          "memory_gb",
+          "created_at",
+          "last_active_at"
+        ]
+      },
       "MediaStatus": {
         "type": "object",
         "properties": {
@@ -27710,6 +27753,286 @@
                     "ok",
                     "config"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/sandboxes": {
+      "post": {
+        "tags": [
+          "Sandboxes"
+        ],
+        "summary": "Start a sandbox machine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "The session's id; names the machine."
+                  },
+                  "workspace": {
+                    "type": "string",
+                    "description": "Absolute path of an existing folder inside the coding folder; the only folder the machine sees."
+                  },
+                  "cpus": {
+                    "type": "integer",
+                    "description": "Defaults to 4, clamped to 1 to 8."
+                  },
+                  "memory_gb": {
+                    "type": "integer",
+                    "description": "Defaults to 4, clamped to 1 to 16."
+                  },
+                  "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "description": "Plain variables the agent can read; never a secret."
+                  },
+                  "network": {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "hosts"
+                        ]
+                      },
+                      "hosts": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "default": []
+                      }
+                    },
+                    "required": [
+                      "policy"
+                    ],
+                    "description": "Only policy none exists today; hosts waits for the egress proxy (CODE-SANDBOX-02)."
+                  }
+                },
+                "required": [
+                  "id",
+                  "workspace"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The machine runs behind its network lock.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sandbox"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A field is not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The id is taken.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The machine did not start, or its network lock did not load.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The container system is not running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Sandboxes"
+        ],
+        "summary": "List sandboxes",
+        "responses": {
+          "200": {
+            "description": "Every sandbox the Stack knows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sandboxes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Sandbox"
+                      }
+                    }
+                  },
+                  "required": [
+                    "sandboxes"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/sandboxes/{id}": {
+      "get": {
+        "tags": [
+          "Sandboxes"
+        ],
+        "summary": "One sandbox",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Its state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sandbox"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No sandbox with this id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Sandboxes"
+        ],
+        "summary": "Remove a sandbox machine",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The machine is gone; the workspace folder is untouched.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No sandbox with this id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/sandboxes/{id}/stop": {
+      "post": {
+        "tags": [
+          "Sandboxes"
+        ],
+        "summary": "Stop a sandbox",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stopped; the workspace folder is untouched.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sandbox"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No sandbox with this id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

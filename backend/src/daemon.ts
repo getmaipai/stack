@@ -36,6 +36,7 @@ import { sfxGen } from "@/sound/sfxGen";
 import { stopScoreWorkers } from "@/score/scoreGen";
 import { imageGen } from "@/images/imageEngine";
 import { runSweeps } from "@/lib/sweeps";
+import { sandboxService, startSandboxSweeper } from "@/lib/sandbox";
 import { beginStopping } from "@/lib/lifecycle";
 import { startMemoryWatchdog } from "@/lib/memoryWatchdog";
 import { startResourceHistory } from "@/lib/resourceHistory";
@@ -134,6 +135,8 @@ async function serve(): Promise<void> {
   // Songs: half-made work removed and old results swept; the music worker starts on the first song and exits after five idle minutes.
   // The same for pictures (IMGGEN-STACK-02): half-made work removed, old results swept; the picture worker starts on the first request and exits after ten idle minutes.
   void runSweeps("start");
+  // CODE-SANDBOX-01b: a sandbox machine nobody used for the idle time is stopped (its workspace stays).
+  const stopSandboxSweeper = startSandboxSweeper(sandboxService(dataDir));
   const sweeps = setInterval(() => { void runSweeps("timer"); }, 10 * 60_000);
   (sweeps as unknown as { unref?: () => void }).unref?.();
   // Newer upstream releases of the programs the Stack installs: a public read at most once every 12 hours, off with the update checks.
@@ -157,6 +160,7 @@ async function serve(): Promise<void> {
     stopResourceHistory();
     clearInterval(idle);
     clearInterval(sweeps);
+    stopSandboxSweeper();
     clearInterval(releaseCheck);
     stopSelfHeal();
     // ISOLATION-01: nothing is left stopped; each worker is continued before it is told to quit.
