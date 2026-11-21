@@ -16,7 +16,7 @@ import { logger } from "@/lib/log";
 import { currentMachineTier, engineInstalledFor, getProcess, processRoleFor, requestRole, selectedModel } from "@/lib/supervisor";
 import type { RoleId } from "@/roles";
 import { settingValues } from "@/settings";
-import { currentHomeMode } from "@/lib/homeMode";
+import { currentHomeMode, homeModeEnteringCoding } from "@/lib/homeMode";
 
 /** Most important first: a role later in the list is dropped first when
  * the machine cannot hold them all. */
@@ -62,11 +62,14 @@ export function warmupStatus(): WarmupStatus { return { ...status, roles: status
 /** The roles the idle unload spares. The coding engine is never among them: it loads while someone is coding and unloads after its own keep-warm minutes (CODE-STACK-01 S2). */
 export function warmedRoles(): RoleId[] { return [...warmed].filter((role) => role !== "coding"); }
 
+/** In coding mode, and while Home is switching into it, chat and judge stay unloaded: a warm-up that loaded them mid-switch kept ~30 GB the large model needed (live, 2026-11-21: the switch was refused for memory). */
+function residentsHeldOff(): boolean { return currentHomeMode() === "coding" || homeModeEnteringCoding(); }
+
 function candidatesNow(): WarmCandidate[] {
   const out: WarmCandidate[] = [];
   const seen = new Set<RoleId>();
   for (const role of WARM_ORDER) {
-    if (currentHomeMode() === "coding" && (role === "chat" || role === "judge")) continue;
+    if (residentsHeldOff() && (role === "chat" || role === "judge")) continue;
     const owner = processRoleFor(role);
     if (seen.has(owner)) continue;
     const model = selectedModel(owner);
@@ -121,6 +124,7 @@ async function run(trigger: string): Promise<WarmupStatus> {
     }),
   };
   for (const role of plan.warm) {
+    if (residentsHeldOff() && (role === "chat" || role === "judge")) { setRole(role, { state: "skipped", reason: "Home is switching to the large coding mode." }); continue; }
     const began = Date.now();
     setRole(role, { state: "warming" });
     try {
