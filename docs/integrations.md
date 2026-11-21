@@ -314,7 +314,7 @@ and filled by the installer.
 **Role switches (ADMIN-04).** Every role has two declared settings in the
 `roles` section ("Features"): `stack.roles.<role>.enabled` (boolean, default
 on, applies at once) and `stack.roles.<role>.priority` (integer 1 to 1000,
-lower is served first; defaults are the declaration order, ten apart). A
+lower is served first; every role defaults to 100, so the queue keeps arrival order until a role is ranked). A
 role that is off is never started (`getProcess` refuses it) and never
 admitted (the governor refuses it, with the reason); its row on
 `GET /stack/v1/roles` has `enabled: false`, state `offline` with cause

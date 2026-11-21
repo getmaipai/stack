@@ -117,7 +117,7 @@ test("the roles route says enabled, priority and why a role is off", async () =>
   expect(vision).toMatchObject({ enabled: false, priority: 7, state: { state: "offline", cause: "disabled" } });
   expect(vision.reason).toContain("Vision is turned off");
   expect(vision.plain_reason).toContain("Vision is turned off");
-  expect(body.roles.find((r) => r.id === "chat")).toMatchObject({ enabled: true, priority: 10 });
+  expect(body.roles.find((r) => r.id === "chat")).toMatchObject({ enabled: true, priority: 100 });
 });
 
 test("changing a role setting through the settings route is audited with source and what changed", async () => {

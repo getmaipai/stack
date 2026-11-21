@@ -5,8 +5,9 @@
 // route read one place and none of them imports the settings module.
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
 
-/** Default order: the order the roles are declared in, ten apart so a person can slot one between two. */
-export function defaultRolePriority(role: RoleId): number { return (ROLE_IDS.indexOf(role) + 1) * 10; }
+/** Every role starts equal, so the queue keeps arrival order until the person ranks a role (and a Max window or tier rule is never reshuffled by a default). */
+export const DEFAULT_ROLE_PRIORITY = 100;
+export function defaultRolePriority(_role: RoleId): number { return DEFAULT_ROLE_PRIORITY; }
 export const ROLE_PRIORITY_MIN = 1;
 export const ROLE_PRIORITY_MAX = 1000;
 
