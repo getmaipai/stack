@@ -21,11 +21,12 @@ describe("staged model pins", () => {
   });
   test("the ids are unique and the URLs are the authors' own", () => {
     expect(new Set(STACK_STAGED_MODELS.map((pin) => pin.id)).size).toBe(STACK_STAGED_MODELS.length);
-    for (const pin of STACK_STAGED_MODELS) expect(pin.download!.url).toMatch(/^https:\/\/(github\.com\/(TencentARC|xinntao)\/|huggingface\.co\/ResembleAI\/)/);
+    for (const pin of STACK_STAGED_MODELS) expect(pin.download!.url).toMatch(/^https:\/\/(github\.com\/(TencentARC|xinntao)\/|huggingface\.co\/(ResembleAI|mlx-community)\/)/);
   });
-  test.skipIf(!existsSync(LIVE_HUB))("on the Studio, each blob is installed with the pinned size", () => {
+  test.skipIf(!existsSync(LIVE_HUB))("on the Studio, each installed blob has the pinned size (the VoxCPM2 pins are staged and not installed there until a tier picks them)", () => {
     for (const pin of STACK_STAGED_MODELS) {
       const blob = `${LIVE_HUB}/models--${pin.repo!.replace("/", "--")}/blobs/${pin.download!.sha256}`;
+      if (pin.engine === "voxcpm2" && !existsSync(blob)) continue;
       expect(statSync(blob).size).toBe(pin.download!.approx_bytes);
     }
   });
