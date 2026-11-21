@@ -914,7 +914,9 @@ export function projectorFor(model: ModelRecord): ModelRecord | null {
  * input. */
 function servesRole(model: ModelRecord, role: RoleId, engine: string | null): boolean {
   const selectedChatSplash = role === "chat" && SPLASH_CHAT_IDS.includes(model.id) && engineForRole(role) === "splash" && model.id === splashChatModelId();
-  return model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (selectedChatSplash || !engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine) && (role !== "vision" || declaresImageInput(model));
+  // The optional 35B is a Splash-only chat model that `recordEngineFor` (which maps Splash to llama-server records) would hide: it is listed and loadable once it and its draft are installed, so Home's chooser can pick it. Never bound or recommended by a tier.
+  const optionalSplashChat = role === "chat" && model.id === MOE_CHAT_ID && splashPairReady(MOE_CHAT_ID);
+  return model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (selectedChatSplash || optionalSplashChat || !engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine) && (role !== "vision" || declaresImageInput(model));
 }
 
 export function selectedModel(role: RoleId): ModelRecord | null {

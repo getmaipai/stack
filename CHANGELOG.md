@@ -10,6 +10,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 
 ### Added
 
+- The installed Huihui 35B (with its draft) now appears in the chat role's `models` list and loads through the model load route, like the dense 27B. It is still optional: no tier binds it and no recommendation changes. Before, Home's chooser got a 404 for it.
 - The Huihui Qwen3.6-35B-A3B chat model is now pickable at Standard on p64 and p128 in the tier chooser (Settings, AI and models). It sits after the other Standard candidates, so no recommendation changes. Home's "load this model" for it now picks Splash before the choice is stored.
 - Optional chat model: Huihui Qwen3.6-35B-A3B abliterated Q4_K_M, served by Splash with its DFlash2 draft (measured 21 GB at 32k context, first token about 5x faster than the dense 27B on a 5.5k-token prompt). An admin installs it on purpose (an optional row on p64 and p128) and chooses it with `stack.engines.chat.model`; when it is the stored choice, `auto` picks Splash. The install fetches the target and the draft, then runs Splash's own model preparation (re-run when a pin changes, cleaned on removal), and the launch passes Splash the verified GGUF and the draft folder. No tier binds it and the default chat model and engine are unchanged. See docs/dev/moe-chat-trial.md.
 

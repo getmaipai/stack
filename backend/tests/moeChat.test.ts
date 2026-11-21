@@ -14,7 +14,7 @@ import { customPickRefusal, resolveLadder, resolveTier, tierCandidateLists, tier
 import { preferModel } from "@/lib/supervisor";
 import { splashFootprintEstimateBytes, splashChatMemoryPlan } from "@/lib/splash";
 import { prepareSplashModel, splashModelsDir, splashPreparedCurrent, splashPreparedNotePath, splashRoot, type PrepareRunner } from "@/lib/splashStore";
-import { chatEngine, resetSupervisorForTests, selectedModel, setCodingMachineFacts, setMachineTier, splashLaunchPlan } from "@/lib/supervisor";
+import { chatEngine, resetSupervisorForTests, selectableModel, selectableModels, selectedModel, setCodingMachineFacts, setMachineTier, splashLaunchPlan } from "@/lib/supervisor";
 import { __setAppleChipForTests } from "@/lib/hardware";
 import { __resetHealthForTests } from "@/lib/health";
 import { __resetSettingsForTests, applyPendingSettings, updateSettings } from "@/settings";
@@ -113,6 +113,26 @@ test("Home's load of the 35B (the model preference, before the setting is stored
   updateSettings({ "stack.engines.chat.model": MOE.id }); applyPendingSettings(); preferModel("chat", null);
   expect(chatEngine()).toBe("splash");
   expect(selectedModel("chat")?.id).toBe(MOE.id);
+});
+
+test("the chat role's models list names the 35B when it and its draft are installed, like the dense 27B, and not when absent or without its draft", () => {
+  installPin(STACK_CHAT_8B_MODEL); installPin(STACK_CHAT_QWEN38_UNCENSORED_MODEL as typeof MOE); installSplashEngine();
+  const ids = () => selectableModels("chat").map((entry) => entry.id);
+  expect(ids()).toContain(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id);
+  expect(ids()).not.toContain(MOE.id);
+  expect(selectableModel("chat", MOE.id)).toBeNull();
+  installPin(MOE);
+  expect(ids()).not.toContain(MOE.id);
+  installPin(DRAFT);
+  expect(ids()).toContain(MOE.id);
+  expect(ids()).toContain(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id);
+  expect(selectableModel("chat", MOE.id)?.id).toBe(MOE.id);
+  // It stays optional: listed does not mean recommended or bound, and the draft is never a choice.
+  expect(ids()).not.toContain(DRAFT.id);
+  expect(selectedModel("chat")?.id).not.toBe(MOE.id);
+  expect(Object.values(PROFILE_MODEL_BINDINGS).flatMap((bound) => Object.values(bound ?? {}))).not.toContain(MOE.id);
+  removeModel(MOE.id);
+  expect(ids()).not.toContain(MOE.id);
 });
 
 test("selecting it: a stored choice of the 35B makes auto pick Splash and serve it; before it is installed, and for every other choice, chat stays on llama-server", () => {
