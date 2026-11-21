@@ -58,6 +58,37 @@ the Stack page imports those and adds no library of its own. If any Valet
 code is ever copied, MIT notice goes in `NOTICE`. A design-resolver pass
 checks the page against the org UI rule before build.
 
+### Design bar (owner, 2026-11-21)
+
+A simplified UniFi app, as Apple would have designed it, with the polish
+of Apple, Spotify and Valet.
+
+- **UniFi, simplified:** one calm dashboard of live device-style cards
+  (each role is a "device" with status, load and a tap-through detail
+  sheet), a topology-like view of roles and engines, big clear numbers,
+  few controls per screen, advanced settings tucked behind "More".
+- **Apple:** generous space, a strict type scale, soft glass and blur on
+  bars and sheets, continuous corners, spring motion that respects
+  reduced-motion, sheets instead of page jumps, SF-style system font
+  stack with Geist as the fallback, dark mode that is designed, not
+  inverted.
+- **Spotify:** confident dark default, one accent color, big tappable
+  rows and cards, smooth transitions between states, skeletons that
+  never flash empty, the "now playing" bar idea reused as a persistent
+  live status bar (what is running now, memory pressure).
+- **Valet:** the live-everything, hover details, `⌘K` and approve-first
+  chat feel.
+- **Rules that keep it honest:** one accent color, status colors only for
+  status, no more than two type weights per screen, every number live,
+  every empty and error state written in plain words with a fix button,
+  phone first for layout, 60 fps animations, no spinner longer than a
+  skeleton.
+- **Gate:** before screens are built, `design-resolver` produces a design
+  note and I build a clickable mockup of Overview, Resources and Helper
+  on seeded data; I open it in the browser pane at desktop and phone
+  width, judge the screenshots against this bar, and only then build the
+  rest. The UI is tokens on `@maipai/ui` only, never a fork.
+
 Adopted from Valet: command palette (`⌘K` for screens, roles, settings,
 actions), top bar with hover details (CPU, memory, tier), live everything
 over SSE, approvals before any change from chat, a `/wall` read-only
@@ -169,7 +200,8 @@ so it works when the `chat` role is down, which is exactly when you need it.
 2. Admin account, sessions, listener binding, tests.
 3. Restart, logs and reboot routes, tests.
 4. Role enable and priority settings, tests.
-5. Page shell (on `@maipai/ui`, `⌘K`, top bar) with Overview, Health, Engines.
+5. Design note and clickable mockup, judged against the design bar.
+5b. Page shell (on `@maipai/ui`, `⌘K`, top bar) with Overview, Health, Engines.
 6. Resource history ring and the Resources screen.
 7. Features, Models and priority, Settings, Updates, Tools screens.
 8. Helper: model bench and pin, role, on-demand load and unload, tools and
