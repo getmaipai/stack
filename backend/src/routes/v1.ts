@@ -15,6 +15,7 @@ import { listModels, ProvenanceIncompleteError } from "@/lib/modelStore";
 import { DownloadVerificationError } from "@/lib/download";
 import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
 import { prepareChatterboxVoice, voiceSettingsRefusal } from "@/speech/chatterboxClones";
+import { isVoxcpm2Engine } from "@/speech/ttsEngines";
 import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
 import { endWithStream, heavyGate } from "@/lib/heavyGate";
@@ -53,6 +54,8 @@ const SpeechFormSchema = z.object({
   /** VOICES-02: the voice's own sampling temperature (0.1 to 2.0) and pitch offset in semitones (-12 to 12); the Chatterbox engine only. */
   temperature: z.coerce.number().optional(),
   pitch_semitones: z.coerce.number().optional(),
+  /** VOICE-VOXCPM2-01: the words spoken in the voice's reference recording, for the VoxCPM2 engine; with none, the Stack reads them from the clip with its pinned listening model once per clip. Ignored by the other engines. Additive: not yet in spec/voice. */
+  voice_text: z.string().max(2000).optional().openapi({ description: "The words spoken in the recording named by `voice_url` (VoxCPM2 only; other engines ignore it). Optional: without it the engine reads the words from the recording itself, once per recording." }),
   model: z.string().min(1).optional().openapi({ example: "tts" }),
   timeout_ms: z.coerce.number().int().positive().optional(),
 });
@@ -336,15 +339,17 @@ v1Routes.openapi(speechRoute, async (c) => {
     // list (or none) is not an error there (VOICE-STUDIO-01). A clip
     // address on the household's network is the one voice it takes
     // besides, with the voice's own temperature and pitch (VOICES-02).
-    const pocket = ttsEngineInEffect() === "pocket";
+    const engineInEffect = ttsEngineInEffect();
+    const pocket = engineInEffect === "pocket";
+    const voxcpm2 = isVoxcpm2Engine(engineInEffect);
     const refusal = voiceSettingsRefusal(form.temperature, form.pitch_semitones);
     if (refusal) return jsonReply(c, { error: refusal, reason: "voice-setting-out-of-range" }, 400, identityHeaders(null));
-    const voice = pocket ? await prepareVoice(form.voice_url, { signal: controller.signal }) : await prepareChatterboxVoice(form.voice_url, { signal: controller.signal });
+    const voice = pocket ? await prepareVoice(form.voice_url, { signal: controller.signal }) : await prepareChatterboxVoice(form.voice_url, { signal: controller.signal, needsTokenizer: !voxcpm2 });
     if (pocket && voiceNeedsCloning(voice)) await ensureCloningLoaded(resolution.role, controller.signal);
     // ISOLATION-01: speech is interactive from the ask until the last audio is sent (a heavy job is paused meanwhile).
     const end = heavyGate.begin(resolution.role);
     let spoken: Awaited<ReturnType<typeof speakRole>>;
-    try { spoken = await speakRole(resolution.role, speechForm(form.text, voice, pocket || !voice ? {} : { temperature: form.temperature, pitch_semitones: form.pitch_semitones }), controller.signal); } catch (error) { end(); throw error; }
+    try { spoken = await speakRole(resolution.role, speechForm(form.text, voice, pocket || !voice ? {} : { temperature: form.temperature, pitch_semitones: form.pitch_semitones, ...(voxcpm2 && form.voice_text ? { voice_text: form.voice_text } : {}) }), controller.signal); } catch (error) { end(); throw error; }
     for (const [name, value] of Object.entries(spoken.headers)) c.header(name, value);
     if (!spoken.body) { end(); return new Response(JSON.stringify({ error: spoken.status === 499 ? "Request cancelled" : spoken.status === 504 ? "The engine timed out." : "The engine did not answer." }), { status: spoken.status, headers: { ...spoken.headers, "content-type": "application/json" } }); }
     return new Response(endWithStream(spoken.body, end), { status: spoken.status, headers: { ...spoken.headers, "content-type": spoken.contentType ?? "audio/wav", "cache-control": "no-cache" } });

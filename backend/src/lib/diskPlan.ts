@@ -12,7 +12,7 @@ import { partDef, partLabel } from "@/lib/partDefs";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
   SPLASH_LOCAL_CHAT_MODELS,
-  CHATTERBOX_ENGINE, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
+  CHATTERBOX_ENGINE, VOXCPM2_ENGINE, VOXCPM2_REDUCED_ENGINE, voxcpm2PackFor, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
   STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_SFX_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_H3_MODELS, STACK_VIDEO_MASK_MODELS,
 } from "@/lib/modelCatalog";
 import { plannedPinsFor } from "@/lib/installPlan";
@@ -119,6 +119,7 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:python": () => engineRow("engine:python", "python-base", "Python base for the engines", "The shared Python the voice and picture engines run on."),
   "engine:voice": () => engineRow("engine:voice", "pocket-tts", "Voice engine tools", "What the voice runs on."),
   "engine:voice-better": () => engineRow("engine:voice-better", "mlx-audio", "Better voice engine tools", "What the expressive voice runs on."),
+  "engine:voice-voxcpm2": () => engineRow("engine:voice-voxcpm2", "voxcpm2", "Optional voice engine tools", "What the optional natural voice runs on."),
   "engine:pictures": () => engineRow("engine:pictures", "image-gen", "Picture engine tools", "What making pictures runs on."),
   "engine:pictures-h3": () => engineRow("engine:pictures-h3", "h3-image-gen", "Picture model engine tools", "What the picture model runs on."),
   "engine:image-tools": () => engineRow("engine:image-tools", "image-tools", "Picture editing engine tools", "What removing a background, erasing and enlarging run on."),
@@ -138,7 +139,7 @@ const ENGINE_ROWS: Record<string, () => DiskRow> = {
   "engine:recorded-speech": () => engineRow("engine:recorded-speech", "recorded-speech", "Recorded speech tools", "What recorded speech rendering runs on."),
   "engine:chat-mlx": () => engineRow("engine:chat-mlx", "omlx", "Faster chat engine tools (oMLX)", "What the faster chat engine runs on. llama.cpp stays as the fallback."),
 };
-const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:pictures", "engine:pictures-h3", "engine:image-tools", "engine:liveportrait", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:video-mask", "engine:music", "engine:sound-effects", "engine:score", "engine:swap-composite", "engine:stems", "engine:align", "engine:beats", "engine:voice-convert", "engine:recorded-speech"];
+const PYTHON_ENGINES = ["engine:chat-mlx", "engine:voice", "engine:voice-better", "engine:voice-voxcpm2", "engine:pictures", "engine:pictures-h3", "engine:image-tools", "engine:liveportrait", "engine:video", "engine:video-ltx25", "engine:video-ltx25-max", "engine:video-mask", "engine:music", "engine:sound-effects", "engine:score", "engine:swap-composite", "engine:stems", "engine:align", "engine:beats", "engine:voice-convert", "engine:recorded-speech"];
 
 function totals(rows: DiskRow[], selected: Set<string>, only?: "home" | "ai"): DiskTotals {
   const chosen = rows.filter((row) => selected.has(row.id));
@@ -189,6 +190,10 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (voice.length) rows.push(modelRow({ id: "voice", label: partLabel("pocket-tts-english"), note: partDef("pocket-tts-english")!.description, need: "required", engines: ["engine:voice", "engine:python"] }, voice));
   const better = plannedWhere((pin) => chatterbox.has(pin.id));
   if (better.length) rows.push(modelRow({ id: "voice-better", label: partLabel("chatterbox-turbo-fp16"), note: partDef("chatterbox-turbo-fp16")!.description, need: "recommended", engines: ["engine:voice-better", "engine:python"] }, better));
+  // voxcpm2 (VOICE-VOXCPM2-01 step 2): two optional rows, off by default, never in the first-run set; the voice is chosen by name in the voice engine setting afterwards.
+  // Each size brings its own files and the clip speech-to-text (a shared companion, counted once per row because the rows are alternatives).
+  if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64")) rows.push(modelRow({ id: "voice-voxcpm2", label: partLabel("voxcpm2-bf16"), note: `${partDef("voxcpm2-bf16")!.description} Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.`, need: "optional", engines: ["engine:voice-voxcpm2", "engine:python"] }, voxcpm2PackFor(VOXCPM2_ENGINE)));
+  if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p32")) rows.push(modelRow({ id: "voice-voxcpm2-reduced", label: partLabel("voxcpm2-4bit"), note: `${partDef("voxcpm2-4bit")!.description} Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.`, need: "optional", engines: ["engine:voice-voxcpm2", "engine:python"] }, voxcpm2PackFor(VOXCPM2_REDUCED_ENGINE)));
   const tools = plannedWhere((pin) => imageTools.has(pin.id));
   if (tools.length) rows.push(modelRow({ id: "image-tools", label: partLabel("image-tools"), note: partDef("image-tools")!.description, need: "recommended", engines: ["engine:image-tools", "engine:python"] }, tools));
   const look = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");

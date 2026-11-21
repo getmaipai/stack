@@ -43,8 +43,8 @@ function fakeEnvironment(root: string, files: Record<string, string>): void {
 }
 function choose(engine: string): void { updateSettings({ "stack.voice.engine": engine }); applyPendingSettings(); }
 
-test("the registry holds three engines, two built; Chatterbox Turbo declares the six measured tags, Pocket none, Orpheus is a slot", () => {
-  expect(TTS_ENGINE_CHOICES.sort()).toEqual(["chatterbox-turbo", "pocket"]);
+test("the registry holds five engines, four built (VoxCPM2 in two sizes); Chatterbox Turbo declares the six measured tags, Pocket none, Orpheus is a slot", () => {
+  expect(TTS_ENGINE_CHOICES.sort()).toEqual(["chatterbox-turbo", "pocket", "voxcpm2", "voxcpm2-reduced"]);
   expect(TTS_ENGINES.orpheus.built).toBe(false);
   expect(TTS_ENGINES["chatterbox-turbo"].tags).toEqual(["[laugh]", "[chuckle]", "[cough]", "[sigh]", "[clear throat]", "[gasp]"]);
   expect(TTS_ENGINES.pocket.tags).toEqual([]);
@@ -82,7 +82,7 @@ test("resolving the engine: auto follows the tier; a missing, failed or unbuilt 
 test("stack.voice.engine is one declared select that defaults to auto and applies at the engine's restart", () => {
   const row = readSettings().find((setting) => setting.key === "stack.voice.engine")!;
   expect(row).toMatchObject({ selector: "select", default: "auto", in_effect: "auto", needs_restart: true });
-  expect((row.range as { options: Array<{ value: string }> }).options.map((option) => option.value)).toEqual(["auto", "chatterbox-turbo", "pocket"]);
+  expect((row.range as { options: Array<{ value: string }> }).options.map((option) => option.value)).toEqual(["auto", "chatterbox-turbo", "pocket", "voxcpm2", "voxcpm2-reduced"]);
   updateSettings({ "stack.voice.engine": "pocket" });
   expect(readSettings().find((setting) => setting.key === "stack.voice.engine")).toMatchObject({ in_effect: "auto", pending: "pocket" });
   expect(() => updateSettings({ "stack.voice.engine": "banana" })).toThrow();

@@ -1,7 +1,7 @@
 // The VoxCPM2 voice engine's runtime (VOICE-VOXCPM2-01 step 1): its own Python environment (mlx-audio 0.6.4, the first line that
 // ships the VoxCPM2 model; the Chatterbox environment stays on 0.5.9), assembled from the pinned uv and a hashed requirements file
 // by the same builder as mlx-audio, and launched with the same server script, `mlx_tts_server.py --engine voxcpm2`, which speaks
-// the Chatterbox wire (same form, chunked 24 kHz WAV). Nothing launches it yet: the supervisor, tiers and the setting come in step 2.
+// the Chatterbox wire (same form, chunked 24 kHz WAV). The supervisor launches it only when the setting `stack.voice.engine` names `voxcpm2` (bf16) or `voxcpm2-reduced` (4-bit); never by default (step 2).
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANAGED_RUNTIMES } from "@/lib/engineCatalog";

@@ -17,6 +17,12 @@
       "peak_temp_bytes": 336965689,
       "basis": "measured"
     },
+    "voxcpm2": {
+      "installed_bytes": 466000000,
+      "download_bytes": 330000000,
+      "peak_temp_bytes": 330000000,
+      "basis": "estimate"
+    },
     "image-gen": {
       "installed_bytes": 1174437888,
       "download_bytes": 807690041,
@@ -822,6 +828,70 @@
     "flux3-image-klein-text-encoder-chat-template": {
       "download_bytes": 5502,
       "installed_bytes": 5502
+    },
+    "voxcpm2-bf16": {
+      "download_bytes": 4286190791,
+      "installed_bytes": 4286190791
+    },
+    "voxcpm2-bf16-model-00002": {
+      "download_bytes": 669068875,
+      "installed_bytes": 669068875
+    },
+    "voxcpm2-bf16-model-safetensors-index": {
+      "download_bytes": 67424,
+      "installed_bytes": 67424
+    },
+    "voxcpm2-bf16-config": {
+      "download_bytes": 5210,
+      "installed_bytes": 5210
+    },
+    "voxcpm2-bf16-special-tokens-map": {
+      "download_bytes": 1632,
+      "installed_bytes": 1632
+    },
+    "voxcpm2-bf16-tokenizer": {
+      "download_bytes": 3676772,
+      "installed_bytes": 3676772
+    },
+    "voxcpm2-bf16-tokenizer-config": {
+      "download_bytes": 4952,
+      "installed_bytes": 4952
+    },
+    "voxcpm2-4bit": {
+      "download_bytes": 2297215329,
+      "installed_bytes": 2297215329
+    },
+    "voxcpm2-4bit-config": {
+      "download_bytes": 5332,
+      "installed_bytes": 5332
+    },
+    "voxcpm2-4bit-special-tokens-map": {
+      "download_bytes": 1632,
+      "installed_bytes": 1632
+    },
+    "voxcpm2-4bit-tokenizer": {
+      "download_bytes": 3676772,
+      "installed_bytes": 3676772
+    },
+    "voxcpm2-4bit-tokenizer-config": {
+      "download_bytes": 4952,
+      "installed_bytes": 4952
+    },
+    "voxcpm2-clip-stt-model": {
+      "download_bytes": 2471559904,
+      "installed_bytes": 2471559904
+    },
+    "voxcpm2-clip-stt-config": {
+      "download_bytes": 36176,
+      "installed_bytes": 36176
+    },
+    "voxcpm2-clip-stt-tokenizer": {
+      "download_bytes": 251396,
+      "installed_bytes": 251396
+    },
+    "voxcpm2-clip-stt-vocab": {
+      "download_bytes": 5066,
+      "installed_bytes": 5066
     }
   }
 }

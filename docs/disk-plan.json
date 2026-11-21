@@ -12,19 +12,19 @@
     "p16.ai_required_free_bytes": 45593263653,
     "p32.required_free_bytes": 51766323237,
     "p32.minimum_required_free_bytes": 14771808659,
-    "p32.everything_required_free_bytes": 75670420517,
+    "p32.everything_required_free_bytes": 82286928388,
     "p32.needed_bytes": 43914403488,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 48589999960,
     "p64.required_free_bytes": 194408115933,
     "p64.minimum_required_free_bytes": 37187187977,
-    "p64.everything_required_free_bytes": 296036209552,
+    "p64.everything_required_free_bytes": 311569759261,
     "p64.needed_bytes": 163132484664,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 191231792656,
     "p128.required_free_bytes": 197949623094,
     "p128.minimum_required_free_bytes": 37187187977,
-    "p128.everything_required_free_bytes": 777195296547,
+    "p128.everything_required_free_bytes": 792728846256,
     "p128.needed_bytes": 166083740632,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 194773299817
@@ -629,6 +629,34 @@
           "basis": "pins"
         },
         {
+          "id": "voice-voxcpm2-reduced",
+          "label": "VoxCPM2 (smaller)",
+          "note": "The same voice in a smaller version that needs less memory and disk. Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 4772756559,
+          "installed_bytes": 4772756559,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "voxcpm2-4bit",
+            "voxcpm2-4bit-config",
+            "voxcpm2-4bit-special-tokens-map",
+            "voxcpm2-4bit-tokenizer",
+            "voxcpm2-4bit-tokenizer-config",
+            "voxcpm2-clip-stt-model",
+            "voxcpm2-clip-stt-config",
+            "voxcpm2-clip-stt-tokenizer",
+            "voxcpm2-clip-stt-vocab"
+          ],
+          "engines": [
+            "engine:voice-voxcpm2",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "image-tools",
           "label": "Image editor",
           "note": "Remove a background, erase an object, upscale, resize or make a depth map for a picture.",
@@ -908,6 +936,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:voice-voxcpm2",
+          "label": "Optional voice engine tools",
+          "note": "What the optional natural voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 330000000,
+          "installed_bytes": 466000000,
+          "peak_temp_bytes": 330000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:image-tools",
           "label": "Picture editing engine tools",
           "note": "What removing a background, erasing and enlarging run on.",
@@ -1028,11 +1071,11 @@
         "required_free_bytes": 14771808659
       },
       "everything": {
-        "download_bytes": 49580968985,
-        "installed_bytes": 55183176253,
-        "peak_temp_bytes": 9450609013,
-        "needed_bytes": 64633785266,
-        "required_free_bytes": 75670420517
+        "download_bytes": 54683725544,
+        "installed_bytes": 60421932812,
+        "peak_temp_bytes": 9780609013,
+        "needed_bytes": 70202541825,
+        "required_free_bytes": 82286928388
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1223,6 +1266,64 @@
           ],
           "engines": [
             "engine:voice-better",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice-voxcpm2",
+          "label": "VoxCPM2",
+          "note": "An optional, very natural speaking voice that can copy a voice from a short recording. The full-size version, for larger computers. Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 7430868198,
+          "installed_bytes": 7430868198,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "voxcpm2-bf16",
+            "voxcpm2-bf16-model-00002",
+            "voxcpm2-bf16-model-safetensors-index",
+            "voxcpm2-bf16-config",
+            "voxcpm2-bf16-special-tokens-map",
+            "voxcpm2-bf16-tokenizer",
+            "voxcpm2-bf16-tokenizer-config",
+            "voxcpm2-clip-stt-model",
+            "voxcpm2-clip-stt-config",
+            "voxcpm2-clip-stt-tokenizer",
+            "voxcpm2-clip-stt-vocab"
+          ],
+          "engines": [
+            "engine:voice-voxcpm2",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice-voxcpm2-reduced",
+          "label": "VoxCPM2 (smaller)",
+          "note": "The same voice in a smaller version that needs less memory and disk. Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 4772756559,
+          "installed_bytes": 4772756559,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "voxcpm2-4bit",
+            "voxcpm2-4bit-config",
+            "voxcpm2-4bit-special-tokens-map",
+            "voxcpm2-4bit-tokenizer",
+            "voxcpm2-4bit-tokenizer-config",
+            "voxcpm2-clip-stt-model",
+            "voxcpm2-clip-stt-config",
+            "voxcpm2-clip-stt-tokenizer",
+            "voxcpm2-clip-stt-vocab"
+          ],
+          "engines": [
+            "engine:voice-voxcpm2",
             "engine:python"
           ],
           "installed": false,
@@ -1735,6 +1836,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:voice-voxcpm2",
+          "label": "Optional voice engine tools",
+          "note": "What the optional natural voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 330000000,
+          "installed_bytes": 466000000,
+          "peak_temp_bytes": 330000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:pictures",
           "label": "Picture engine tools",
           "note": "What making pictures runs on.",
@@ -1915,11 +2031,11 @@
         "required_free_bytes": 37187187977
       },
       "everything": {
-        "download_bytes": 229659174315,
-        "installed_bytes": 236405064135,
-        "peak_temp_bytes": 12350132590,
-        "needed_bytes": 248755196725,
-        "required_free_bytes": 296036209552
+        "download_bytes": 242192799072,
+        "installed_bytes": 249074688892,
+        "peak_temp_bytes": 12680132590,
+        "needed_bytes": 261754821482,
+        "required_free_bytes": 311569759261
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2152,6 +2268,64 @@
           ],
           "engines": [
             "engine:voice-better",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice-voxcpm2",
+          "label": "VoxCPM2",
+          "note": "An optional, very natural speaking voice that can copy a voice from a short recording. The full-size version, for larger computers. Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 7430868198,
+          "installed_bytes": 7430868198,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "voxcpm2-bf16",
+            "voxcpm2-bf16-model-00002",
+            "voxcpm2-bf16-model-safetensors-index",
+            "voxcpm2-bf16-config",
+            "voxcpm2-bf16-special-tokens-map",
+            "voxcpm2-bf16-tokenizer",
+            "voxcpm2-bf16-tokenizer-config",
+            "voxcpm2-clip-stt-model",
+            "voxcpm2-clip-stt-config",
+            "voxcpm2-clip-stt-tokenizer",
+            "voxcpm2-clip-stt-vocab"
+          ],
+          "engines": [
+            "engine:voice-voxcpm2",
+            "engine:python"
+          ],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "voice-voxcpm2-reduced",
+          "label": "VoxCPM2 (smaller)",
+          "note": "The same voice in a smaller version that needs less memory and disk. Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 4772756559,
+          "installed_bytes": 4772756559,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "voxcpm2-4bit",
+            "voxcpm2-4bit-config",
+            "voxcpm2-4bit-special-tokens-map",
+            "voxcpm2-4bit-tokenizer",
+            "voxcpm2-4bit-tokenizer-config",
+            "voxcpm2-clip-stt-model",
+            "voxcpm2-clip-stt-config",
+            "voxcpm2-clip-stt-tokenizer",
+            "voxcpm2-clip-stt-vocab"
+          ],
+          "engines": [
+            "engine:voice-voxcpm2",
             "engine:python"
           ],
           "installed": false,
@@ -2888,6 +3062,21 @@
           "basis": "measured"
         },
         {
+          "id": "engine:voice-voxcpm2",
+          "label": "Optional voice engine tools",
+          "note": "What the optional natural voice runs on.",
+          "kind": "engine",
+          "need": "required",
+          "selectable": false,
+          "download_bytes": 330000000,
+          "installed_bytes": 466000000,
+          "peak_temp_bytes": 330000000,
+          "model_ids": [],
+          "engines": [],
+          "installed": false,
+          "basis": "estimate"
+        },
+        {
           "id": "engine:pictures",
           "label": "Picture engine tools",
           "note": "What making pictures runs on.",
@@ -3143,11 +3332,11 @@
         "required_free_bytes": 37187187977
       },
       "everything": {
-        "download_bytes": 627576661676,
-        "installed_bytes": 636171446624,
-        "peak_temp_bytes": 13789560598,
-        "needed_bytes": 649961007222,
-        "required_free_bytes": 777195296547
+        "download_bytes": 640110286433,
+        "installed_bytes": 648841071381,
+        "peak_temp_bytes": 14119560598,
+        "needed_bytes": 662960631979,
+        "required_free_bytes": 792728846256
       },
       "measured_on": "2026-10-17",
       "default_selected": [

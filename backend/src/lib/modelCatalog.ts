@@ -919,13 +919,16 @@ export const STACK_VOICE_CHANGE_CHATTERBOX: CatalogModelLike = {
   id: "chatterbox-vc-s3gen", role: "tts", repo: "ResembleAI/chatterbox", license: "MIT", revision: "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18", engine: "chatterbox-vc",
   download: { url: hfUrl("ResembleAI/chatterbox/resolve/5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18/s3gen.safetensors"), sha256: "2b78103c654207393955e4900aac14a12de8ef25f4b09424f1ef91941f161d4e", approx_bytes: 1_056_484_620, hub_file: "s3gen.safetensors" },
 };
-/** VoxCPM2 (OpenBMB, Apache-2.0) as the mlx-community MLX conversions, VOICE-VOXCPM2-01 step 1: the owner's blind-listening pick for the conversation voice.
- * Staged, not selected: no tier installs it until step 2 picks tiers (bf16 for Standard, 4-bit for Reduced). Every file is pinned by sha256 and size at the
- * revision the voice lab measured, placed in the hub cache, and read offline by `mlx_tts_server.py --engine voxcpm2 --repo <repo>`. The README, .gitattributes and
- * sample WAVs of the repositories are not installed. Measured in the lab (Apple M5 Max): first audio 114 to 196 ms over HTTP. */
+/** VoxCPM2 (OpenBMB, Apache-2.0) as the mlx-community MLX conversions, VOICE-VOXCPM2-01: the owner's blind-listening pick for the conversation voice.
+ * Selected only by the setting `stack.voice.engine` (`voxcpm2`, bf16, the Standard size; `voxcpm2-reduced`, 4-bit, the Reduced size): they are in
+ * STACK_MODELS so the disk plan can offer them, but no tier's first-run plan names them and they carry no `sizing` (no tier binds them). Every file is pinned by sha256 and size at the revision the
+ * voice lab measured, placed in the hub cache, and read offline by `mlx_tts_server.py --engine voxcpm2 --repo <repo>`. The README, .gitattributes and
+ * sample WAVs of the repositories are not installed. Measured in the lab (Apple M5 Max): first audio 114 to 196 ms over HTTP.
+ * The two sizes carry their own engine name so a record says which size it is (`selectedModel` filters on it). */
 export const VOXCPM2_ENGINE = "voxcpm2";
-const VOXCPM2_FILES: Array<{ id: string; repo: string; revision: string; quantization: string; files: Array<{ file: string; sha256: string; bytes: number }> }> = [
-  { id: "voxcpm2-bf16", repo: "mlx-community/VoxCPM2-bf16", revision: "a7fb80d9056983135a54ca3f71fcc5a637ccddf5", quantization: "bf16", files: [
+export const VOXCPM2_REDUCED_ENGINE = "voxcpm2-reduced";
+const VOXCPM2_FILES: Array<{ id: string; repo: string; revision: string; quantization: string; engine: string; files: Array<{ file: string; sha256: string; bytes: number }> }> = [
+  { id: "voxcpm2-bf16", repo: "mlx-community/VoxCPM2-bf16", revision: "a7fb80d9056983135a54ca3f71fcc5a637ccddf5", quantization: "bf16", engine: VOXCPM2_ENGINE, files: [
     { file: "model-00001.safetensors", sha256: "676b05649d915e63f2291a0b091bd72250785b2448fe14ec81f3566cf5f47950", bytes: 4_286_190_791 },
     { file: "model-00002.safetensors", sha256: "adddb9b85026763751beb20ba050aa46ef19b6b55cf6cb6a8c44ac8b06ec5cff", bytes: 669_068_875 },
     { file: "model.safetensors.index.json", sha256: "e5c9dbe10f771ec0bc6ee244531475615547c1129b3adf6b51fd00b1466ee75a", bytes: 67_424 },
@@ -934,7 +937,7 @@ const VOXCPM2_FILES: Array<{ id: string; repo: string; revision: string; quantiz
     { file: "tokenizer.json", sha256: "f8984687e4a92a3503d521396d454b7d68e9fdaab2a0288eb3536c7c1aa4bc20", bytes: 3_676_772 },
     { file: "tokenizer_config.json", sha256: "466575c55f0cf49530666c2e46ed14f26237dbd227ba7f4bb3bbec93df90edfc", bytes: 4_952 },
   ] },
-  { id: "voxcpm2-4bit", repo: "mlx-community/VoxCPM2-4bit", revision: "dc9e5c187858da5f4a13dc4c247e297339216381", quantization: "MLX 4-bit", files: [
+  { id: "voxcpm2-4bit", repo: "mlx-community/VoxCPM2-4bit", revision: "dc9e5c187858da5f4a13dc4c247e297339216381", quantization: "MLX 4-bit", engine: VOXCPM2_REDUCED_ENGINE, files: [
     { file: "model.safetensors", sha256: "25bddc99a7cc6d28214f12dd676ed0afa9b0a805d6477f85c275bb113cb8acee", bytes: 2_297_215_329 },
     { file: "config.json", sha256: "91bff6db1be27bc0f4f2a287cca7a8fbb8b1d7a0b026a5dc4a71bc5f2f1ddcfb", bytes: 5_332 },
     { file: "special_tokens_map.json", sha256: "068594063e37662c02b21acf42ebb334ef6a74fb810e68a2368f88f08351de76", bytes: 1_632 },
@@ -945,14 +948,41 @@ const VOXCPM2_FILES: Array<{ id: string; repo: string; revision: string; quantiz
 export const STACK_TTS_VOXCPM2_MODELS: CatalogModelLike[] = VOXCPM2_FILES.flatMap((model) => model.files.map((part, index) => ({
   id: index === 0 ? model.id : `${model.id}-${part.file.replace(/\.[^.]+$/, "").replace(/[._]/g, "-")}`,
   role: "tts" as const,
-  ...(index === 0 ? { sizing: { profile: "p64", quantization: model.quantization } } : { component: `voxcpm2-${part.file.replace(/\.[^.]+$/, "").replace(/[._]/g, "-")}` }),
+  ...(index === 0 ? {} : { component: `${model.engine}-${part.file.replace(/\.[^.]+$/, "").replace(/[._]/g, "-")}` }),
   repo: model.repo,
   license: "Apache-2.0",
   revision: model.revision,
-  engine: VOXCPM2_ENGINE,
+  engine: model.engine,
   download: { url: hfUrl(`${model.repo}/resolve/${model.revision}/${part.file}`), sha256: part.sha256, approx_bytes: part.bytes, hub_file: part.file },
 })));
-export const STACK_STAGED_MODELS: CatalogModelLike[] = [STACK_FACE_REPAIR_GFPGAN, STACK_FACE_REPAIR_DETECTOR, STACK_FACE_REPAIR_PARSER, STACK_VOICE_CHANGE_CHATTERBOX, ...STACK_TTS_VOXCPM2_MODELS];
+/** The pinned speech-to-text the VoxCPM2 engine uses to read the words of a reference clip when the request brings none (NVIDIA Parakeet TDT 0.6B v2,
+ * CC-BY-4.0, the mlx-community conversion). It is a companion of both VoxCPM2 sizes and installs only with them; the engine loads it offline from the
+ * hub cache (`STT_REPO` in `mlx_tts_server.py`) and a missing file is a clear error, never a download. Not the Stack's `stt` role model (that is a sherpa
+ * ONNX build behind its own worker, which the Python engine cannot call). Read from the hub cache on 2026-11-21 at the repository's head. */
+export const VOXCPM2_STT_REPO = "mlx-community/parakeet-tdt-0.6b-v2";
+export const VOXCPM2_STT_REVISION = "8ae155301e23d820d82aa60d24817c900e69e487";
+export const VOXCPM2_STT_ENGINE = "voxcpm2-stt";
+const VOXCPM2_STT_FILES: Array<{ file: string; sha256: string; bytes: number }> = [
+  { file: "model.safetensors", sha256: "b958c37a6baa6874a279108755c8f2818e27bf647d72d54800a234a421341dfe", bytes: 2_471_559_904 },
+  { file: "config.json", sha256: "9bd323e60afe2615c983a5d9fc3a2c0470df2a03edf90c0f861bd59509d07264", bytes: 36_176 },
+  { file: "tokenizer.model", sha256: "5a3a82c48998709f9bc9f5db2924d99a899d20bf82550ca52272da7c7557b0a0", bytes: 251_396 },
+  { file: "vocab.txt", sha256: "70b25deed256d79365a3c290d6191c31cc2315d952faf18d5c3a334f46e4866e", bytes: 5_066 },
+];
+export const STACK_TTS_VOXCPM2_STT_MODELS: CatalogModelLike[] = VOXCPM2_STT_FILES.map((part) => ({
+  id: `voxcpm2-clip-stt-${part.file.replace(/\.[^.]+$/, "").replace(/[._]/g, "-")}`,
+  role: "tts" as const,
+  component: `voxcpm2-clip-stt-${part.file.replace(/\.[^.]+$/, "").replace(/[._]/g, "-")}`,
+  repo: VOXCPM2_STT_REPO,
+  license: "CC-BY-4.0",
+  revision: VOXCPM2_STT_REVISION,
+  engine: VOXCPM2_STT_ENGINE,
+  download: { url: hfUrl(`${VOXCPM2_STT_REPO}/resolve/${VOXCPM2_STT_REVISION}/${part.file}`), sha256: part.sha256, approx_bytes: part.bytes, hub_file: part.file },
+}));
+/** Every file one VoxCPM2 size needs: its own pack and the clip speech-to-text companion. */
+export function voxcpm2PackFor(engine: string): CatalogModelLike[] {
+  return [...STACK_TTS_VOXCPM2_MODELS.filter((pin) => pin.engine === engine), ...STACK_TTS_VOXCPM2_STT_MODELS];
+}
+export const STACK_STAGED_MODELS: CatalogModelLike[] = [STACK_FACE_REPAIR_GFPGAN, STACK_FACE_REPAIR_DETECTOR, STACK_FACE_REPAIR_PARSER, STACK_VOICE_CHANGE_CHATTERBOX];
 /** Held by the coordinator on 2026-11-15 (a possible engine switch may replace them): recorded, never downloaded. */
 export const STACK_HELD_MODELS = ["LTX-2.5 IC-LoRA adapters", "CrossView-Warp adapter", "MoGe-2", "MuseTalk 1.5", "LatentSync 1.6"] as const;
 
@@ -1633,7 +1663,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS, ...STACK_TTS_VOXCPM2_MODELS, ...STACK_TTS_VOXCPM2_STT_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

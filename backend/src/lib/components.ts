@@ -16,7 +16,7 @@ import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, removeModel, removeModelsAtomically, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
-import { SPLASH_LOCAL_CHAT_MODELS, H3_LICENCE_NOTICE, KLEIN3_LICENCE_NOTICE, STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_H3_ID, STACK_IMAGE_H3_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_RESTORE_ID, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, LTX_LICENCE_NOTICE, H3_VIDEO_LICENSE_NOTICE, STACK_VIDEO_H3_MODEL, STACK_VIDEO_H3_MODEL_ID, SFX_LICENCE_NOTICE, STACK_SFX_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS } from "@/lib/modelCatalog";
+import { SPLASH_LOCAL_CHAT_MODELS, H3_LICENCE_NOTICE, KLEIN3_LICENCE_NOTICE, STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_H3_ID, STACK_IMAGE_H3_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_RESTORE_ID, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, LTX_LICENCE_NOTICE, H3_VIDEO_LICENSE_NOTICE, STACK_VIDEO_H3_MODEL, STACK_VIDEO_H3_MODEL_ID, SFX_LICENCE_NOTICE, STACK_SFX_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_SFT_ID, STACK_MUSIC_XL_ID, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MAX_MODEL_ID, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_LTX25_MODEL_ID, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MASK_MODEL_ID, STACK_VIDEO_MODELS, STACK_TTS_VOXCPM2_STT_MODELS, VOXCPM2_ENGINE, VOXCPM2_REDUCED_ENGINE } from "@/lib/modelCatalog";
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
@@ -52,6 +52,7 @@ import { imageTools, imageToolsProof, imageToolsRoot } from "@/imagetools/imageT
 import { livePortrait, livePortraitEnvironmentReady, livePortraitRoot } from "@/liveportrait/liveportrait";
 import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot } from "@/speech/pocketTts";
 import { ensureMlxAudioEnvironment, mlxAudioInstalled, mlxAudioRoot } from "@/speech/mlxAudio";
+import { ensureVoxcpm2Environment, voxcpm2Installed, voxcpm2Root, VOXCPM2_RUNTIME_NAME } from "@/speech/voxcpm2";
 import { RECORDED_SPEECH_NAME, ensureRecordedSpeechEnvironment, recordedSpeech, recordedSpeechEnvironmentReady, recordedSpeechRoot } from "@/recordedSpeech/recordedSpeech";
 import { ensureMaskEnvironment, maskEnvironmentReady, maskGenRoot, maskRequirementsFileFor, MASK_GEN_NAME } from "@/video/mask";
 import { compositeSwapEnvironmentReady, compositeSwapRoot, ensureCompositeSwapEnvironment, COMPOSITE_SWAP_NAME } from "@/video/compositeSwap";
@@ -112,10 +113,10 @@ export interface UnitDef {
 
 const GB = 1_000_000_000;
 /** Environment downloads come from the disk plan's measured table (one definition with the wizard); the figures are a fallback only. */
-const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, beats: engineDownloadBytes("beats") ?? 0.5 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, voiceConvert: engineDownloadBytes("voice-convert") ?? 4 * GB, recordedSpeech: engineDownloadBytes("recorded-speech") ?? 1.7 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, h3: engineDownloadBytes("h3-image-gen") ?? 0.08 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, mask: engineDownloadBytes("mask-gen") ?? 0.6 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB };
+const ENV_BYTES = { align: engineDownloadBytes("align") ?? 0.3 * GB, beats: engineDownloadBytes("beats") ?? 0.5 * GB, stems: engineDownloadBytes("stems") ?? 0.25 * GB, voiceConvert: engineDownloadBytes("voice-convert") ?? 4 * GB, recordedSpeech: engineDownloadBytes("recorded-speech") ?? 1.7 * GB, image: engineDownloadBytes("image-gen") ?? 1.1 * GB, h3: engineDownloadBytes("h3-image-gen") ?? 0.08 * GB, video: engineDownloadBytes("video-gen") ?? 1.0 * GB, ltx25: engineDownloadBytes("ltx25-gen") ?? 0.25 * GB, ltx25max: engineDownloadBytes("ltx25-max-gen") ?? 0.25 * GB, mask: engineDownloadBytes("mask-gen") ?? 0.6 * GB, music: engineDownloadBytes("music-gen") ?? 0.8 * GB, tools: engineDownloadBytes("image-tools") ?? 0.4 * GB, pocket: engineDownloadBytes("pocket-tts") ?? 0.72 * GB, mlxAudio: engineDownloadBytes("mlx-audio") ?? 0.47 * GB, voxcpm2: engineDownloadBytes("voxcpm2") ?? 0.5 * GB };
 /** The disk plan's row for a component, where the plan has one (its optional rows are the wizard's unchecked extras). */
 /** The install-plan row each component stands for (the size and need shown beside it). A test keeps every plan row covered. */
-export const DISK_ROW: Record<string, string> = { ...Object.fromEntries(SPLASH_LOCAL_CHAT_MODELS.map((entry) => [entry.pin.id, entry.row])), "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "flux3-image-klein": "pictures-klein3", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "minimax-h3-image": "pictures-h3", "seedvr2-3b": "pictures-clearer", "image-tools": "image-tools", ffmpeg: "ffmpeg", "shazam-signature": "shazam-signature", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max", "stable-audio-3-small-sfx": "sound-effects", "score-gen": "score-transcription" };
+export const DISK_ROW: Record<string, string> = { ...Object.fromEntries(SPLASH_LOCAL_CHAT_MODELS.map((entry) => [entry.pin.id, entry.row])), "qwen3.8-27b-ud-q4-k-m": "coding", "flux2-klein-4b": "pictures", "flux3-image-klein": "pictures-klein3", "z-image-turbo": "pictures-zimage", "ernie-image-turbo": "pictures-ernie", "qwen-image-2512-q8": "pictures-qwen", "minimax-h3-image": "pictures-h3", "seedvr2-3b": "pictures-clearer", "image-tools": "image-tools", ffmpeg: "ffmpeg", "shazam-signature": "shazam-signature", "pocket-tts-english": "voice", "chatterbox-turbo-fp16": "voice-better", "voxcpm2-bf16": "voice-voxcpm2", "voxcpm2-4bit": "voice-voxcpm2-reduced", "fish-audio-drama-3-4bit": "recorded-speech", "fastwan2-2-ti2v-5b-mlx-bf16": "video", "sam2.1-hiera-small": "video-mask", "ace-step-1-5-turbo": "music", "ace-step-1-5-xl-turbo-bf16": "music-boost", "ace-step-1-5-xl-sft-bf16": "music-max", "htdemucs": "stems", "htdemucs_ft": "stems-ft", "htdemucs_6s": "stems-6s", "mms-fa-align": "align", "soulx-singer-svc": "voice-convert", "soulx-singer-rmvpe": "voice-convert", "soulx-singer-whisper-base": "voice-convert", "ltx-2-5-q8-distilled-mlx": "video-ltx25", "ltx-2-5-bf16-distilled-mlx-max": "video-ltx25-max", "stable-audio-3-small-sfx": "sound-effects", "score-gen": "score-transcription" };
 
 const envImage: EnvDef = { name: "image-gen", approxBytes: ENV_BYTES.image, root: imageGenRoot, ready: imageGenEnvironmentReady, build: (onPhase, signal) => ensureImageGenEnvironment(onPhase, { signal }), stop: () => imageGen.stop() };
 // The high-detail picture model's own environment (h3-image-gen). It has no warm worker, so nothing needs stopping before it is rebuilt.
@@ -212,6 +213,7 @@ const envShazamSignature: EnvDef = {
 };
 const envPocket: EnvDef = { name: "pocket-tts", approxBytes: ENV_BYTES.pocket, root: pocketTtsRoot, ready: pocketTtsInstalled, build: (onPhase, signal) => ensurePocketTtsEnvironment(onPhase, { signal }) };
 const envMlxAudio: EnvDef = { name: "mlx-audio", approxBytes: ENV_BYTES.mlxAudio, root: mlxAudioRoot, ready: mlxAudioInstalled, build: (onPhase, signal) => ensureMlxAudioEnvironment(onPhase, { signal }) };
+const envVoxcpm2: EnvDef = { name: VOXCPM2_RUNTIME_NAME, approxBytes: ENV_BYTES.voxcpm2, root: voxcpm2Root, ready: voxcpm2Installed, build: (onPhase, signal) => ensureVoxcpm2Environment(onPhase, { signal }) };
 const envRecordedSpeech: EnvDef = { name: RECORDED_SPEECH_NAME, approxBytes: ENV_BYTES.recordedSpeech, root: recordedSpeechRoot, ready: recordedSpeechEnvironmentReady, build: (onPhase, signal) => ensureRecordedSpeechEnvironment(onPhase, signal), stop: () => recordedSpeech.stop() };
 
 function dedupe<T>(items: T[], key: (item: T) => string): T[] { const seen = new Set<string>(); return items.filter((item) => { const k = key(item); if (seen.has(k)) return false; seen.add(k); return true; }); }
@@ -248,7 +250,12 @@ export function componentDefs(): UnitDef[] {
     else if (pin.role === "vision") units.push(generic(pin, "chat", "vision", ["Describing pictures"]));
     else if (pin.role === "embed") units.push(generic(pin, "chat", "embed", ["Memory and search"]));
     else if (pin.role === "stt") units.push(generic(pin, "voice", "stt", ["Listening"]));
-    else if (pin.role === "tts") units.push(generic(pin, "voice", "tts", ["Speaking"], pin.engine === "pocket-tts" ? envPocket : pin.engine === "chatterbox-turbo" ? envMlxAudio : undefined));
+    else if (pin.role === "tts") {
+      const unit = generic(pin, "voice", "tts", ["Speaking"], pin.engine === "pocket-tts" ? envPocket : pin.engine === "chatterbox-turbo" ? envMlxAudio : pin.engine === VOXCPM2_ENGINE || pin.engine === VOXCPM2_REDUCED_ENGINE ? envVoxcpm2 : undefined);
+      // Either voxcpm2 size brings the clip speech-to-text it reads a recording's words with (the pins are shared; removal keeps them while the other size is installed).
+      if (pin.engine === VOXCPM2_ENGINE || pin.engine === VOXCPM2_REDUCED_ENGINE) unit.pins = dedupe([...unit.pins, ...STACK_TTS_VOXCPM2_STT_MODELS], (item) => item.id);
+      units.push(unit);
+    }
   }
   // The wake word is three small assets that only work together.
   const wake = STACK_MODELS.filter((pin) => pin.role === "wakeword");
@@ -683,8 +690,11 @@ export async function uninstallComponent(id: string, hw?: HardwareInfo): Promise
   if (guard) throw guard;
   const before = unitDiskBytes(unit, defs);
   let freed = 0;
-  const modelIds = unit.pins.filter((pin) => !!getModel(pin.id)).map((pin) => pin.id);
+  // A file another installed component also lists (the voxcpm2 clip speech-to-text) stays while that component is installed.
+  const keptForOther = (pin: CatalogModelLike): boolean => defs.some((other) => other !== unit && other.pins.some((item) => item.id === pin.id) && pinInstalled(other.pins[0]!));
+  const modelIds = unit.pins.filter((pin) => !!getModel(pin.id) && !keptForOther(pin)).map((pin) => pin.id);
   for (const pin of unit.pins) {
+    if (keptForOther(pin)) continue;
     const hub = pin.download?.hub_file && pin.repo && pin.revision;
     if (hub) freed += releaseHfFile(pin.repo!, pin.revision!, pin.download!.hub_file!);
   }
