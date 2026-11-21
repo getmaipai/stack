@@ -4,7 +4,10 @@
 // restart policy is the outer watchdog. index.ts dispatches here; the
 // speech worker never imports this file, so it never opens the database.
 import { app, websocket } from "@/app";
-import { guardedFetch } from "@/lib/requestGuard";
+import { adminGuardedFetch } from "@/lib/adminGuard";
+import { pickTailscaleAddress } from "@/lib/adminListener";
+import { createSetupCode, resetAdmin } from "@/lib/adminAuth";
+import { dataDir } from "@/lib/paths";
 import { homeViewToken } from "@/lib/adultView";
 import { logger } from "@/lib/log";
 import { installLaunchdService, launchdStatus, startLaunchdService, stopLaunchdService, uninstallLaunchdService } from "@/service/launchd";
@@ -37,6 +40,10 @@ import { beginStopping } from "@/lib/lifecycle";
 import { startMemoryWatchdog } from "@/lib/memoryWatchdog";
 import { startResourceHistory } from "@/lib/resourceHistory";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { db } from "@/db";
+import { admin } from "@/db/schema";
 import { readMetalCapBytes } from "@/lib/metalCap";
 import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
 import { wireMaxWindowReduced } from "@/lib/maxWindowReduced";
@@ -49,8 +56,16 @@ export const MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024 * 1024 + 64 * 1024 * 1024;
 
 export function serveOptions(): { port: number; hostname: "127.0.0.1"; fetch: (request: Request, server: unknown) => Response | Promise<Response>; websocket: typeof websocket; idleTimeout: number; maxRequestBodySize: number } {
   const port = Number(process.env.PORT ?? settingValues()["stack.runtime.port"] ?? 8770);
-  return { port, hostname: "127.0.0.1", fetch: guardedFetch(app.fetch as (request: Request, server: unknown) => Response | Promise<Response>), websocket, idleTimeout: 255, maxRequestBodySize: MAX_REQUEST_BODY_BYTES };
+  return { port, hostname: "127.0.0.1", fetch: adminGuardedFetch(app.fetch as (request: Request, server: unknown) => Response | Promise<Response>), websocket, idleTimeout: 255, maxRequestBodySize: MAX_REQUEST_BODY_BYTES };
 }
+
+/** The second listener for the admin page on the Tailscale address, or null when the setting is off or no Tailscale address exists. Every /stack/v1 request on it needs an admin session. */
+export function tailscaleServeOptions(base: ReturnType<typeof serveOptions>, address: string | null = pickTailscaleAddress()): (Omit<ReturnType<typeof serveOptions>, "hostname"> & { hostname: string }) | null {
+  if (!settingValues()["stack.admin.tailscale"] || !address) return null;
+  return { ...base, hostname: address, fetch: adminGuardedFetch(app.fetch as (request: Request, server: unknown) => Response | Promise<Response>, { tailscaleAddress: address }) };
+}
+
+function hasAdmin(): boolean { return db.select().from(admin).get() !== undefined; }
 
 function onBattery(): boolean {
   if (process.platform !== "darwin") return false;
@@ -83,6 +98,16 @@ async function serve(): Promise<void> {
   logger.appendLine(JSON.stringify({ event: "engines.spec.loaded", engine: "splash", tiers: splashSpec().tiers }));
   const options = serveOptions();
   const server = Bun.serve(options);
+  const tailscaleOptions = tailscaleServeOptions(options);
+  const tailscaleServer = tailscaleOptions ? Bun.serve(tailscaleOptions) : null;
+  if (tailscaleOptions && tailscaleServer) logger.appendLine(JSON.stringify({ event: "admin.tailscale.bound", address: tailscaleOptions.hostname, port: tailscaleServer.port }));
+  else if (settingValues()["stack.admin.tailscale"]) logger.appendLine(JSON.stringify({ event: "admin.tailscale.unavailable", reason: "no Tailscale address (100.64.0.0/10) on this computer; only loopback is bound" }));
+  // First run: no admin yet means a one-time setup code, printed once here and kept in a 0600 file.
+  if (!hasAdmin() && !existsSync(join(dataDir, "admin-setup-code"))) {
+    createSetupCode(dataDir);
+    logger.appendLine(JSON.stringify({ event: "admin.setup-code.created", at: new Date().toISOString(), file: join(dataDir, "admin-setup-code") }));
+    console.log(`No admin account yet. The one-time setup code is in ${join(dataDir, "admin-setup-code")} (only you can read it).`);
+  }
   // Under systemd (Type=notify) the unit is "started" only now, and the
   // watchdog is answered from here on; elsewhere both are no-ops.
   notifySystemd("READY=1");
@@ -151,6 +176,7 @@ async function serve(): Promise<void> {
     stopTierWatch();
     stopWatchdog();
     server.stop(true);
+    tailscaleServer?.stop(true);
     process.exitCode = exitCode;
   };
   logger.installFatalErrorHandlers(() => stop(1));
@@ -180,6 +206,12 @@ export async function runDaemonCommand(command: string): Promise<void> {
       if (data) rmSync(data, { recursive: true, force: true });
       console.log("Service and data removed.");
     } else console.log("Service removed. Data was kept.");
+    return;
+  }
+  if (command === "admin" && process.argv[3] === "reset") {
+    await resetAdmin(dataDir);
+    logger.appendLine(JSON.stringify({ event: "admin.reset", at: new Date().toISOString(), remote: "local" }));
+    console.log(`Admin account removed and every sign-in ended. A new one-time setup code is in ${join(dataDir, "admin-setup-code")} (only you can read it). Open the admin page and enter it.`);
     return;
   }
   if (command === "start") { service.start(); console.log("Service started."); return; }

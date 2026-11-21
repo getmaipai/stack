@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 // `readiness.latest` meta row into the shared database, and the "empty
 // meta" assertion below failed on it. The child process cannot share that
 // singleton.
-test("opens and migrates the three-table state database", () => {
+test("opens and migrates the five-table state database", () => {
   const dataDir = mkdtempSync(join(tmpdir(), "maipai-stack-db-"));
   try {
     const probe = Bun.spawnSync(["bun", "run", "tests/dbProbe.ts"], {
@@ -22,7 +22,7 @@ test("opens and migrates the three-table state database", () => {
     });
     expect(probe.exitCode, probe.stderr.toString()).toBe(0);
     const result = JSON.parse(probe.stdout.toString().trim()) as { tables: string[]; meta: unknown[] };
-    expect(result.tables).toEqual(["health", "meta", "models"]);
+    expect(result.tables).toEqual(["admin", "admin_sessions", "health", "meta", "models"]);
     expect(result.meta).toEqual([]);
   } finally {
     rmSync(dataDir, { recursive: true, force: true });

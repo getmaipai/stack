@@ -1,9 +1,26 @@
-// The Stack's state: three tables. Settings values and small facts live
+// The Stack's state: five tables. Settings values and small facts live
 // in `meta`; a model's provenance and measured peaks in `models`; open
-// and resolved health items in `health`. Nothing else is stored (the
-// governor's ledger and the event ring are in memory; history a person
-// reads is Home's to keep).
+// and resolved health items in `health`; the one admin account in
+// `admin`; its open sessions in `admin_sessions` (the token's sha256,
+// never the token itself). Nothing else is stored (the governor's
+// ledger and the event ring are in memory; history a person reads is
+// Home's to keep).
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const admin = sqliteTable("admin", {
+  id: integer("id").primaryKey(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const adminSessions = sqliteTable("admin_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  createdAt: text("created_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  remote: text("remote").notNull(),
+});
 
 export const meta = sqliteTable("meta", {
   key: text("key").primaryKey(),
