@@ -34,7 +34,7 @@ import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, 
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
 import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashChatMemoryPlan, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
-import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor, splashResidentWeightsBytes, codingModeHeavy } from "@/lib/splashStore";
+import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor, splashResidentWeightsBytes, splashMeasuredPeakBytes, codingModeHeavy } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
 import { registerOwned, type OwnedHandle } from "@/lib/ownedProcesses";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
@@ -1739,11 +1739,11 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // A jit role's pin carries the whole-machine cost measured on a real
     // load (weights the engine maps are not in the process footprint),
     // and the larger of that and the store's own reading is the peak.
-    measuredPeakBytes: onSplash ? null : JIT_ROLES.includes(role) && pinMeasured !== null ? Math.max(pinMeasured, model.measuredFootprintBytes ?? 0) : model.measuredFootprintBytes,
+    measuredPeakBytes: onSplash ? splashMeasuredPeakBytes(model.id) : JIT_ROLES.includes(role) && pinMeasured !== null ? Math.max(pinMeasured, model.measuredFootprintBytes ?? 0) : model.measuredFootprintBytes,
     dryRunPeakBytes: onSplash ? splashEstimate : dryRunPeakBytes === null ? null : dryRunPeakBytes + projectorBytes,
     // Chat on Splash is admitted for its whole Metal budget (SPLASH-MEM-01): the process grows to that budget with cached
     // request states, and a ledger that held only the estimate let a song job wait on memory that was never free.
-    headroomBytes: onChatSplash ? splashChatMemoryPlan({ estimateBytes: splashEstimate!, measuredBytes: model.measuredFootprintBytes ?? null, headroomBytes: chatHeadroomBytes(settingValues()) }).ledgerHeadroomBytes
+    headroomBytes: onChatSplash && splashMeasuredPeakBytes(model.id) !== null ? 0 : onChatSplash ? splashChatMemoryPlan({ estimateBytes: splashEstimate!, measuredBytes: model.measuredFootprintBytes ?? null, headroomBytes: chatHeadroomBytes(settingValues()) }).ledgerHeadroomBytes
       : engineForRole(role) === "mlx-serve" && !managed && !generator && !SPEECH_ROLES.includes(role) ? mlxHeadroomBytes({ modelDir: model.modelPath!, contextTokens: contextLength }) : null,
     engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : onChatSplash ? "splash-chat" : onSplash ? "splash" : "llama-server",
     pinned: pinnedModels.has(model.id),
@@ -2293,6 +2293,21 @@ export async function restartForNewChatEngine(): Promise<boolean> {
  * self-heal controller forgets its failures and any retry it had pending. */
 let restartListener: ((role: RoleId) => void) | null = null;
 export function setRestartListener(listener: ((role: RoleId) => void) | null): void { restartListener = listener; }
+
+/** Home's "load this model": the role retires its engine and starts the model. A start that is refused (memory, a missing file) puts the earlier choice back and starts that model again, so a refused load never leaves the role without an engine; the refusal is still thrown. */
+export async function loadModelForRole(role: RoleId, modelId: string): Promise<RoleProcess> {
+  const before = preferredModels.get(role) ?? null;
+  preferModel(role, modelId);
+  try {
+    await restartRole(role, "model-load");
+    return await getProcess(role);
+  } catch (error) {
+    preferModel(role, before);
+    // The refused start left a back-off and a "does not fit" reason on the role: a recycle clears both before the earlier model starts again.
+    await restartRole(role, "model-load").then(() => getProcess(role)).catch(() => undefined);
+    throw error;
+  }
+}
 
 export async function restartRole(requested: RoleId, cause: RetireCause): Promise<void> {
   restartListener?.(processRoleFor(requested));

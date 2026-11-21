@@ -19,7 +19,7 @@ import { RoleIdSchema } from "@/roles";
 import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { catalogModelForId } from "@/updates/catalog";
 import { updateSettings } from "@/settings";
-import { getProcess, isModelPinned, loadedRoleForModel, pinModel, preferModel, restartForNewProjector, restartRole, unloadRole, EngineUnavailableError } from "@/lib/supervisor";
+import { isModelPinned, loadedRoleForModel, loadModelForRole, pinModel, restartForNewProjector, restartRole, unloadRole, EngineUnavailableError } from "@/lib/supervisor";
 import { STACK_MODELS, STACK_WAKEWORD_MODELS } from "@/lib/modelCatalog";
 import { startModelInstall } from "@/lib/installJobs";
 import { InspectRefusal, inspectModel } from "@/lib/modelInspect";
@@ -135,7 +135,7 @@ modelsRoutes.openapi(actionRoute, async (c) => {
   try {
     if (action === "pin" || action === "unpin") { pinModel(id, action === "pin"); return c.json({ modelId: id, ok: true }, 200); }
     if (!role) return c.json({ modelId: id, ok: false, reason: "The model declares no role." }, 200);
-    if (action === "load") { preferModel(role, id); await restartRole(role, "model-load"); const started = await getProcess(role); if (started.modelId === id && role === "chat") updateSettings({ "stack.engines.chat.model": id }); return c.json(started.modelId === id ? { modelId: id, ok: true } : { modelId: id, ok: false, reason: `The ${role} role loaded ${started.modelId ?? "another model"} instead.` }, 200); }
+    if (action === "load") { const started = await loadModelForRole(role, id); if (started.modelId === id && role === "chat") updateSettings({ "stack.engines.chat.model": id }); return c.json(started.modelId === id ? { modelId: id, ok: true } : { modelId: id, ok: false, reason: `The ${role} role loaded ${started.modelId ?? "another model"} instead.` }, 200); }
     if (loadedRoleForModel(id) !== null) await unloadRole(role, "Unloaded by Home.", "route-models-unload");
     return c.json({ modelId: id, ok: true }, 200);
   } catch (error) { return c.json({ modelId: id, ok: false, reason: error instanceof EngineUnavailableError ? error.reason : (error as Error).message }, 200); }
