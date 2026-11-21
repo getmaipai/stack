@@ -64,6 +64,9 @@ export const TIER_CANDIDATES: TierCandidate[] = [
   { id: "chatterbox-turbo-fp16", category: "voice", family: "chatterbox", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_580_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
   { id: "chatterbox-nano", category: "voice", family: "chatterbox", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 2_770_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak with cloning; needs a pinned mlx-audio or a config-reading patch before it ships." }], tiers: ["reduced"] },
   { id: "pocket-tts-english", category: "voice", family: "pocket", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_600_000_000, status: "measured", note: "Tier eval 2026-10-30, whole process peak." }], tiers: ["reduced", "standard"] },
+  // VOICE-VOXCPM2-01: listed after Chatterbox and Pocket so it is never the recommended pick; an admin chooses it by name. Peaks from the scratch-Stack run, 2026-11-21 (resident memory, built-in voice).
+  { id: "voxcpm2-bf16", category: "voice", family: "voxcpm2", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 5_100_000_000, status: "measured", note: "Scratch Stack 2026-11-21, resident memory 5.1 GB; first sound 142 to 284 ms." }], tiers: ["standard"] },
+  { id: "voxcpm2-4bit", category: "voice", family: "voxcpm2", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 2_500_000_000, status: "measured", note: "Scratch Stack 2026-11-21, resident memory 2.5 GB; first sound 90 to 236 ms." }], tiers: ["standard"] },
   { id: "htdemucs", category: "stems", family: "demucs", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_210_000_000, status: "measured", note: "Tier eval 2026-10-30, 40 s song in 2 to 5 s. Boost htdemucs_ft stays out until a listen finds it cleaner." }], tiers: ["standard"] },
 ];
 
