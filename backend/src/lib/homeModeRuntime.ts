@@ -1,5 +1,5 @@
 import { settingValues, updateSettings } from "@/settings";
-import { STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL } from "@/lib/modelCatalog";
+import { codingModeHeavy, splashResidentWeightsBytes } from "@/lib/splashStore";
 import { isComponent, listModels } from "@/lib/modelStore";
 import { getGovernorStatus, setCodingModeActive } from "@/lib/governor";
 import { splashFootprintEstimateBytes } from "@/lib/splash";
@@ -28,21 +28,24 @@ function memoryPlan(): { memory: HomeModeMemory; fits: boolean } {
     const model = models.find((item) => item.roles.includes(role) && !isComponent(item));
     return sum + (model?.measuredFootprintBytes ?? Math.ceil((model?.sizeBytes ?? 0) * 1.3));
   }, loadedStaying);
-  const heavy = models.find((item) => item.id === STACK_CODING_HEAVY_MODEL.id);
-  const draft = models.find((item) => item.id === STACK_CODING_HEAVY_DRAFT_MODEL.id);
-  const contextTokens = Number(settingValues()["stack.engines.coding.context_length"] ?? 131_072);
-  const plan = splashFootprintEstimateBytes({ weightsBytes: heavy?.sizeBytes ?? STACK_CODING_HEAVY_MODEL.download!.approx_bytes, draftBytes: draft?.sizeBytes ?? STACK_CODING_HEAVY_DRAFT_MODEL.download!.approx_bytes, contextTokens });
+  const { pin, draftPin } = codingModeHeavy();
+  const heavy = models.find((item) => item.id === pin.id);
+  const draft = models.find((item) => item.id === draftPin.id);
+  // A pinned window (Flash Next's 32K) is the window the launch uses; otherwise the coding setting's.
+  const contextTokens = pin.launch?.contextLength ?? Number(settingValues()["stack.engines.coding.context_length"] ?? 131_072);
+  const plan = splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(pin.id, heavy?.sizeBytes ?? pin.download!.approx_bytes), draftBytes: draft?.sizeBytes ?? draftPin.download!.approx_bytes, contextTokens });
   const budget = Math.max(0, governor.capBytes - residentBytes - governor.marginBytes);
   return { memory: { plan_bytes: plan, budget_bytes: budget }, fits: plan <= budget };
 }
 function checks(): { checks: HomeModeChecks; reason: string | null; memory: HomeModeMemory } {
   const engine = splashInstalledForHomeMode();
-  const pieces = modelInstalled(STACK_CODING_HEAVY_MODEL.id) && modelInstalled(STACK_CODING_HEAVY_DRAFT_MODEL.id);
+  const heavyPair = codingModeHeavy();
+  const pieces = modelInstalled(heavyPair.pin.id) && modelInstalled(heavyPair.draftPin.id);
   const hardware = codingModeHardwareEligible();
   const planned = memoryPlan();
   // STACK_HOME_MODE_VERDICT_TEST is for the measurement run only (MODE-BENCH-01 has to enter the mode before a verdict can be recorded). A household never sets it.
   const testVerdict = process.env.STACK_HOME_MODE_VERDICT_TEST;
-  const benchVerdict = testVerdict === "offer" || testVerdict === "offer_with_limits" ? testVerdict : STACK_CODING_HEAVY_MODEL.modeVerdict ?? "pending";
+  const benchVerdict = testVerdict === "offer" || testVerdict === "offer_with_limits" ? testVerdict : heavyPair.pin.modeVerdict ?? "pending";
   const bench = benchVerdict === "offer" || benchVerdict === "offer_with_limits";
   const result: HomeModeChecks = { engine, pieces, hardware, memory: planned.fits, bench };
   const reason = !bench ? benchVerdict === "do_not_offer" ? "The large coding model did not pass its measurements on this kind of computer." : "The large coding model has not been measured on this kind of computer yet."
@@ -61,7 +64,7 @@ function textReply(body: unknown): string | null {
   return typeof message?.content === "string" && message.content.trim() ? message.content : null;
 }
 export async function checkHomeModeOpenAIWire(client: Pick<EngineClient, "request">): Promise<void> {
-  const base = { model: STACK_CODING_HEAVY_MODEL.id, messages: [{ role: "user", content: "Reply with the word ready." }], max_tokens: 32 };
+  const base = { model: codingModeHeavy().pin.id, messages: [{ role: "user", content: "Reply with the word ready." }], max_tokens: 32 };
   const plain = await client.request("/v1/chat/completions", { ...base, reasoning_effort: "none" });
   if (plain.status < 200 || plain.status >= 300 || !textReply(plain.body)) throw new Error("The large coding model did not complete its basic check.");
   const tool = await client.request("/v1/chat/completions", { ...base, messages: [{ role: "user", content: "Call the check tool now." }], tools: [{ type: "function", function: { name: "home_mode_check", description: "Report a successful check.", parameters: { type: "object", properties: {}, required: [] } } }], tool_choice: "required", max_tokens: 64 });
@@ -84,7 +87,7 @@ export async function retryWhileResidentStarts<T>(start: () => Promise<T>, waitM
   }
 }
 async function postLoadCodingCheck(): Promise<void> {
-  const process = await getProcess("coding", STACK_CODING_HEAVY_MODEL.id);
+  const process = await getProcess("coding", codingModeHeavy().pin.id);
   await checkHomeModeOpenAIWire(process.client);
 }
 
@@ -97,7 +100,7 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
         if (role === owner || (role === "judge" && owner === "judge")) await unloadRole(owner, "Home is changing modes.", "home-mode-change");
       }
     },
-    startHeavy: async () => { setCodingModeActive(true); await retryWhileResidentStarts(() => getProcess("coding", STACK_CODING_HEAVY_MODEL.id)); },
+    startHeavy: async () => { setCodingModeActive(true); await retryWhileResidentStarts(() => getProcess("coding", codingModeHeavy().pin.id)); },
     stopHeavy: async () => { await unloadRole("coding", "Home is changing modes.", "home-mode-change"); },
     startResidents: async () => {
       setCodingModeActive(false);
@@ -109,7 +112,7 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
     transition: () => { setCodingModeActive(true); emitHomeModeTransition(); },
     persistMode: (mode) => { updateSettings({ "stack.engines.coding.home_mode": mode }); },
     generating: () => getGovernorStatus().loaded.some((entry) => entry.kind === "generator"),
-    pins: () => JSON.stringify([currentEngineTag("splash") ?? "", STACK_CODING_HEAVY_MODEL.revision, STACK_CODING_HEAVY_DRAFT_MODEL.revision]),
+    pins: () => JSON.stringify([currentEngineTag("splash") ?? "", codingModeHeavy().pin.revision, codingModeHeavy().draftPin.revision]),
   };
   configureHomeMode(adapter); initializeHomeMode("normal");
   if (initial === "coding") await switchHomeMode("coding").catch((error) => {

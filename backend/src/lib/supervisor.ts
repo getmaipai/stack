@@ -36,7 +36,7 @@ import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, 
 import { clearTtsEngineFailures, isVoxcpm2Engine, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
 import { STACK_CODING_DRAFT_MODEL, voxcpm2PackFor, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashChatMemoryPlan, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
-import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor, splashResidentWeightsBytes } from "@/lib/splashStore";
+import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor, splashResidentWeightsBytes, codingModeHeavy } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
 import { registerOwned, type OwnedHandle } from "@/lib/ownedProcesses";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
@@ -938,11 +938,11 @@ function servesRole(model: ModelRecord, role: RoleId, engine: string | null): bo
 
 export function selectedModel(role: RoleId): ModelRecord | null {
   if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && ["chat", "judge", "router"].includes(role)) {
-    const heavy = getModel(STACK_CODING_HEAVY_MODEL.id);
+    const heavy = getModel(codingModeHeavy().pin.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
   }
   if (role === "coding" && currentHomeMode() === "coding") {
-    const heavy = getModel(STACK_CODING_HEAVY_MODEL.id);
+    const heavy = getModel(codingModeHeavy().pin.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
   }
   if (reducedChatForcesLight() && ["chat", "judge", "router"].includes(role)) {
@@ -969,7 +969,7 @@ export function selectedModel(role: RoleId): ModelRecord | null {
  * Kept beside selection so the API and dispatcher share the same
  * provenance, file and engine-compatibility rules. */
 export function selectableModels(role: RoleId): Array<{ id: string; name: string }> {
-  if (currentHomeMode() === "coding" && ["chat", "judge", "router"].includes(role)) return selectedModel("chat") ? [{ id: STACK_CODING_HEAVY_MODEL.id, name: STACK_CODING_HEAVY_MODEL.id }] : [];
+  if (currentHomeMode() === "coding" && ["chat", "judge", "router"].includes(role)) return selectedModel("chat") ? [{ id: codingModeHeavy().pin.id, name: codingModeHeavy().pin.id }] : [];
   const engine = recordEngineFor(role);
   return listModels()
     .filter((model) => servesRole(model, role, engine) && (role !== "coding" || model.id !== STACK_CODING_HEAVY_MODEL.id || machineTier === "p128"))
@@ -979,6 +979,8 @@ export function selectableModels(role: RoleId): Array<{ id: string; name: string
 /** The model a start may use. While Reduced forces the light model onto chat, judge and router, that model is catalogued for `judge` only, so the role check below would refuse it for `chat` ("No verified and installed chat model"): the forced pick is the answer, after the same selectable and file checks `selectedModel` applies. */
 export function selectableModel(role: RoleId, modelId: string): ModelRecord | null {
   if (reducedChatForcesLight() && ["chat", "judge", "router"].includes(role)) { const forced = selectedModel(role); if (forced?.id === modelId) return forced; }
+  // The mode's big model may be a chat-role record (Flash Next): the mode starts it for coding, as selectedModel names it.
+  if (role === "coding" && modelId === codingModeHeavy().pin.id) { const heavy = getModel(modelId); return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null; }
   const engine = recordEngineFor(role);
   return listModels().find((model) => model.id === modelId && servesRole(model, role, engine)) ?? null;
 }
@@ -1494,9 +1496,9 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const codingRole = role === "coding";
   // A record with its own launch (vision) runs one slot, as its args say.
   const slots = declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-  const contextLength = capChatWindow(role, resolvedContextLength ?? (codingRole ? codingLaunchSettings().contextLength : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role))));
+  const contextLength = capChatWindow(role, resolvedContextLength ?? (codingRole ? declaredLaunchContext(model) ?? codingLaunchSettings().contextLength : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role))));
   if (role === "chat" && engineForRole(role) === "splash") return splashLaunchPlan(model, port, contextLength, "splash-chat");
-  if (codingRole && engineForRole(role) === "splash") return splashLaunchPlan(model, port, resolvedContextLength ?? codingLaunchSettings().contextLength);
+  if (codingRole && engineForRole(role) === "splash") return splashLaunchPlan(model, port, resolvedContextLength ?? declaredLaunchContext(model) ?? codingLaunchSettings().contextLength);
   if (engineForRole(role) === "omlx") {
     // oMLX (ENGINE-MLX-01): an environment the Stack built, serving the one
     // pinned MLX directory on loopback behind a random key. Offline, with
@@ -1705,9 +1707,9 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const onChatSplash = role === "chat" && engineForRole(role) === "splash";
   const onSplash = (coding !== null && engineForRole(role) === "splash") || onChatSplash;
   const splashPair = onSplash ? splashPairFor(model.id) : null;
-  const splashContext = onChatSplash ? declaredLaunchContext(model) ?? Math.max(32_768, Math.floor(Number(settingValues()["stack.engines.chat.context_length"] ?? model.measuredContextLength ?? 131_072))) : coding?.contextLength ?? 0;
+  const splashContext = onChatSplash ? declaredLaunchContext(model) ?? Math.max(32_768, Math.floor(Number(settingValues()["stack.engines.chat.context_length"] ?? model.measuredContextLength ?? 131_072))) : coding ? declaredLaunchContext(model) ?? coding.contextLength : 0;
   const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(model.id, model.sizeBytes ?? 0), draftBytes: getModel(splashPair!.draftPin.id)?.sizeBytes ?? splashPair!.draftPin.download!.approx_bytes, contextTokens: splashContext }) : null;
-  const codingWindow = coding ? (onSplash ? { contextLength: coding.contextLength, dryRunPeakBytes: splashEstimate } : await codingContextFor(model, coding.contextLength)) : null;
+  const codingWindow = coding ? (onSplash ? { contextLength: splashContext, dryRunPeakBytes: splashEstimate } : await codingContextFor(model, coding.contextLength)) : null;
   const ownContext = coding ? codingWindow!.contextLength : declaredLaunchContext(model);
   const declaredContextLength = ownContext ?? (onChatSplash ? settingValues()["stack.engines.chat.context_length"] as number : launchConfig.context_length);
   const slots = coding ? coding.slots : ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
@@ -1941,7 +1943,7 @@ async function startOne(role: RoleId, modelId?: string): Promise<RoleProcess> {
   if (bound) return startUrlProcess(role, bound.url);
   if (role === "tts") return startVoiceWithFallback(modelId);
   if (role === "chat") return startChatWithFallback(modelId);
-  if (role === "coding") return currentHomeMode() === "coding" || homeModeEnteringCoding() ? startSpawnedProcess("coding", STACK_CODING_HEAVY_MODEL.id) : startCodingWithFallback(modelId);
+  if (role === "coding") return currentHomeMode() === "coding" || homeModeEnteringCoding() ? startSpawnedProcess("coding", codingModeHeavy().pin.id) : startCodingWithFallback(modelId);
   return startSpawnedProcess(role, modelId);
 }
 

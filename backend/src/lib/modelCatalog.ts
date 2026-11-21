@@ -182,6 +182,8 @@ export const STACK_CHAT_QWEN38_FLASH_NEXT_MODEL: CatalogModelLike = {
   license: "qwen-community-1.0",
   revision: FLASH_NEXT_REVISION,
   engine: "splash",
+  // 2026-11-21, provisional: 5 of 5 on a five-task repo coding check (the uncensored Ornith GGUF got 3 of 5), 81 tokens/s, 70 to 74 GB at 32K. Coding mode loads it instead of Ornith when it and its draft are installed; the window stays at the pinned 32K (larger windows are unmeasured).
+  modeVerdict: "offer_with_limits",
   companions: ["qwen3-8-flash-next-177b-dflash2-draft"],
   sizing: { profile: "p128", quantization: "UD-IQ4_XS" },
   // The window Splash was measured and budgeted at; the chat launch honours it instead of the window setting.
