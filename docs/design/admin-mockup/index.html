@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MaiPai Stack admin (mockup)</title>
+<meta name="theme-color" content="#0b0c10">
+<style>
+:root{
+  --bg:#0b0c10; --bg2:#12141a; --card:#171a21; --card2:#1d212a; --line:rgba(255,255,255,.08);
+  --text:#f2f4f8; --muted:#9aa3b2; --faint:#6b7382;
+  --accent:#7c8cff; --accent-ink:#0b0c10; --accent-soft:rgba(124,140,255,.16);
+  --ok:#3ecf8e; --warn:#f5b84b; --bad:#ff6b6b;
+  --glass:rgba(18,20,26,.72);
+  --r-xl:28px; --r-lg:22px; --r-md:16px; --r-sm:12px;
+  --spring:cubic-bezier(.34,1.4,.5,1); --ease:cubic-bezier(.2,.8,.2,1);
+  --c-chat:#7c8cff; --c-embed:#b48cff; --c-stt:#4cc3e8; --c-tts:#ff8fb8; --c-wake:#8aa0b8; --c-image:#e8a86a;
+  --c-other:#3a4050; --c-free:rgba(255,255,255,.05);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Geist","Segoe UI",system-ui,Roboto,sans-serif;
+  --shadow:0 20px 60px rgba(0,0,0,.45);
+}
+:root[data-theme="light"]{
+  --bg:#f4f5f8; --bg2:#ffffff; --card:#ffffff; --card2:#f0f2f6; --line:rgba(10,15,30,.09);
+  --text:#12141a; --muted:#566074; --faint:#8791a3;
+  --accent:#4a5cf0; --accent-ink:#fff; --accent-soft:rgba(74,92,240,.12);
+  --ok:#14a36b; --warn:#c98a12; --bad:#d9433f;
+  --glass:rgba(255,255,255,.72);
+  --c-chat:#4a5cf0; --c-embed:#8a55e0; --c-stt:#1a9cc4; --c-tts:#e0558c; --c-wake:#667a92; --c-image:#cc7f2f;
+  --c-other:#c9cfdb; --c-free:rgba(10,15,30,.05);
+  --shadow:0 20px 50px rgba(20,30,60,.18);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font:400 15px/1.45 var(--font);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+b,strong,h1,h2,h3,.w6{font-weight:600}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select{font:inherit;color:inherit}
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+.num{font-variant-numeric:tabular-nums}
+.hidden{display:none!important}
+
+/* motion */
+@media (prefers-reduced-motion:no-preference){
+  .press{transition:transform .35s var(--spring),background .2s var(--ease),box-shadow .3s var(--ease)}
+  .press:active{transform:scale(.97)}
+  .card.tap:hover{transform:translateY(-2px)}
+  .view{animation:rise .5s var(--spring)}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* sign in */
+#signin{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:
+  radial-gradient(900px 500px at 20% -10%,var(--accent-soft),transparent 60%),var(--bg);z-index:100}
+.signbox{width:100%;max-width:360px;text-align:center}
+.logo{width:64px;height:64px;border-radius:20px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;margin:0 auto 22px;font-size:28px;font-weight:600}
+.signbox h1{font-size:28px;letter-spacing:-.02em;margin-bottom:6px}
+.field{width:100%;padding:15px 18px;border-radius:var(--r-md);background:var(--card);border:1px solid var(--line);outline:none;margin-top:22px;text-align:center}
+.field:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.btn{padding:12px 20px;border-radius:999px;background:var(--card2);border:1px solid var(--line);font-weight:600}
+.btn:hover{background:var(--accent-soft)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:8px 14px;font-size:13px}
+.btn.wide{width:100%;margin-top:14px;padding:15px}
+
+/* shell */
+#app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+#rail{position:sticky;top:0;height:100vh;padding:22px 14px;display:flex;flex-direction:column;gap:4px;border-right:1px solid var(--line);background:var(--bg2)}
+.brand{display:flex;align-items:center;gap:12px;padding:6px 10px 22px;font-weight:600;font-size:17px}
+.brand .logo{width:34px;height:34px;border-radius:11px;font-size:16px;margin:0}
+.navitem{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:var(--r-sm);color:var(--muted);text-align:left;width:100%}
+.navitem svg{width:20px;height:20px;flex:none}
+.navitem:hover{background:var(--card2);color:var(--text)}
+.navitem.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.railfoot{margin-top:auto;display:flex;flex-direction:column;gap:6px}
+.kbd{margin-left:auto;font-size:12px;color:var(--faint);border:1px solid var(--line);border-radius:7px;padding:1px 7px}
+main{min-width:0;padding:28px 36px 140px;max-width:1180px;width:100%;margin:0 auto}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.top h1{font-size:30px;letter-spacing:-.025em;line-height:1.1}
+.top .sp{flex:1}
+.iconbtn{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--card);border:1px solid var(--line)}
+.iconbtn svg{width:19px;height:19px}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:var(--card2);font-size:13px;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
+.dot.idle{background:var(--faint);box-shadow:none}
+.dot.warn{background:var(--warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 22%,transparent)}
+.dot.bad{background:var(--bad);box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 22%,transparent)}
+
+/* tab bar */
+#tabbar{display:none}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px}
+.card.tap{cursor:pointer;text-align:left;width:100%;display:block}
+.hero{padding:28px;border-radius:var(--r-xl);background:linear-gradient(135deg,var(--accent-soft),transparent 70%),var(--card);border:1px solid var(--line);margin-bottom:22px}
+.hero h2{font-size:34px;letter-spacing:-.03em;line-height:1.1;margin:10px 0 6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.rolehead{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.rolehead .name{font-weight:600;font-size:16px}
+.rolehead .st{margin-left:auto;font-size:13px;color:var(--muted)}
+.big{font-size:30px;letter-spacing:-.02em;font-weight:600}
+.big small{font-size:14px;font-weight:400;color:var(--muted);margin-left:3px}
+.sub{font-size:13px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spark{width:100%;height:34px;margin-top:12px;display:block}
+.section{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:30px 4px 12px}
+
+/* now bar */
+#nowbar{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;width:min(720px,calc(100% - 32px));z-index:30;
+  display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:22px;background:var(--glass);
+  backdrop-filter:blur(22px) saturate(1.5);-webkit-backdrop-filter:blur(22px) saturate(1.5);border:1px solid var(--line);box-shadow:var(--shadow);cursor:pointer}
+#nowbar .eq{display:flex;gap:3px;align-items:flex-end;height:20px}
+#nowbar .eq i{width:3px;background:var(--accent);border-radius:2px;height:6px;animation:eq 1.1s ease-in-out infinite}
+#nowbar .eq i:nth-child(2){animation-delay:.2s}#nowbar .eq i:nth-child(3){animation-delay:.4s}#nowbar .eq i:nth-child(4){animation-delay:.1s}
+@keyframes eq{0%,100%{height:5px}50%{height:19px}}
+#nowbar .txt{min-width:0;flex:1}
+#nowbar .txt div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.press-badge{padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.press-badge.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.press-badge.bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+
+/* sheet */
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .3s var(--ease);z-index:60}
+#scrim.on{opacity:1;pointer-events:auto}
+#sheet{position:fixed;z-index:61;background:var(--glass);backdrop-filter:blur(28px) saturate(1.5);-webkit-backdrop-filter:blur(28px) saturate(1.5);
+  border:1px solid var(--line);box-shadow:var(--shadow);padding:10px 22px 28px;overflow:auto;
+  left:0;right:0;bottom:0;max-height:86vh;border-radius:var(--r-xl) var(--r-xl) 0 0;transform:translateY(105%);transition:transform .5s var(--spring)}
+#sheet.on{transform:none}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--faint);opacity:.5;margin:4px auto 16px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:0;margin:14px 0}
+.kv div{padding:11px 0;border-bottom:1px solid var(--line)}
+.kv div:nth-child(odd){color:var(--muted)}
+.kv div:nth-child(even){text-align:right}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+
+/* resources */
+.bar{display:flex;height:44px;border-radius:14px;overflow:hidden;background:var(--c-free);gap:2px}
+.bar i{display:block;height:100%;transition:width .8s var(--ease)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:10px;height:10px;border-radius:4px;display:inline-block}
+.seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--card2);border:1px solid var(--line)}
+.seg button{padding:6px 14px;border-radius:999px;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:14px}
+.chart{position:relative}
+.chart h3{font-size:14px;color:var(--muted);font-weight:400;display:flex;justify-content:space-between;margin-bottom:8px}
+.chart h3 b{color:var(--text)}
+.chart svg{width:100%;height:150px;display:block;touch-action:none}
+.tip{position:absolute;pointer-events:none;padding:8px 11px;border-radius:12px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--line);font-size:12px;box-shadow:var(--shadow);opacity:0;transition:opacity .15s;white-space:nowrap;z-index:5}
+.tip.on{opacity:1}
+table{width:100%;border-collapse:collapse}
+td,th{padding:13px 8px;text-align:right;border-bottom:1px solid var(--line);font-weight:400;font-size:14px}
+th{color:var(--faint);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+td:first-child,th:first-child{text-align:left}
+.tblwrap{overflow-x:auto}
+.swatch{display:inline-block;width:10px;height:10px;border-radius:4px;margin-right:9px}
+.bar.thin{height:10px;border-radius:6px;margin-top:8px}
+
+/* helper */
+.chat{display:flex;flex-direction:column;height:calc(100vh - 230px);min-height:420px}
+.msgs{flex:1;overflow:auto;padding:6px 2px 14px;display:flex;flex-direction:column;gap:12px}
+.bub{max-width:82%;padding:12px 16px;border-radius:20px;background:var(--card2);align-self:flex-start;animation:rise .4s var(--spring)}
+.bub.me{align-self:flex-end;background:var(--accent);color:var(--accent-ink)}
+.tool{align-self:flex-start;max-width:92%;width:420px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--card);padding:14px}
+.tool .tag{font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em}
+.diff{margin:10px 0;padding:10px 12px;border-radius:12px;background:var(--bg);font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+.diff .a{color:var(--muted)}
+.wake{align-self:flex-start;display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px}
+.dots i{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--muted);margin-right:3px;animation:bob 1.2s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes bob{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-4px);opacity:1}}
+.composer{position:relative;display:flex;gap:10px;align-items:center;padding-top:8px}
+.composer .field{margin:0;text-align:left;border-radius:999px}
+.cmdmenu{position:absolute;bottom:62px;left:0;width:280px;background:var(--glass);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--line);border-radius:var(--r-md);padding:6px;box-shadow:var(--shadow)}
+.cmdmenu button{display:flex;gap:12px;width:100%;padding:9px 12px;border-radius:10px;text-align:left}
+.cmdmenu button:hover{background:var(--accent-soft)}
+.cmdmenu span{color:var(--muted);font-size:13px}
+.meter{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.meter .bar{width:90px;height:6px;border-radius:4px}
+.meter .bar i{background:var(--accent)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.chip{padding:7px 13px;border-radius:999px;background:var(--card2);border:1px solid var(--line);font-size:13px;color:var(--muted)}
+.chip:hover{color:var(--text)}
+
+/* lists and settings */
+.list{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.li{display:flex;align-items:center;gap:14px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.li:last-child{border-bottom:0}
+.li .grow{flex:1;min-width:0}
+.li .t{font-weight:400;font-size:15px}
+.li .d{font-size:13px;color:var(--muted)}
+.tog{width:52px;height:32px;border-radius:999px;background:var(--card2);border:1px solid var(--line);position:relative;flex:none;transition:background .3s var(--ease)}
+.tog::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:var(--text);transition:transform .4s var(--spring)}
+.tog.on{background:var(--accent)}
+.tog.on::after{transform:translateX(20px);background:var(--accent-ink)}
+.handle{color:var(--faint);cursor:grab;padding:4px;touch-action:none}
+.li.drag{opacity:.4}
+select.field,input.small{width:auto;margin:0;padding:9px 14px;text-align:left;border-radius:12px}
+details.more{margin-top:18px}
+details.more summary{cursor:pointer;color:var(--muted);padding:12px 4px;list-style:none}
+details.more summary::before{content:"+  "}
+details[open].more summary::before{content:"-  "}
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty .big{color:var(--text);margin-bottom:6px}
+.fix{border-left:3px solid var(--warn)}
+
+/* skeleton */
+.sk{border-radius:var(--r-lg);background:linear-gradient(100deg,var(--card) 30%,var(--card2) 50%,var(--card) 70%);background-size:300% 100%;animation:sh 1.3s linear infinite;height:140px}
+@keyframes sh{from{background-position:100% 0}to{background-position:0 0}}
+
+/* palette */
+#pal{position:fixed;inset:0;z-index:90;display:flex;justify-content:center;align-items:flex-start;padding:12vh 16px 0;background:rgba(0,0,0,.45)}
+#pal .box{width:min(560px,100%);background:var(--glass);backdrop-filter:blur(30px) saturate(1.5);-webkit-backdrop-filter:blur(30px) saturate(1.5);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow);overflow:hidden;animation:rise .35s var(--spring)}
+#pal input{width:100%;padding:18px 20px;background:none;border:0;border-bottom:1px solid var(--line);outline:none;font-size:17px}
+#pal .res{max-height:50vh;overflow:auto;padding:8px}
+#pal .res button{display:flex;width:100%;gap:12px;padding:11px 14px;border-radius:12px;text-align:left;align-items:center}
+#pal .res button.sel{background:var(--accent-soft)}
+#pal .res small{margin-left:auto;color:var(--faint)}
+#toast{position:fixed;top:18px;left:50%;transform:translate(-50%,-140%);padding:12px 20px;border-radius:999px;background:var(--glass);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--line);box-shadow:var(--shadow);z-index:120;transition:transform .5s var(--spring)}
+#toast.on{transform:translate(-50%,0)}
+
+/* phone */
+@media (max-width:860px){
+  #app{grid-template-columns:1fr}
+  #rail{display:none}
+  main{padding:20px 16px 170px}
+  .top h1{font-size:26px}
+  .hero{padding:22px}.hero h2{font-size:28px}
+  #tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;justify-content:space-around;padding:8px 6px calc(10px + env(safe-area-inset-bottom));
+    background:var(--glass);backdrop-filter:blur(24px) saturate(1.5);-webkit-backdrop-filter:blur(24px) saturate(1.5);border-top:1px solid var(--line)}
+  #tabbar button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--faint);padding:4px 10px;flex:1}
+  #tabbar button svg{width:23px;height:23px}
+  #tabbar button.on{color:var(--accent)}
+  #nowbar{bottom:calc(74px + env(safe-area-inset-bottom));width:calc(100% - 20px);padding:10px 14px}
+  .chat{height:calc(100vh - 290px)}
+  .bub{max-width:90%}
+}
+@media (min-width:861px){
+  #sheet{left:auto;right:16px;top:16px;bottom:16px;width:420px;max-height:none;border-radius:var(--r-xl);transform:translateX(110%)}
+  #sheet.on{transform:none}
+  .grab{display:none}
+}
+</style>
+</head>
+<body>
+
+<div id="signin">
+  <form class="signbox" id="signform">
+    <div class="logo">M</div>
+    <h1>MaiPai Stack</h1>
+    <p class="muted">Sign in to manage the engines on this computer.</p>
+    <input class="field" id="pw" type="password" placeholder="Admin password" autocomplete="current-password" aria-label="Admin password">
+    <button class="btn primary wide press" type="submit">Sign in</button>
+    <p class="faint" style="margin-top:18px;font-size:13px">Mockup: any password works. Forgot it? Reset it with a command on this computer.</p>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <nav id="rail" aria-label="Main"></nav>
+  <main id="main"></main>
+</div>
+<nav id="tabbar" class="hidden" aria-label="Main"></nav>
+<div id="nowbar" class="hidden" role="button" tabindex="0" aria-label="Open resources"></div>
+<div id="scrim"></div>
+<aside id="sheet" aria-modal="true" role="dialog"></aside>
+<div id="pal" class="hidden"><div class="box"><input id="palin" placeholder="Jump to a screen or run an action" aria-label="Command palette"><div class="res" id="palres"></div></div></div>
+<div id="toast" role="status"></div>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s)};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+var store={get:function(k){try{return localStorage.getItem(k)}catch(e){return null}},set:function(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+/* ---------- icons ---------- */
+var I={
+ home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>',
+ chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+ chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.7 7L4 20l1.1-4.6A8 8 0 1 1 21 12z"/></svg>',
+ heart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>',
+ grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>',
+ down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m-5-4l5 5 5-5M5 20h14"/></svg>',
+ gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg>',
+ more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+ search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>',
+ sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>',
+ send:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+ grip:'<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>'
+};
+
+/* ---------- data ---------- */
+var TOTAL=32;
+var roles=[
+ {id:'chat',name:'Chat',color:'var(--c-chat)',engine:'llama-server b12589',model:'Gemma 3 12B Instruct (Q4)',mem:9.6,base:9.6,state:'ready',reqs:412,last:'0.8 s',loaded:'Today, 07:12',peak:10.4,tps:38,hist:[]},
+ {id:'embed',name:'Embeddings',color:'var(--c-embed)',engine:'llama-server b12589',model:'Nomic Embed Text v1.5',mem:0.6,base:0.6,state:'ready',reqs:1930,last:'2 s',loaded:'Today, 07:12',peak:0.7,tps:0,hist:[]},
+ {id:'stt',name:'Speech to text',color:'var(--c-stt)',engine:'whisper-server 1.8',model:'Whisper Large v3 Turbo',mem:1.9,base:1.9,state:'ready',reqs:96,last:'14 s',loaded:'Today, 07:12',peak:2.2,tps:0,hist:[]},
+ {id:'tts',name:'Text to speech',color:'var(--c-tts)',engine:'kokoro 0.9',model:'Kokoro 82M',mem:0.8,base:0.8,state:'ready',reqs:88,last:'31 s',loaded:'Today, 07:13',peak:0.9,tps:0,hist:[]},
+ {id:'wake',name:'Wake word',color:'var(--c-wake)',engine:'openwakeword 0.6',model:'Hey Doki (tiny)',mem:0.1,base:0.1,state:'ready',reqs:5400,last:'1 s',loaded:'Today, 07:12',peak:0.1,tps:0,hist:[]},
+ {id:'image',name:'Image',color:'var(--c-image)',engine:'sd-server 2.1',model:'FLUX.1 schnell (Q4)',mem:0,base:7.4,state:'idle',reqs:12,last:'2 h ago',loaded:'Unloaded after 5 min idle',peak:7.6,tps:0,hist:[]}
+];
+var other=9.1, swap=0.3, cpu=22, gpu=41, tpsTotal=38;
+for(var i=0;i<roles.length;i++){for(var k=0;k<40;k++){roles[i].hist.push(roles[i].mem*(1+(Math.random()-.5)*.03))}}
+var health=[
+ {id:'h1',t:'The speech model file is older than its pinned version',d:'Whisper Large v3 Turbo has a newer verified build. Voice still works.',fix:'Update the model'},
+ {id:'h2',t:'Disk for models is 82 percent full',d:'Two unused model files take up 14 GB. Removing them keeps updates from failing.',fix:'Remove unused models'}
+];
+var features=[
+ {id:'chat',name:'Chat',d:'Answers questions and drives the assistant.',on:true},
+ {id:'embed',name:'Embeddings',d:'Search and memory for documents.',on:true},
+ {id:'stt',name:'Speech to text',d:'Turns voice into words.',on:true},
+ {id:'tts',name:'Text to speech',d:'Reads answers out loud.',on:true},
+ {id:'wake',name:'Wake word',d:'Listens for "Hey Doki".',on:true},
+ {id:'image',name:'Image',d:'Draws pictures. Loads only when asked.',on:true}
+];
+var settings={helperIdle:5,tier:'Standard',tailscale:false,autocheck:true,theme:'dark'};
+var updates=[
+ {n:'llama-server',cur:'b12589',av:'b12611',d:'Faster prompt processing.'},
+ {n:'whisper-server',cur:'1.8.0',av:null,d:'Up to date.'},
+ {n:'Whisper Large v3 Turbo',cur:'r3',av:'r4',d:'New verified build.'},
+ {n:'Gemma 3 12B Instruct',cur:'r1',av:null,d:'Up to date.'}
+];
+
+/* ---------- helpers ---------- */
+function rnd(a,b){return a+Math.random()*(b-a)}
+function fmt(n,d){return n.toFixed(d==null?1:d)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function toast(m){var t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.remove('on')},2400)}
+function sparkPath(d,w,h){var mn=Math.min.apply(0,d),mx=Math.max.apply(0,d);var r=(mx-mn)||1;return d.map(function(v,i){return (i?'L':'M')+(i/(d.length-1)*w).toFixed(1)+' '+(h-3-((v-mn)/r)*(h-6)).toFixed(1)}).join(' ')}
+function used(){return roles.reduce(function(s,r){return s+r.mem},0)}
+function pressure(){var u=used()+other;var f=u/TOTAL;return f<.8?{t:'Comfortable',c:''}:f<.92?{t:'Tight',c:'warn'}:{t:'Critical',c:'bad'}}
+function runningCount(){return roles.filter(function(r){return r.state==='ready'}).length}
+
+/* ---------- routes ---------- */
+var routes=[
+ {id:'overview',label:'Overview',icon:'home'},
+ {id:'resources',label:'Resources',icon:'chart'},
+ {id:'helper',label:'Helper',icon:'chat'},
+ {id:'features',label:'Features',icon:'grid'},
+ {id:'health',label:'Health',icon:'heart'},
+ {id:'updates',label:'Updates',icon:'down'},
+ {id:'settings',label:'Settings',icon:'gear'}
+];
+var tabs=['overview','resources','helper','health','more'];
+var cur='overview', booted=false;
+
+function buildNav(){
+  var h='<div class="brand"><div class="logo">M</div>MaiPai Stack</div>';
+  routes.forEach(function(r){h+='<button class="navitem press" data-go="'+r.id+'">'+I[r.icon]+'<span>'+r.label+'</span>'+(r.id==='health'?'<span class="kbd" id="hcount"></span>':'')+'</button>'});
+  h+='<div class="railfoot"><button class="navitem press" id="palbtn">'+I.search+'<span>Search</span><span class="kbd">Ctrl K</span></button><button class="navitem press" id="themebtn">'+I.sun+'<span>Light or dark</span></button></div>';
+  $('#rail').innerHTML=h;
+  var t='';
+  tabs.forEach(function(id){var r=routes.filter(function(x){return x.id===id})[0];
+    t+='<button class="press" data-tab="'+id+'">'+(r?I[r.icon]:I.more)+'<span>'+(r?r.label:'More')+'</span></button>'});
+  $('#tabbar').innerHTML=t;
+}
+function markNav(){
+  $$('[data-go]').forEach(function(b){b.classList.toggle('on',b.dataset.go===cur)});
+  $$('[data-tab]').forEach(function(b){var id=b.dataset.tab;var on=id===cur||(id==='more'&&['features','updates','settings'].indexOf(cur)>-1);b.classList.toggle('on',on)});
+  var c=$('#hcount');if(c)c.textContent=health.length||'';
+}
+function go(id){if(location.hash!=='#/'+id)location.hash='#/'+id;else render()}
+window.addEventListener('hashchange',render);
+
+/* ---------- views ---------- */
+function skeleton(){return '<div class="top"><h1>&nbsp;</h1></div><div class="sk" style="height:160px;margin-bottom:22px"></div><div class="grid">'+'<div class="sk"></div>'.repeat(6)+'</div>'}
+
+function roleCard(r){
+  var st=r.state==='ready'?['dot','Running']:r.state==='busy'?['dot warn','Starting']:['dot idle','Sleeping'];
+  return '<button class="card tap press" data-role="'+r.id+'"><div class="rolehead"><span class="'+st[0]+'" id="d-'+r.id+'"></span><span class="name">'+r.name+'</span><span class="st" id="s-'+r.id+'">'+st[1]+'</span></div>'+
+   '<div class="big num"><span id="m-'+r.id+'">'+(r.mem?fmt(r.mem):'0.0')+'</span><small>GB</small></div>'+
+   '<div class="sub">'+esc(r.model)+'</div><div class="sub faint">'+esc(r.engine)+'</div>'+
+   '<svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none"><path id="sp-'+r.id+'" d="" fill="none" stroke="'+r.color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg></button>';
+}
+function vOverview(){
+  var p=pressure();var n=runningCount();
+  var line=health.length?'Everything is running, with '+health.length+' thing'+(health.length>1?'s':'')+' to look at':'Everything is running';
+  var h='<div class="top"><h1>Overview</h1><span class="sp"></span><button class="iconbtn press" data-act="pal" aria-label="Search">'+I.search+'</button><button class="iconbtn press" data-act="theme" aria-label="Light or dark">'+I.sun+'</button></div>';
+  h+='<section class="hero"><span class="pill"><span class="dot"></span><span id="ov-n">'+n+' of 6 features awake</span></span><h2>'+line+'</h2><p class="muted">Memory is <b id="ov-p">'+p.t.toLowerCase()+'</b>. Last check 2 seconds ago. Up for 6 days.</p></section>';
+  h+='<div class="grid">'+roles.map(roleCard).join('')+'</div>';
+  h+='<div class="section">Topology</div><div class="card"><svg viewBox="0 0 600 150" style="width:100%;height:auto" aria-label="Roles and engines"><g fill="none" stroke="var(--line)" stroke-width="1.5"><path d="M300 30 C300 60 100 55 100 95"/><path d="M300 30 C300 60 300 60 300 95"/><path d="M300 30 C300 60 500 55 500 95"/></g><rect x="235" y="8" width="130" height="30" rx="15" fill="var(--accent-soft)"/><text x="300" y="28" text-anchor="middle" fill="var(--accent)" font-size="13">Stack address</text><g font-size="12" text-anchor="middle" fill="var(--muted)"><rect x="30" y="95" width="140" height="40" rx="14" fill="var(--card2)"/><text x="100" y="119">llama-server</text><rect x="230" y="95" width="140" height="40" rx="14" fill="var(--card2)"/><text x="300" y="119">whisper and kokoro</text><rect x="430" y="95" width="140" height="40" rx="14" fill="var(--card2)"/><text x="500" y="119">sd-server</text></g></svg><p class="sub" style="text-align:center;white-space:normal">Chat and embeddings share llama-server. Voice has its own engines. Images wake on request.</p></div>';
+  return h;
+}
+
+function openSheet(html){$('#sheet').innerHTML='<div class="grab"></div>'+html;$('#sheet').classList.add('on');$('#scrim').classList.add('on')}
+function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on')}
+function roleSheet(id){
+  var r=roles.filter(function(x){return x.id===id})[0];
+  var h='<div class="rolehead" style="margin-top:6px"><span class="dot '+(r.state==='ready'?'':'idle')+'"></span><h2 style="font-size:24px;letter-spacing:-.02em">'+r.name+'</h2></div><p class="muted">'+(r.state==='ready'?'Running and answering requests.':'Asleep to save memory. It wakes on the next request.')+'</p>'+
+  '<div class="kv"><div>Engine</div><div>'+esc(r.engine)+'</div><div>Model</div><div>'+esc(r.model)+'</div><div>Memory now</div><div class="num">'+fmt(r.mem||0)+' GB</div><div>Peak today</div><div class="num">'+fmt(r.peak)+' GB</div><div>Requests today</div><div class="num">'+r.reqs+'</div><div>Last answer</div><div>'+r.last+'</div><div>Loaded</div><div>'+r.loaded+'</div></div>'+
+  '<div class="row"><button class="btn primary press" data-do="restart:'+id+'">Restart</button><button class="btn press" data-do="unload:'+id+'">Unload</button><button class="btn press" data-do="close">Close</button></div>';
+  openSheet(h);
+}
+function moreSheet(){
+  openSheet('<h2 style="font-size:22px;margin:6px 0 10px">More</h2><div class="list">'+['features','updates','settings'].map(function(id){var r=routes.filter(function(x){return x.id===id})[0];return '<button class="li press" style="width:100%;text-align:left" data-goclose="'+id+'">'+I[r.icon].replace('<svg','<svg width="20" height="20"')+'<span class="grow t">'+r.label+'</span></button>'}).join('')+'<button class="li press" style="width:100%;text-align:left" data-act="theme">'+I.sun.replace('<svg','<svg width="20" height="20"')+'<span class="grow t">Light or dark</span></button></div>');
+}
+
+/* ----- resources ----- */
+var range='1h';
+var rangeLbl={'1h':['-1 h','now'],'24h':['-24 h','now'],'7d':['-7 d','now'],'30d':['-30 d','now']};
+var series={};
+function seed(rg){
+  var n=60,s={};
+  var i;
+  function wave(base,amp,i,ph){return base+amp*Math.sin(i/(rg==='1h'?9:rg==='24h'?6:4)+ph)+rnd(-amp*.25,amp*.25)}
+  roles.forEach(function(r,ri){s[r.id]=[];for(var i=0;i<n;i++){var b=r.id==='image'?(i%17>13?7.2:0):r.base;s[r.id].push(Math.max(0,r.id==='image'?b:wave(b,b*.03,i,ri)))}});
+  s.swap=[];s.cpu=[];s.gpu=[];s.tps=[];
+  for(i=0;i<n;i++){s.swap.push(Math.max(0,wave(.3,.12,i,1)));s.cpu.push(Math.max(2,wave(24,12,i,2)));s.gpu.push(Math.max(2,wave(40,25,i,3)));s.tps.push(Math.max(0,wave(30,16,i,4)))}
+  return s;
+}
+function ensureSeries(){if(!series[range])series[range]=seed(range)}
+function drawChart(el,spec){
+  /* spec: {title,unit,series:[{name,color,data}],stacked,max,fixedMax} */
+  var W=600,H=150,n=spec.series[0].data.length;
+  var base=new Array(n).fill(0),paths='',tops=[];
+  var mx=spec.max||1;
+  if(spec.stacked){mx=0;for(var i=0;i<n;i++){var t=0;spec.series.forEach(function(s){t+=s.data[i]});mx=Math.max(mx,t)}}
+  else{mx=Math.max.apply(0,spec.series[0].data)*1.15}
+  mx=spec.fixedMax||mx||1;
+  spec.series.forEach(function(s,si){
+    var top=[],bot=[];
+    for(var i=0;i<n;i++){var x=i/(n-1)*W;var b=spec.stacked?base[i]:0;var v=b+s.data[i];
+      top.push([x,H-(v/mx)*(H-8)-2]);bot.push([x,H-(b/mx)*(H-8)-2]);if(spec.stacked)base[i]=v}
+    var d='M'+top.map(function(p){return p[0].toFixed(1)+' '+p[1].toFixed(1)}).join(' L');
+    if(spec.stacked){paths+='<path d="'+d+' L'+bot.reverse().map(function(p){return p[0].toFixed(1)+' '+p[1].toFixed(1)}).join(' L')+'Z" fill="'+s.color+'" opacity=".85"/>'}
+    else{paths+='<path d="'+d+' L'+W+' '+H+' L0 '+H+'Z" fill="'+s.color+'" opacity=".14"/><path d="'+d+'" fill="none" stroke="'+s.color+'" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'}
+  });
+  var grid='<g stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"><path d="M0 '+(H*.25)+'H'+W+' M0 '+(H*.5)+'H'+W+' M0 '+(H*.75)+'H'+W+'"/></g>';
+  var last=0;spec.series.forEach(function(s){last+=s.data[n-1]});if(!spec.stacked)last=spec.series[0].data[n-1];
+  el.innerHTML='<h3><span>'+spec.title+'</span><b class="num">'+fmt(last,spec.dec==null?1:spec.dec)+' '+spec.unit+'</b></h3><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'+grid+paths+'<line class="hl" x1="0" x2="0" y1="0" y2="'+H+'" stroke="var(--muted)" stroke-width="1" vector-effect="non-scaling-stroke" opacity="0"/></svg><div class="tip"></div><div class="row faint" style="justify-content:space-between;font-size:12px;margin-top:4px"><span>'+rangeLbl[range][0]+'</span><span>'+rangeLbl[range][1]+'</span></div>';
+  var svg=$('svg',el),tip=$('.tip',el),hl=$('.hl',el);
+  function mv(e){
+    var rc=svg.getBoundingClientRect();var cx=(e.touches?e.touches[0].clientX:e.clientX);
+    var f=Math.min(1,Math.max(0,(cx-rc.left)/rc.width));var i=Math.round(f*(n-1));
+    hl.setAttribute('x1',f*W);hl.setAttribute('x2',f*W);hl.setAttribute('opacity','1');
+    var rows=spec.series.map(function(s){return '<div><span class="swatch" style="background:'+s.color+';margin-right:6px"></span>'+s.name+' <b class="num">'+fmt(s.data[i],spec.dec==null?1:spec.dec)+' '+spec.unit+'</b></div>'}).join('');
+    var ago=Math.round((1-i/(n-1))*({'1h':60,'24h':1440,'7d':10080,'30d':43200}[range]));
+    var when=ago===0?'Now':ago<120?ago+' min ago':ago<2880?Math.round(ago/60)+' h ago':Math.round(ago/1440)+' days ago';
+    tip.innerHTML='<div class="muted" style="margin-bottom:3px">'+when+'</div>'+rows;tip.classList.add('on');
+    var tw=tip.offsetWidth,left=f*rc.width-tw/2;left=Math.max(0,Math.min(rc.width-tw,left));
+    tip.style.left=left+'px';tip.style.top='34px';
+  }
+  function lv(){tip.classList.remove('on');hl.setAttribute('opacity','0')}
+  svg.addEventListener('pointermove',mv);svg.addEventListener('pointerleave',lv);svg.addEventListener('pointerdown',mv);
+}
+function drawCharts(){
+  ensureSeries();var s=series[range];if(!$('#ch-mem'))return;
+  drawChart($('#ch-mem'),{title:'Memory by role',unit:'GB',stacked:true,fixedMax:TOTAL*.7,series:roles.map(function(r){return{name:r.name,color:r.color,data:s[r.id]}})});
+  drawChart($('#ch-swap'),{title:'Swap',unit:'GB',dec:2,series:[{name:'Swap',color:'var(--accent)',data:s.swap}]});
+  drawChart($('#ch-cpu'),{title:'CPU',unit:'%',dec:0,fixedMax:100,series:[{name:'CPU',color:'var(--accent)',data:s.cpu}]});
+  drawChart($('#ch-gpu'),{title:'GPU',unit:'%',dec:0,fixedMax:100,series:[{name:'GPU',color:'var(--accent)',data:s.gpu}]});
+  drawChart($('#ch-tps'),{title:'Tokens per second',unit:'tok/s',dec:0,series:[{name:'Chat',color:'var(--c-chat)',data:s.tps}]});
+}
+function memBar(){
+  var segs=roles.filter(function(r){return r.mem>0}).map(function(r){return '<i style="width:'+(r.mem/TOTAL*100)+'%;background:'+r.color+'" title="'+r.name+'"></i>'}).join('');
+  segs+='<i style="width:'+(other/TOTAL*100)+'%;background:var(--c-other)"></i>';
+  return segs;
+}
+function vResources(){
+  var p=pressure();
+  var h='<div class="top"><h1>Resources</h1><span class="sp"></span><span class="press-badge '+p.c+'" id="rs-badge">'+p.t+'</span></div>';
+  h+='<section class="card"><div class="row" style="justify-content:space-between;align-items:baseline"><div class="big num"><span id="rs-used">0</span><small>GB of '+TOTAL+' GB in use</small></div><span class="muted" id="rs-free"></span></div><div style="height:14px"></div><div class="bar" id="rs-bar"></div>'+
+   '<div class="legend">'+roles.map(function(r){return '<span><i style="background:'+r.color+'"></i>'+r.name+'</span>'}).join('')+'<span><i style="background:var(--c-other)"></i>Other programs</span><span><i style="background:var(--c-free);border:1px solid var(--line)"></i>Free</span></div></section>';
+  h+='<div class="row" style="justify-content:space-between;align-items:center;margin:26px 2px 0"><div class="section" style="margin:0">History</div><div class="seg" role="tablist">'+['1h','24h','7d','30d'].map(function(r){return '<button class="'+(r===range?'on':'')+'" data-range="'+r+'">'+r+'</button>'}).join('')+'</div></div>';
+  h+='<div class="charts"><div class="card chart" id="ch-mem"></div><div class="card chart" id="ch-tps"></div><div class="card chart" id="ch-cpu"></div><div class="card chart" id="ch-gpu"></div><div class="card chart" id="ch-swap"></div></div>';
+  h+='<div class="section">Engines</div><div class="card tblwrap"><table><thead><tr><th>Role</th><th>Now</th><th>Peak</th><th>Requests</th><th>Last answer</th></tr></thead><tbody id="rs-rows"></tbody></table></div>';
+  h+='<div class="section">Waiting and refused</div><div class="card" id="rs-queue"><p>Nothing is waiting. The image role can start now: it needs 7.4 GB and there are <b id="rs-q-free">0</b> GB free.</p><p class="muted" style="margin-top:8px">Earlier today: a second image request was held for 41 seconds until chat finished, then ran.</p></div>';
+  h+='<div class="section">Disk used by models</div><div class="card"><div class="row" style="justify-content:space-between;align-items:baseline"><div class="big num">61<small>GB of 74 GB for models</small></div><button class="btn sm press" data-act="prune">Remove unused</button></div><div class="bar thin"><i style="width:30%;background:var(--c-chat)"></i><i style="width:20%;background:var(--c-image)"></i><i style="width:10%;background:var(--c-stt)"></i><i style="width:22%;background:var(--c-other)"></i></div><div class="kv"><div>Chat models</div><div class="num">24.8 GB</div><div>Image models</div><div class="num">16.2 GB</div><div>Speech and voice</div><div class="num">8.3 GB</div><div>Unused (can remove)</div><div class="num">11.7 GB</div></div></div>';
+  return h;
+}
+function liveResources(){
+  if(cur!=='resources')return;
+  var u=used()+other;var p=pressure();
+  var set=function(id,t){var e=$(id);if(e)e.textContent=t};
+  set('#rs-used',fmt(u));set('#rs-free',fmt(TOTAL-u)+' GB free');set('#rs-q-free',fmt(TOTAL-u));
+  var b=$('#rs-badge');if(b){b.textContent=p.t;b.className='press-badge '+p.c}
+  var bar=$('#rs-bar');if(bar)bar.innerHTML=memBar();
+  var rows=$('#rs-rows');if(rows)rows.innerHTML=roles.map(function(r){return '<tr><td><span class="swatch" style="background:'+r.color+'"></span>'+r.name+'</td><td class="num">'+fmt(r.mem)+' GB</td><td class="num">'+fmt(r.peak)+' GB</td><td class="num">'+r.reqs+'</td><td>'+r.last+'</td></tr>'}).join('');
+  if(range==='1h'){var s=series[range];if(s){roles.forEach(function(r){s[r.id].push(r.mem);s[r.id].shift()});s.swap.push(swap);s.swap.shift();s.cpu.push(cpu);s.cpu.shift();s.gpu.push(gpu);s.gpu.shift();s.tps.push(tpsTotal);s.tps.shift()}}
+  drawCharts();
+}
+
+/* ----- helper ----- */
+var chatState={awake:false,waking:false,msgs:[],tokens:420};
+var cmds=[['/restart','Restart an engine (asks first)'],['/health','Check what needs attention'],['/new','Start a fresh chat'],['@chat','Ask about one role']];
+function vHelper(){
+  var h='<div class="top"><h1>Helper</h1><span class="sp"></span><span class="pill"><span class="dot '+(chatState.awake?'':'idle')+'" id="hp-dot"></span><span id="hp-st">'+(chatState.awake?'Awake. Sleeps after '+settings.helperIdle+' min idle':'Asleep')+'</span></span></div>';
+  h+='<div class="card chat" style="padding:16px"><div class="msgs" id="msgs"></div>';
+  h+='<div class="chips"><button class="chip press" data-ask="Why is memory tight?">Why is memory tight?</button><button class="chip press" data-ask="Restart the image role">Restart the image role</button><button class="chip press" data-ask="What needs attention?">What needs attention?</button></div>';
+  h+='<div class="composer"><div class="cmdmenu hidden" id="cmdmenu"></div><input class="field" id="chatin" placeholder="Ask the Stack. Type / for commands" autocomplete="off" aria-label="Message"><button class="iconbtn press" id="chatsend" style="background:var(--accent);color:var(--accent-ink);border:0" aria-label="Send">'+I.send+'</button></div>';
+  h+='<div class="meter" style="margin-top:10px"><span>Context</span><div class="bar"><i id="ctxbar" style="width:10%"></i></div><span class="num" id="ctxtxt">420 of 4096</span><span class="sp" style="flex:1"></span><span class="faint">Runs on its own 3B model. Nothing leaves this computer.</span></div></div>';
+  return h;
+}
+function paintMsgs(){
+  var m=$('#msgs');if(!m)return;
+  var h='';
+  if(!chatState.msgs.length)h='<div class="empty"><div class="big">Ask about this computer</div>I can read memory, health and settings. Changes need your approval first.</div>';
+  chatState.msgs.forEach(function(x,i){
+    if(x.k==='me')h+='<div class="bub me">'+esc(x.t)+'</div>';
+    else if(x.k==='bot')h+='<div class="bub">'+x.t+'</div>';
+    else if(x.k==='wake')h+='<div class="wake"><span class="dots"><i></i><i></i><i></i></span>Waking up. Loading the Helper model, a few seconds.</div>';
+    else if(x.k==='think')h+='<div class="wake"><span class="dots"><i></i><i></i><i></i></span>Thinking</div>';
+    else if(x.k==='tool'){
+      h+='<div class="tool"><div class="tag">Proposed change</div><div style="margin-top:4px">'+x.title+'</div><div class="diff">'+x.diff+'</div>'+
+      (x.status==='pending'?'<div class="row"><button class="btn primary sm press" data-tool="'+i+':ok">Approve</button><button class="btn sm press" data-tool="'+i+':no">Decline</button></div>':'<div class="muted" style="font-size:13px">'+(x.status==='ok'?'Approved. Done and logged as "by Helper, approved by admin".':'Declined. Nothing changed.')+'</div>')+'</div>';
+    }
+  });
+  m.innerHTML=h;m.scrollTop=m.scrollHeight;
+  var pct=Math.min(100,chatState.tokens/4096*100);$('#ctxbar').style.width=pct+'%';$('#ctxtxt').textContent=chatState.tokens+' of 4096';
+  var d=$('#hp-dot'),s=$('#hp-st');if(d){d.className='dot'+(chatState.awake?'':' idle');s.textContent=chatState.waking?'Waking up':chatState.awake?'Awake. Sleeps after '+settings.helperIdle+' min idle':'Asleep'}
+}
+function reply(q){
+  var l=q.toLowerCase();
+  var push=function(o){chatState.msgs=chatState.msgs.filter(function(x){return x.k!=='think'});chatState.msgs.push(o);chatState.tokens+=Math.round(40+Math.random()*60);paintMsgs()};
+  var p=pressure();
+  if(l.indexOf('/new')===0){chatState.msgs=[];chatState.tokens=420;paintMsgs();return}
+  if(l.indexOf('restart')>-1){var role=l.indexOf('chat')>-1?'chat':'image';
+    push({k:'bot',t:'I can restart the '+role+' role. It will be offline for about 6 seconds. Approve it below.'});
+    chatState.msgs.push({k:'tool',title:'Restart the '+role+' role',diff:'<div class="a">role: '+role+'</div><div style="color:var(--warn)">action: restart (about 6 s offline)</div>',status:'pending',role:role});paintMsgs();return}
+  if(l.indexOf('memory')>-1||l.indexOf('tight')>-1||l.indexOf('why')>-1){
+    push({k:'bot',t:'Memory is <b>'+p.t.toLowerCase()+'</b> right now: '+fmt(used()+other)+' GB of '+TOTAL+' GB in use. Chat takes '+fmt(roles[0].mem)+' GB, other programs take '+fmt(other)+' GB. The image role is asleep and needs 7.4 GB, so it can start but would make things tighter.'});
+    chatState.msgs.push({k:'tool',title:'Shorten the image idle timer from 5 to 2 minutes',diff:'<div class="a">image.idle_minutes</div><div style="color:var(--bad)">- 5</div><div style="color:var(--ok)">+ 2</div>',status:'pending',role:'idle'});paintMsgs();return}
+  if(l.indexOf('attention')>-1||l.indexOf('health')>-1){
+    push({k:'bot',t:health.length?'Two things: a newer speech model is ready, and the models disk is 82 percent full. Open Health to fix each with one button.':'Nothing needs attention. Every role answered its last check.'});return}
+  push({k:'bot',t:'I can read roles, health, memory, settings and updates, and propose changes for you to approve. Try "Why is memory tight?" or "Restart the image role".'});
+}
+function send(q){
+  q=(q||'').trim();if(!q)return;
+  chatState.msgs.push({k:'me',t:q});chatState.tokens+=Math.round(q.length/3);
+  var go2=function(){chatState.msgs.push({k:'think'});paintMsgs();setTimeout(function(){reply(q)},900)};
+  if(!chatState.awake){chatState.waking=true;chatState.msgs.push({k:'wake'});paintMsgs();
+    setTimeout(function(){chatState.awake=true;chatState.waking=false;chatState.msgs=chatState.msgs.filter(function(x){return x.k!=='wake'});go2()},2600)}
+  else go2();
+}
+
+/* ----- other screens ----- */
+function vFeatures(){
+  var h='<div class="top"><h1>Features</h1></div><p class="muted" style="margin:-8px 4px 18px">Turn roles on or off. Drag to set who gets memory first when it is tight.</p><div class="list" id="featlist">';
+  features.forEach(function(f,i){h+='<div class="li" draggable="true" data-fi="'+i+'"><span class="handle" aria-label="Drag to reorder">'+I.grip+'</span><div class="grow"><div class="t">'+f.name+'</div><div class="d">'+f.d+'</div></div><button class="tog'+(f.on?' on':'')+'" data-ftog="'+i+'" role="switch" aria-checked="'+f.on+'" aria-label="'+f.name+'"></button></div>'});
+  h+='</div><details class="more"><summary>More</summary><div class="list"><div class="li"><div class="grow"><div class="t">Memory tier</div><div class="d">How much of this computer the Stack may use.</div></div><select class="field" id="tier"><option>Light</option><option selected>Standard</option><option>Maximum</option></select></div></div></details>';
+  return h;
+}
+function vHealth(){
+  var h='<div class="top"><h1>Health</h1></div>';
+  if(!health.length)return h+'<div class="card empty"><div class="big">Nothing needs attention</div>Every role answered its last check. We look again every minute.</div>';
+  h+='<p class="muted" style="margin:-8px 4px 18px">Each problem has one fix.</p><div class="list">';
+  health.forEach(function(x){h+='<div class="li fix"><span class="dot warn"></span><div class="grow"><div class="t">'+x.t+'</div><div class="d">'+x.d+'</div></div><button class="btn primary sm press" data-fix="'+x.id+'">'+x.fix+'</button></div>'});
+  return h+'</div>';
+}
+function vUpdates(){
+  var n=updates.filter(function(u){return u.av}).length;
+  var h='<div class="top"><h1>Updates</h1><span class="sp"></span><button class="btn press" data-act="check">Check now</button></div><p class="muted" style="margin:-8px 4px 18px" id="upd-line">'+(n?n+' updates available. Last checked 3 minutes ago.':'Everything is up to date. Last checked just now.')+'</p><div class="list">';
+  updates.forEach(function(u,i){h+='<div class="li"><div class="grow"><div class="t">'+u.n+'</div><div class="d">Installed '+u.cur+(u.av?'. Available '+u.av+'. ':'. ')+u.d+'</div></div>'+(u.av?'<button class="btn primary sm press" data-upd="'+i+'">Install</button>':'<button class="btn sm press" data-roll="'+i+'">Go back</button>')+'</div>'});
+  return h+'</div><p class="faint" style="margin:14px 4px;font-size:13px">The previous build is kept so any update can be undone.</p>';
+}
+function vSettings(){
+  var h='<div class="top"><h1>Settings</h1></div><div class="list">';
+  h+='<div class="li"><div class="grow"><div class="t">Check for updates on its own</div><div class="d">Asks the public catalog once a day. Nothing else leaves this computer.</div></div><button class="tog'+(settings.autocheck?' on':'')+'" data-stog="autocheck" role="switch" aria-label="Check for updates"></button></div>';
+  h+='<div class="li"><div class="grow"><div class="t">Helper sleeps after</div><div class="d">Minutes idle before its memory is freed.</div></div><select class="field" id="idle">'+[1,2,5,10,30].map(function(m){return '<option'+(m===settings.helperIdle?' selected':'')+'>'+m+'</option>'}).join('')+'</select></div>';
+  h+='<div class="li"><div class="grow"><div class="t">Appearance</div><div class="d">Dark is the default.</div></div><div class="seg"><button class="'+(settings.theme==='dark'?'on':'')+'" data-theme="dark">Dark</button><button class="'+(settings.theme==='light'?'on':'')+'" data-theme="light">Light</button></div></div></div>';
+  h+='<details class="more"><summary>More</summary><div class="list"><div class="li"><div class="grow"><div class="t">Reach this page over Tailscale</div><div class="d">Off by default. Sign-in is always needed, on any network.</div></div><button class="tog'+(settings.tailscale?' on':'')+'" data-stog="tailscale" role="switch" aria-label="Tailscale"></button></div>'+
+   '<div class="li"><div class="grow"><div class="t">Address</div><div class="d num">http://192.0.2.14:8788 (this computer only)</div></div></div>'+
+   '<div class="li"><div class="grow"><div class="t">Sign out</div></div><button class="btn sm press" data-act="signout">Sign out</button></div></div></details>';
+  return h;
+}
+
+var views={overview:vOverview,resources:vResources,helper:vHelper,features:vFeatures,health:vHealth,updates:vUpdates,settings:vSettings};
+
+function render(){
+  var id=(location.hash.replace('#/','')||'overview');if(!views[id])id='overview';
+  cur=id;markNav();
+  var m=$('#main');
+  if(!booted){m.innerHTML=skeleton();return}
+  m.innerHTML='<div class="view">'+views[id]()+'</div>';
+  window.scrollTo(0,0);
+  if(id==='overview')liveOverview();
+  if(id==='resources'){drawCharts();liveResourcesPaint()}
+  if(id==='helper')paintMsgs();
+  if(id==='features')bindDrag();
+  nowbar();
+}
+function liveResourcesPaint(){var u=used()+other,p=pressure();var set=function(i,t){var e=$(i);if(e)e.textContent=t};set('#rs-used',fmt(u));set('#rs-free',fmt(TOTAL-u)+' GB free');set('#rs-q-free',fmt(TOTAL-u));$('#rs-bar').innerHTML=memBar();
+  $('#rs-rows').innerHTML=roles.map(function(r){return '<tr><td><span class="swatch" style="background:'+r.color+'"></span>'+r.name+'</td><td class="num">'+fmt(r.mem)+' GB</td><td class="num">'+fmt(r.peak)+' GB</td><td class="num">'+r.reqs+'</td><td>'+r.last+'</td></tr>'}).join('')}
+function liveOverview(){
+  roles.forEach(function(r){var e=$('#m-'+r.id);if(e)e.textContent=fmt(r.mem);var sp=$('#sp-'+r.id);if(sp)sp.setAttribute('d',sparkPath(r.hist.slice(-30).map(function(v){return v||0}).concat(r.mem?[]:[0]),200,34));
+    var d=$('#d-'+r.id),s=$('#s-'+r.id);if(d){d.className=r.state==='ready'?'dot':r.state==='busy'?'dot warn':'dot idle';s.textContent=r.state==='ready'?'Running':r.state==='busy'?'Starting':'Sleeping'}});
+  var n=$('#ov-n');if(n)n.textContent=runningCount()+' of 6 features awake';
+  var p=$('#ov-p');if(p)p.textContent=pressure().t.toLowerCase();
+}
+function nowbar(){
+  var nb=$('#nowbar');var p=pressure();
+  var awake=roles.filter(function(r){return r.state==='ready'});
+  nb.innerHTML='<div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></div><div class="txt"><div class="w6">Now running: '+awake.map(function(r){return r.name}).slice(0,2).join(', ')+(awake.length>2?' and '+(awake.length-2)+' more':'')+'</div><div class="muted num" style="font-size:13px">'+fmt(used()+other)+' of '+TOTAL+' GB · '+fmt(tpsTotal,0)+' tok/s</div></div><span class="press-badge '+p.c+'">'+p.t+'</span>';
+}
+
+/* ---------- live tick ---------- */
+function tick(){
+  roles.forEach(function(r){
+    if(r.state==='ready'){r.mem=Math.max(.05,r.base*(1+rnd(-.015,.015))+(r.id==='chat'?rnd(-.1,.15):0));if(r.mem>r.peak)r.peak=r.mem;r.hist.push(r.mem)}
+    else r.hist.push(0);
+    if(r.hist.length>60)r.hist.shift();
+  });
+  other=Math.max(6,Math.min(13,other+rnd(-.15,.15)));
+  swap=Math.max(.05,Math.min(.9,swap+rnd(-.03,.03)));
+  cpu=Math.max(5,Math.min(70,cpu+rnd(-5,5)));gpu=Math.max(5,Math.min(95,gpu+rnd(-9,9)));
+  tpsTotal=Math.max(8,Math.min(60,tpsTotal+rnd(-4,4)));
+  roles[0].reqs+=Math.random()<.3?1:0;
+  if(!booted)return;
+  if(cur==='overview')liveOverview();
+  liveResources();
+  nowbar();
+}
+setInterval(tick,2000);
+
+/* ---------- actions ---------- */
+function themeSet(t){settings.theme=t;document.documentElement.setAttribute('data-theme',t);store.set('stack-theme',t);var m=document.querySelector('meta[name=theme-color]');if(m)m.content=t==='dark'?'#0b0c10':'#f4f5f8'}
+function themeToggle(){themeSet(settings.theme==='dark'?'light':'dark');if(cur==='settings')render()}
+function roleDo(a,id){
+  var r=roles.filter(function(x){return x.id===id})[0];
+  if(a==='restart'){r.state='busy';r.mem=0;toast('Restarting '+r.name+'...');closeSheet();paintNow();setTimeout(function(){r.state='ready';r.mem=r.base;r.loaded='Today, just now';toast(r.name+' is back');paintNow()},2200)}
+  if(a==='unload'){r.state='idle';r.mem=0;r.loaded='Unloaded just now';toast(r.name+' unloaded. It wakes on the next request.');closeSheet();paintNow()}
+}
+function paintNow(){if(cur==='overview')liveOverview();else if(cur==='resources')liveResourcesPaint();nowbar()}
+var actions=[
+ {t:'Restart chat',k:'Action',run:function(){roleDo('restart','chat')}},
+ {t:'Unload image role',k:'Action',run:function(){roleDo('unload','image')}},
+ {t:'Check for updates',k:'Action',run:function(){go('updates');setTimeout(function(){toast('Checked. 2 updates available.')},300)}},
+ {t:'Toggle light or dark',k:'Action',run:themeToggle},
+ {t:'Sign out',k:'Action',run:signOut}
+];
+function palItems(q){
+  var all=routes.map(function(r){return {t:'Go to '+r.label,k:'Screen',run:function(){go(r.id)}}}).concat(roles.map(function(r){return {t:'Open '+r.name,k:'Role',run:function(){go('overview');setTimeout(function(){roleSheet(r.id)},150)}}})).concat(actions);
+  q=q.toLowerCase();return all.filter(function(a){return !q||a.t.toLowerCase().indexOf(q)>-1})
+}
+var palSel=0,palList=[];
+function palOpen(){$('#pal').classList.remove('hidden');$('#palin').value='';palPaint('');$('#palin').focus()}
+function palClose(){$('#pal').classList.add('hidden')}
+function palPaint(q){
+  palList=palItems(q).slice(0,9);palSel=0;
+  $('#palres').innerHTML=palList.length?palList.map(function(a,i){return '<button class="'+(i===0?'sel':'')+'" data-pi="'+i+'"><span>'+a.t+'</span><small>'+a.k+'</small></button>'}).join(''):'<div class="empty" style="padding:24px">Nothing matches. Try "memory" or "restart".</div>';
+}
+function palRun(i){var a=palList[i];if(a){palClose();a.run()}}
+function signOut(){$('#app').classList.add('hidden');$('#tabbar').classList.add('hidden');$('#nowbar').classList.add('hidden');closeSheet();$('#signin').classList.remove('hidden');$('#pw').value='';booted=false}
+
+/* drag reorder */
+function bindDrag(){
+  var l=$('#featlist');if(!l)return;var from=null;
+  l.addEventListener('dragstart',function(e){var li=e.target.closest('.li');if(!li)return;from=+li.dataset.fi;li.classList.add('drag');e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',String(from))}catch(x){}});
+  l.addEventListener('dragend',function(e){$$('.li',l).forEach(function(x){x.classList.remove('drag')})});
+  l.addEventListener('dragover',function(e){e.preventDefault()});
+  l.addEventListener('drop',function(e){e.preventDefault();var li=e.target.closest('.li');if(!li||from==null)return;var to=+li.dataset.fi;var it=features.splice(from,1)[0];features.splice(to,0,it);render();toast('Priority saved. '+features[0].name+' gets memory first.')});
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',function(e){
+  var t=e.target;
+  var el=t.closest('[data-go]');if(el){go(el.dataset.go);return}
+  el=t.closest('[data-tab]');if(el){if(el.dataset.tab==='more')moreSheet();else go(el.dataset.tab);return}
+  el=t.closest('[data-goclose]');if(el){closeSheet();go(el.dataset.goclose);return}
+  el=t.closest('[data-role]');if(el){roleSheet(el.dataset.role);return}
+  el=t.closest('[data-do]');if(el){var p=el.dataset.do.split(':');if(p[0]==='close')closeSheet();else roleDo(p[0],p[1]);return}
+  el=t.closest('[data-range]');if(el){range=el.dataset.range;ensureSeries();$$('[data-range]').forEach(function(b){b.classList.toggle('on',b===el)});drawCharts();return}
+  el=t.closest('[data-ask]');if(el){send(el.dataset.ask);return}
+  el=t.closest('[data-tool]');if(el){var q=el.dataset.tool.split(':');var m=chatState.msgs[+q[0]];m.status=q[1];if(q[1]==='ok'){if(m.role==='idle')toast('Image idle timer set to 2 minutes');else roleDo('restart',m.role)}paintMsgs();return}
+  el=t.closest('[data-ftog]');if(el){var f=features[+el.dataset.ftog];f.on=!f.on;el.classList.toggle('on',f.on);el.setAttribute('aria-checked',f.on);var r=roles.filter(function(x){return x.id===f.id})[0];if(r){if(f.on){r.state=r.id==='image'?'idle':'ready';r.mem=r.id==='image'?0:r.base}else{r.state='off';r.mem=0}}toast(f.name+(f.on?' is on':' is off'));return}
+  el=t.closest('[data-stog]');if(el){var k=el.dataset.stog;settings[k]=!settings[k];el.classList.toggle('on',settings[k]);toast(k==='tailscale'?(settings[k]?'Reachable on your Tailscale network. Sign-in still needed.':'Back to this computer only'):'Saved');return}
+  el=t.closest('[data-theme]');if(el){themeSet(el.dataset.theme);render();return}
+  el=t.closest('[data-fix]');if(el){health=health.filter(function(h){return h.id!==el.dataset.fix});toast('Fixed. Checking again.');render();return}
+  el=t.closest('[data-upd]');if(el){var u=updates[+el.dataset.upd];toast('Installing '+u.n+' '+u.av+'...');setTimeout(function(){u.cur=u.av;u.av=null;u.d='Up to date.';if(cur==='updates')render();toast(u.n+' updated. The old build is kept.')},1400);return}
+  el=t.closest('[data-roll]');if(el){toast('Rolled back is available once a newer build is installed');return}
+  el=t.closest('[data-act]');if(el){var a=el.dataset.act;
+    if(a==='pal')palOpen();if(a==='theme'){themeToggle();}if(a==='prune')toast('Removed 11.7 GB of unused models');if(a==='check'){toast('Checking...');setTimeout(function(){toast('Checked just now')},900)}if(a==='signout')signOut();return}
+  if(t.closest('#palbtn')){palOpen();return}
+  if(t.closest('#themebtn')){themeToggle();return}
+  if(t.closest('#nowbar')){go('resources');return}
+  if(t.id==='scrim'){closeSheet();return}
+  var pi=t.closest('[data-pi]');if(pi){palRun(+pi.dataset.pi);return}
+  if(t.id==='pal'){palClose();return}
+  if(t.closest('#chatsend')){var i=$('#chatin');var v=i.value;i.value='';$('#cmdmenu').classList.add('hidden');send(v);return}
+  var cm=t.closest('#cmdmenu button');if(cm){$('#chatin').value=cm.dataset.c+' ';$('#cmdmenu').classList.add('hidden');$('#chatin').focus()}
+});
+document.addEventListener('change',function(e){if(e.target.id==='idle'){settings.helperIdle=+e.target.value;toast('Helper will sleep after '+e.target.value+' min')}if(e.target.id==='tier'){toast('Tier set to '+e.target.value)}});
+document.addEventListener('input',function(e){
+  if(e.target.id==='palin')palPaint(e.target.value);
+  if(e.target.id==='chatin'){var v=e.target.value,mn=$('#cmdmenu');
+    if(v.charAt(0)==='/'||v.charAt(0)==='@'){var ms=cmds.filter(function(c){return c[0].indexOf(v.split(' ')[0])===0});mn.innerHTML=ms.map(function(c){return '<button data-c="'+c[0]+'"><b>'+c[0]+'</b><span>'+c[1]+'</span></button>'}).join('');mn.classList.toggle('hidden',!ms.length||v.indexOf(' ')>-1)}
+    else mn.classList.add('hidden')}
+});
+document.addEventListener('keydown',function(e){
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();if(!booted)return;$('#pal').classList.contains('hidden')?palOpen():palClose();return}
+  if(!$('#pal').classList.contains('hidden')){
+    if(e.key==='Escape')palClose();
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();palSel=(palSel+(e.key==='ArrowDown'?1:-1)+palList.length)%palList.length;$$('#palres button').forEach(function(b,i){b.classList.toggle('sel',i===palSel)})}
+    if(e.key==='Enter'){e.preventDefault();palRun(palSel)}
+    return}
+  if(e.key==='Escape')closeSheet();
+  if(e.target.id==='chatin'&&e.key==='Enter'){var v=e.target.value;e.target.value='';$('#cmdmenu').classList.add('hidden');send(v)}
+  if(e.target.id==='nowbar'&&e.key==='Enter')go('resources');
+});
+
+$('#signform').addEventListener('submit',function(e){
+  e.preventDefault();
+  $('#signin').classList.add('hidden');$('#app').classList.remove('hidden');$('#tabbar').classList.remove('hidden');$('#nowbar').classList.remove('hidden');
+  buildNav();nowbar();render();
+  setTimeout(function(){booted=true;render()},750);
+});
+var saved=store.get('stack-theme');if(saved==='light'||saved==='dark')themeSet(saved);
+else if(window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches&&false)themeSet('light');
+buildNav();
+})();
+</script>
+</body>
+</html>
