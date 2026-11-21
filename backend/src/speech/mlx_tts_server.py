@@ -17,7 +17,7 @@ Engines are classes in ENGINES; a further MLX voice is one more class with
 (VOICE-VOXCPM2-01) from its own environment (mlx-audio 0.6.x): same form, same
 chunked 24 kHz WAV; the optional `voice_text` field carries the reference clip's
 words (without it the engine transcribes the clip once and remembers it). Runs offline: the Stack placed every
-file in the hub cache and sets HF_HUB_OFFLINE=1. All MLX work happens on one
+file in the hub cache, and the VoxCPM2 engine sets HF_HUB_OFFLINE=1 itself. All MLX work happens on one
 worker thread (MLX streams are per thread); the HTTP threads only queue jobs
 and write chunks, so /health answers while a synthesis runs.
 """
@@ -818,6 +818,14 @@ class Handler(BaseHTTPRequestHandler):
             job.cancelled.set()
 
 
+def offline_for(engine: str, env=None) -> None:
+    """VoxCPM2 never reaches Hugging Face: a file missing from the hub cache is an error, not a download (zero
+    phone-home). Set before the first huggingface_hub import, which reads it once. Chatterbox keeps the environment
+    the Stack gave it."""
+    if engine == VoxCPM2.id:
+        (os.environ if env is None else env)["HF_HUB_OFFLINE"] = "1"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
@@ -825,6 +833,7 @@ def main() -> None:
     parser.add_argument("--engine", default=ChatterboxTurbo.id, choices=sorted(ENGINES))
     parser.add_argument("--repo", required=True, help="the Hugging Face repository the Stack placed in the hub cache")
     args = parser.parse_args()
+    offline_for(args.engine)
     threading.Thread(target=worker, args=(args.engine, args.repo), daemon=True).start()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True

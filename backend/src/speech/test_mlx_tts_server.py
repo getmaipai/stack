@@ -531,5 +531,16 @@ class VoxFormTest(unittest.TestCase):
         self.assertEqual(len(list(chatterbox.stream("hi", None, None, 0.0, "ignored words"))), 2)
 
 
+
+class OfflineTest(unittest.TestCase):
+    def test_voxcpm2_forces_offline_and_chatterbox_keeps_its_environment(self):
+        env = {}
+        server.offline_for(server.ChatterboxTurbo.id, env)
+        self.assertNotIn("HF_HUB_OFFLINE", env)
+        env = {"HF_HUB_OFFLINE": "0"}
+        server.offline_for(server.VoxCPM2.id, env)
+        self.assertEqual(env["HF_HUB_OFFLINE"], "1")
+
+
 if __name__ == "__main__":
     unittest.main()
