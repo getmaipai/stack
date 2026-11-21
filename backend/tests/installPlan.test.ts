@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildInstallPlan } from "@/lib/installPlan";
+import { buildInstallPlan, splashChatInstallModels } from "@/lib/installPlan";
 import { primaryBudgetBytes, sizingMemory, type HardwareInfo } from "@/lib/hardware";
 import { proposeProfile, PROFILE_MODEL_BINDINGS } from "@/profiles";
 import { STACK_MODELS } from "@/lib/modelCatalog";
@@ -145,6 +145,13 @@ test("plan: the coding model adds its size to the totals and a pull body for it 
   // The draft is part of the total and of what is left until it is installed too.
   const both = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }), { installedIds: ["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft"] });
   expect(both.remaining_bytes).toBe(with64.total_bytes - 16_464_440_224 - 3_848_817_896);
+});
+test("plan: the optional 35B and its draft are offered as removable parts and never join a tier's plan", () => {
+  for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.map((model) => model.id)).not.toContain("qwen3-6-35b-a3b-huihui-abliterated-q4-k-m");
+  const optional = splashChatInstallModels();
+  expect(optional.map((model) => model.id)).toEqual(["qwen3-6-35b-a3b-huihui-abliterated-q4-k-m", "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft"]);
+  expect(optional[0]).toMatchObject({ removable: true, approx_bytes: 21_166_758_784, engine: "splash" });
+  expect(optional[1]).toMatchObject({ removable: true, component: "draft", engine: "splash", approx_bytes: 1_052_513_456 });
 });
 test("route: the plan's coding model carries removable: true in the response", async () => {
   const body = await (await app.request("/stack/v1/install-plan?vram_gb=64")).json() as { models: Array<{ id: string; removable?: boolean }> };

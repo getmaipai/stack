@@ -169,6 +169,9 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (chat.length) {
     rows.push(modelRow({ id: "chat", label: `Chat AI (${chatName(bigChat!)})`, note: "The AI you talk to.", need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
   }
+  const optionalSplashChat = STACK_MODELS.find((pin) => pin.id === "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m");
+  const optionalSplashDraft = STACK_MODELS.find((pin) => pin.id === "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft");
+  if (optionalSplashChat && optionalSplashDraft && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64")) rows.push(modelRow({ id: "chat-splash-qwen36-abliterated", label: partLabel(optionalSplashChat.id), note: "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.", need: "optional", engines: [] }, [optionalSplashChat, optionalSplashDraft]));
   const reads = plannedWhere((pin) => projectors.has(pin.id) && pin.role !== "vision");
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: partLabel("qwen3-vl-8b-instruct-q4-k-m"), note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));
   // The picture reader and its projector checks finished clips and pictures for safety when chat cannot read pictures (AIMODELS-VISION-01).

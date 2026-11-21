@@ -6,7 +6,7 @@ import { afterEach, expect, test } from "bun:test";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { type HardwareInfo } from "@/lib/hardware";
 import { PROFILE_MODEL_BINDINGS } from "@/profiles";
-import { STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_MODELS } from "@/lib/modelCatalog";
 import { clearModelsForTests, upsertModel } from "@/lib/modelStore";
 import { resetSupervisorForTests, selectedModel } from "@/lib/supervisor";
 import { __resetSettingsForTests, updateSettings } from "@/settings";
@@ -77,6 +77,23 @@ test("Huihui Qwen3.8 abliterated is pinned to its own revision, hashes and proje
     download: { sha256: "c9a09064683620bea3d3bfed5d4462e1a97a7d2fff7e5045d6862a0a85eeb5b5", approx_bytes: 931_145_888 },
   });
   expect(STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR.download!.url).toContain("/resolve/1c69098e9c32db6dc06fc48f1d6cc75ad07da89e/mmproj-model-bf16.gguf");
+});
+
+test("Huihui Qwen3.6 35B abliterated target and Splash draft are pinned", () => {
+  expect(STACK_MODELS).toContain(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL);
+  expect(STACK_MODELS).toContain(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT);
+  expect(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL).toMatchObject({
+    id: "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m", role: "chat", license: "Apache-2.0", engine: "splash",
+    repo: "mradermacher/Huihui-Qwen3.6-35B-A3B-abliterated-GGUF", revision: "0693fc2b47f66380f4b568b01e05195d22edd3a2",
+    sizing: { profile: "p64", quantization: "Q4_K_M" },
+    download: { url: "https://huggingface.co/mradermacher/Huihui-Qwen3.6-35B-A3B-abliterated-GGUF/resolve/0693fc2b47f66380f4b568b01e05195d22edd3a2/Huihui-Qwen3.6-35B-A3B-abliterated.Q4_K_M.gguf", sha256: "fbaa4eb3e2365abffd495c5efa7df88c2b2a5088ba32cd2895973d130991e92b", approx_bytes: 21_166_758_784 },
+    companions: ["qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft"],
+    sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5 },
+  });
+  expect(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT.download?.files).toEqual([
+    { path: "config.json", sha256: "86d2e8e57e7c70bb867240708d00c0535ae9ed3c828dbdcb21584471c7bbce59", bytes: 1_291 },
+    { path: "model.safetensors", sha256: "d1f16c0ff85afbe6166fabfae998af3ec16fa11da87da4391b5e0e0a7c796a4d", bytes: 1_052_513_456 },
+  ]);
 });
 
 test("no tier installs or binds the uncensored Qwen3.8 model", () => {

@@ -18,13 +18,13 @@
     "p32.ai_required_free_bytes": 48589999960,
     "p64.required_free_bytes": 194408115933,
     "p64.minimum_required_free_bytes": 37187187977,
-    "p64.everything_required_free_bytes": 269373082864,
+    "p64.everything_required_free_bytes": 296036209552,
     "p64.needed_bytes": 163132484664,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 191231792656,
     "p128.required_free_bytes": 197949623094,
     "p128.minimum_required_free_bytes": 37187187977,
-    "p128.everything_required_free_bytes": 636665700781,
+    "p128.everything_required_free_bytes": 663328827469,
     "p128.needed_bytes": 166083740632,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 194773299817
@@ -1088,6 +1088,24 @@
           "basis": "pins"
         },
         {
+          "id": "chat-splash-qwen36-abliterated",
+          "label": "Qwen3.6 35B A3B (Huihui)",
+          "note": "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 22219272240,
+          "installed_bytes": 22219272240,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m",
+            "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "judge",
           "label": "Qwen3 4B",
           "note": "A second, smaller AI that double-checks answers.",
@@ -1897,11 +1915,11 @@
         "required_free_bytes": 37187187977
       },
       "everything": {
-        "download_bytes": 207439902075,
-        "installed_bytes": 214185791895,
+        "download_bytes": 229659174315,
+        "installed_bytes": 236405064135,
         "peak_temp_bytes": 12350132590,
-        "needed_bytes": 226535924485,
-        "required_free_bytes": 269373082864
+        "needed_bytes": 248755196725,
+        "required_free_bytes": 296036209552
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1957,6 +1975,24 @@
           "peak_temp_bytes": 0,
           "model_ids": [
             "qwen3-8b-instruct-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
+          "id": "chat-splash-qwen36-abliterated",
+          "label": "Qwen3.6 35B A3B (Huihui)",
+          "note": "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 22219272240,
+          "installed_bytes": 22219272240,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m",
+            "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft"
           ],
           "engines": [],
           "installed": false,
@@ -3089,11 +3125,11 @@
         "required_free_bytes": 37187187977
       },
       "everything": {
-        "download_bytes": 510468665204,
-        "installed_bytes": 519063450152,
+        "download_bytes": 532687937444,
+        "installed_bytes": 541282722392,
         "peak_temp_bytes": 13789560598,
-        "needed_bytes": 532853010750,
-        "required_free_bytes": 636665700781
+        "needed_bytes": 555072282990,
+        "required_free_bytes": 663328827469
       },
       "measured_on": "2026-10-17",
       "default_selected": [

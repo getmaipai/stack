@@ -109,6 +109,54 @@ export const STACK_CHAT_QWEN38_UNCENSORED_MODEL: CatalogModelLike = {
   sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3.8-27B model card, instruct/non-thinking sampling (the fine-tune's base model)" },
 };
 
+// Optional Huihui Qwen3.6-35B-A3B abliterated chat model, served by Splash,
+// which requires a DFlash2 draft. Like the dense model above, an admin installs
+// it on purpose and chooses it in Settings; no tier binds or downloads it. Splash 1.6.1 measured a 21 GB
+// resident footprint at 32k context (7x faster to first token than the dense
+// 27B on a 5.5k-token Home prompt). The dense Huihui Qwen3.8-27B above stays
+// installable and selectable.
+const QWEN36_HUIHUI_35B_REPO = "mradermacher/Huihui-Qwen3.6-35B-A3B-abliterated-GGUF";
+const QWEN36_HUIHUI_35B_REVISION = "0693fc2b47f66380f4b568b01e05195d22edd3a2";
+export const STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL: CatalogModelLike = {
+  id: "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m",
+  role: "chat",
+  repo: QWEN36_HUIHUI_35B_REPO,
+  license: "Apache-2.0",
+  revision: QWEN36_HUIHUI_35B_REVISION,
+  engine: "splash",
+  companions: ["qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft"],
+  sizing: { profile: "p64", quantization: "Q4_K_M" },
+  download: {
+    url: hfUrl(`${QWEN36_HUIHUI_35B_REPO}/resolve/${QWEN36_HUIHUI_35B_REVISION}/Huihui-Qwen3.6-35B-A3B-abliterated.Q4_K_M.gguf`),
+    sha256: "fbaa4eb3e2365abffd495c5efa7df88c2b2a5088ba32cd2895973d130991e92b",
+    approx_bytes: 21_166_758_784,
+  },
+  sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen/Qwen3.6-35B-A3B model card, non-thinking sampling" },
+};
+
+const QWEN36_HUIHUI_35B_DRAFT_REPO = "incoai/Qwen3.6-35B-A3B-DFlash2";
+const QWEN36_HUIHUI_35B_DRAFT_REVISION = "51ef7b6923ad6c14cb1bb41c37a9041446496ab6";
+export const STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT: CatalogModelLike = {
+  id: "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft",
+  role: "chat",
+  component: "draft",
+  repo: QWEN36_HUIHUI_35B_DRAFT_REPO,
+  license: "Apache-2.0",
+  revision: QWEN36_HUIHUI_35B_DRAFT_REVISION,
+  engine: "splash",
+  sizing: { profile: "p64", quantization: "BF16" },
+  download: {
+    url: hfUrl(`${QWEN36_HUIHUI_35B_DRAFT_REPO}/resolve/${QWEN36_HUIHUI_35B_DRAFT_REVISION}/model.safetensors`),
+    sha256: "d1f16c0ff85afbe6166fabfae998af3ec16fa11da87da4391b5e0e0a7c796a4d",
+    approx_bytes: 1_052_513_456,
+    directory: "Qwen3.6-35B-A3B-DFlash2",
+    files: [
+      { path: "config.json", sha256: "86d2e8e57e7c70bb867240708d00c0535ae9ed3c828dbdcb21584471c7bbce59", bytes: 1_291 },
+      { path: "model.safetensors", sha256: "d1f16c0ff85afbe6166fabfae998af3ec16fa11da87da4391b5e0e0a7c796a4d", bytes: 1_052_513_456 },
+    ],
+  },
+};
+
 // The household's background worker pin, exposed as Stack's distinct
 // judge role on machines with a known p16-or-larger profile.
 export const STACK_JUDGE_MODEL: CatalogModelLike = {
@@ -1481,7 +1529,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

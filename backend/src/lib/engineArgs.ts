@@ -217,6 +217,8 @@ export interface SplashArgsOptions {
   maxMemory?: string;
   decodeShare?: number;
   languageOnly?: boolean;
+  /** A GGUF file and a DFlash2 draft folder on disk: Splash prepares its own model folder from them (`--model-dir`, `--draft-model`); `model` is then only the id the API reports, and no `--revision` is allowed. */
+  localModel?: { modelDir: string; draftDir: string };
 }
 
 /** The arguments after `install/launcher.py` for the coding role on Splash (CODE-STACK-01 S5a). Flag spellings are Splash 1.3.2's
@@ -231,7 +233,7 @@ export function splashArgs(options: SplashArgsOptions): string[] {
   return [
     "serve",
     "--model", options.model,
-    "--revision", options.revision,
+    ...(options.localModel ? ["--model-dir", options.localModel.modelDir, "--draft-model", options.localModel.draftDir] : ["--revision", options.revision]),
     "--offline",
     "--host", "127.0.0.1",
     "--port", String(options.port),

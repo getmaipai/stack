@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { SPLASH_CHAT_PIN, SPLASH_PIN, CHAT_ENGINES, engineNameTag } from "@/lib/engineCatalog";
 import { llamaServerArgs } from "@/lib/engineArgs";
 import { CHAT_ENGINE_CHOICES, chatEngineFailure, clearChatEngineFailures, markChatEngineFailed, requestedChatEngine, resolveChatEngine } from "@/lib/chatEngines";
-import { STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CODING_DRAFT_MODEL } from "@/lib/modelCatalog";
+import { STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CODING_DRAFT_MODEL } from "@/lib/modelCatalog";
 import { clearModelsForTests, getModel, upsertModel } from "@/lib/modelStore";
 import { engineDir } from "@/lib/engineInstall";
 import { applyPendingSettings, __resetSettingsForTests, settingValues, updateSettings } from "@/settings";
@@ -17,11 +17,12 @@ import { initializeHomeMode } from "@/lib/homeMode";
 
 const verified = { source: "catalog" as const, provenance: { repo: "huihui-ai/Huihui-Qwen3.8-27B-abliterated-GGUF" }, revision: STACK_CHAT_QWEN38_UNCENSORED_MODEL.revision!, sha256: STACK_CHAT_QWEN38_UNCENSORED_MODEL.download!.sha256, licence: "Apache-2.0", verifiedAt: new Date().toISOString() };
 function sparse(path: string, size: number) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, ""); truncateSync(path, size); }
-function installModel(pin: typeof STACK_CHAT_QWEN38_UNCENSORED_MODEL | typeof STACK_CODING_DRAFT_MODEL) {
+function installModel(pin: typeof STACK_CHAT_QWEN38_UNCENSORED_MODEL | typeof STACK_CODING_DRAFT_MODEL | typeof STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL | typeof STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT) {
   const modelPath = join(splashRoot(), "fixture", pin.id);
   if (pin.download?.files) for (const file of pin.download.files) sparse(join(modelPath, file.path), file.bytes);
   else sparse(modelPath, pin.download!.approx_bytes);
-  upsertModel({ id: pin.id, roles: [pin.role], ...verified, revision: pin.revision!, sha256: pin.download!.sha256, sizeBytes: pin.download!.approx_bytes, modelPath, engineRequirements: { engine: pin.engine, launch: pin.launch, sampling: pin.sampling } });
+  const identity = { source: "catalog" as const, provenance: { repo: pin.repo }, revision: pin.revision!, sha256: pin.download!.sha256, licence: "Apache-2.0", verifiedAt: new Date().toISOString() };
+  upsertModel({ id: pin.id, roles: [pin.role], ...identity, sizeBytes: pin.download!.approx_bytes, modelPath, engineRequirements: { engine: pin.engine, launch: pin.launch, sampling: pin.sampling } });
   return modelPath;
 }
 function installChatEngine() {
@@ -108,7 +109,7 @@ test("the chat memory plan is one number for the launch, the ledger and the watc
 
 test("the watchdog's chat ceiling is the launch cap, not the cap plus the governor margin", async () => {
   installModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL); installModel(STACK_CODING_DRAFT_MODEL); installChatEngine();
-  updateSettings({ "stack.engines.chat.engine": "splash" }); applyPendingSettings();
+  updateSettings({ "stack.engines.chat.engine": "splash", "stack.engines.chat.model": STACK_CHAT_QWEN38_UNCENSORED_MODEL.id }); applyPendingSettings();
   const { chatSplashMemoryCapBytes } = await import("@/lib/supervisor");
   const model = getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)!;
   const context = Number(settingValues()["stack.engines.chat.context_length"] ?? 131_072);
@@ -167,6 +168,41 @@ test("with the chat engine on Splash the household's Huihui record is still the 
   expect(chatEngine()).toBe("splash");
   expect(selectedModel("chat")?.id).toBe(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id);
   expect(selectableModels("chat").map((model) => model.id)).toContain(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id);
+});
+
+test("Splash chat accepts the new model selection and estimates its measured 21 GB footprint", async () => {
+  installModel(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL);
+  installModel(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT as typeof STACK_CODING_DRAFT_MODEL);
+  installChatEngine();
+  const target = getModel(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.id)!;
+  upsertModel({ ...target, measuredFootprintBytes: 21_000_000_000, measuredContextLength: 32_768 });
+  updateSettings({ "stack.engines.chat.engine": "splash", "stack.engines.chat.model": target.id }); applyPendingSettings();
+  expect(chatEngine()).toBe("splash");
+  expect(selectedModel("chat")?.id).toBe(target.id);
+  const { splashFootprintEstimateBytes } = await import("@/lib/splash");
+  const expected = splashFootprintEstimateBytes({ weightsBytes: target.sizeBytes!, draftBytes: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT.download!.approx_bytes, contextTokens: 32_768 });
+  expect(expected).toBeGreaterThanOrEqual(21_000_000_000);
+  expect(expected).toBeLessThanOrEqual(25_000_000_000);
+});
+
+test("Splash chat launches the 35B through Splash's own preparation with the normal chat flags", () => {
+  const target = installModel(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL);
+  const draft = installModel(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT as typeof STACK_CODING_DRAFT_MODEL);
+  installChatEngine();
+  const plan = splashLaunchPlan(getModel(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.id)!, 8812, 32_768, "splash-chat");
+  const args = plan.command;
+  expect(args[args.indexOf("--model-dir") + 1]).toBe(target);
+  expect(args[args.indexOf("--draft-model") + 1]).toBe(draft);
+  expect(args[args.indexOf("--model") + 1]).toBe("mradermacher/Huihui-Qwen3.6-35B-A3B-abliterated-GGUF");
+  expect(args).not.toContain("--revision");
+  expect(args[args.indexOf("--served-model-name") + 1]).toBe(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.id);
+  for (const flag of ["--offline", "--announce-served-name", "--thinking-token-budget", "--max-context", "--max-memory", "--idle-release", "--max-cache-disk", "--no-webui"]) expect(args).toContain(flag);
+  // The same flags the dense chat launch carries.
+  installModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL); installModel(STACK_CODING_DRAFT_MODEL);
+  const dense = splashLaunchPlan(getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)!, 8813, 32_768, "splash-chat").command;
+  expect(dense).not.toContain("--model-dir");
+  expect(dense).toContain("--revision");
+  for (const flag of ["--offline", "--thinking-token-budget", "--max-context", "--max-memory", "--idle-release", "--max-cache-disk"]) expect(dense).toContain(flag);
 });
 
 test("a chat model that declares picture input stays on Splash: pictures are read by the separate vision role, so chat keeps its speed", () => {

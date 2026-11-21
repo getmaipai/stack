@@ -32,9 +32,9 @@ import { newLaunchKey, omlxCommand, omlxEnv, omlxInstalled, omlxSupportedHere, O
 import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
-import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashChatMemoryPlan, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
-import { layOutSplashCache, SplashLayoutError, splashPairFor } from "@/lib/splashStore";
+import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
 import { registerOwned, type OwnedHandle } from "@/lib/ownedProcesses";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
@@ -617,8 +617,24 @@ function omlxModelInstalled(): boolean {
   return listModels().some((model) => model.roles.includes("chat") && model.engineRequirements.engine === "omlx" && isModelSelectable(model) && !!model.modelPath);
 }
 function chatEngineInstalled(id: ChatEngineId): boolean {
-  return id === "omlx" ? omlxInstalled() && omlxModelInstalled() : id === "splash" ? chatSplashEngineInstalled() && !!getModel(STACK_CHAT_QWEN38_UNCENSORED_MODEL.id)?.modelPath && !!getModel(STACK_CODING_DRAFT_MODEL.id)?.modelPath : engineInstalled(id);
+  return id === "omlx" ? omlxInstalled() && omlxModelInstalled() : id === "splash" ? chatSplashEngineInstalled() && splashModelPairInstalled() : engineInstalled(id);
 }
+const MOE_CHAT_ID = STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.id;
+const SPLASH_CHAT_IDS: string[] = [STACK_CHAT_QWEN38_UNCENSORED_MODEL.id, MOE_CHAT_ID];
+function splashPairReady(id: string): boolean {
+  const pair = splashPairFor(id);
+  return [pair.pin, pair.draftPin].every((pin) => {
+    const record = getModel(pin.id);
+    return !!record?.modelPath && isModelSelectable(record);
+  });
+}
+/** The model Splash serves for chat: the one Home chose (the stored setting) when it is a Splash model, else the household's Huihui Qwen3.8-27B. */
+function splashChatModelId(): string {
+  const stored = String(settingValues()["stack.engines.chat.model"] ?? "");
+  if (SPLASH_CHAT_IDS.includes(stored)) return stored;
+  return STACK_CHAT_QWEN38_UNCENSORED_MODEL.id;
+}
+function splashModelPairInstalled(): boolean { return splashPairReady(splashChatModelId()); }
 /** What the choice checks: oMLX falls back to llama-server until it and its model are installed; an explicit mlx-serve is honoured as before (its start says what is missing). */
 function chatEngineAvailableForChoice(id: ChatEngineId): boolean {
   return id === "omlx" || id === "splash" ? chatEngineInstalled(id) : true;
@@ -628,8 +644,12 @@ function chatEngineAvailableForChoice(id: ChatEngineId): boolean {
  * tier's default), then what is installed, then what failed to start
  * this run (ENGINE-MLX-01). */
 export function activeChatChoice(): ChatEngineChoice {
+  const setting = settingValues()[CHAT_ENGINE_SETTING];
+  const stored = String(settingValues()["stack.engines.chat.model"] ?? "");
+  // `auto` picks Splash only when the stored chat model is the 35B, which only Splash can run; every other choice keeps its engine.
+  const auto = setting === undefined || setting === "auto" || setting === "";
   return resolveChatEngine({
-    setting: settingValues()[CHAT_ENGINE_SETTING],
+    setting: auto && stored === MOE_CHAT_ID ? "splash" : setting,
     tier: machineTier,
     installed: (id) => id === "splash" ? chatEngineInstalled("splash") : chatEngineAvailableForChoice(id),
     unsupported: (id) => id === "omlx" ? omlxSupportedHere().reason : id === "splash" ? splashChatUnsupportedReason() : null,
@@ -892,7 +912,8 @@ export function projectorFor(model: ModelRecord): ModelRecord | null {
  * on disk, for the role's engine, and for `vision` declaring picture
  * input. */
 function servesRole(model: ModelRecord, role: RoleId, engine: string | null): boolean {
-  return model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (!engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine) && (role !== "vision" || declaresImageInput(model));
+  const selectedChatSplash = role === "chat" && SPLASH_CHAT_IDS.includes(model.id) && engineForRole(role) === "splash" && model.id === splashChatModelId();
+  return model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (selectedChatSplash || !engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine) && (role !== "vision" || declaresImageInput(model));
 }
 
 export function selectedModel(role: RoleId): ModelRecord | null {
@@ -1503,7 +1524,11 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   // The pin's tool is `engine/splash`; the program's root is two levels up.
   let layout: ReturnType<typeof layOutSplashCache>;
   const pair = splashPairFor(model.id);
-  try { layout = layOutSplashCache(getModel, pair.pin, pair.draftPin); } catch (error) { if (error instanceof SplashLayoutError) throw new EngineUnavailableError(error.message); throw error; }
+  let localModel: { modelDir: string; draftDir: string; model: string } | null = null;
+  try {
+    localModel = splashLocalModelFor(model.id);
+    layout = localModel ? { ...splashDirs(), model: localModel.model, revision: pair.pin.revision!, placed: [] } : layOutSplashCache(getModel, pair.pin, pair.draftPin);
+  } catch (error) { if (error instanceof SplashLayoutError) throw new EngineUnavailableError(error.message); throw error; }
   const values = settingValues();
   const coding = codingLaunchSettings(values);
   const tag = currentEngineTag(pinName) ?? pin.tag;
@@ -1518,7 +1543,7 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   // whatever budget it is given with cached request states, so the governor's working margin is never part of it.
   const maxMemoryBytes = modeCoding ? Math.max(1, Math.min(governor.capBytes - stayingBytes, estimate + governor.marginBytes)) : chatRole ? splashChatMemoryPlan({ estimateBytes: estimate, measuredBytes: model.measuredFootprintBytes ?? null, headroomBytes: chatHeadroomBytes(values) }).capBytes : null;
   const thinkingBudget = Math.max(0, Math.floor(Number(values["stack.engines.chat.thinking_budget_ceiling"] ?? 2000)));
-  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: chatRole ? thinkingBudget : coding.thinkingBudgetTokens, contextLength, languageOnly: !declaredReadsPictures(model), ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : chatRole ? { maxMemory: `${Math.ceil(maxMemoryBytes! / 1_073_741_824)}G` } : {}) });
+  const args = splashArgs({ model: layout.model, revision: layout.revision, port, servedModelName: model.id, thinkingBudgetTokens: chatRole ? thinkingBudget : coding.thinkingBudgetTokens, contextLength, languageOnly: !declaredReadsPictures(model), ...(localModel ? { localModel: { modelDir: localModel.modelDir, draftDir: localModel.draftDir } } : {}), ...(modeCoding ? { defaultReasoningEffort: "none" as const, maxMemory: `${Math.max(1, Math.floor(maxMemoryBytes! / 1_073_741_824))}G`, decodeShare: 1.0 } : chatRole ? { maxMemory: `${Math.ceil(maxMemoryBytes! / 1_073_741_824)}G` } : {}) });
   const env = splashEnv(layout);
   // ISOLATION-04b: Splash takes a bearer key on every route but /health and /ready (its --api-key, here through SPLASH_API_KEY at spawn).
   const apiKey = newLaunchKey();
@@ -2297,7 +2322,7 @@ export function chatProcessRuntime(): { pid: number | null; uptimeMs: number | n
 
 /** Metal memory ceiling passed to Splash chat at launch, for the memory watchdog's process-size comparison. */
 export function chatSplashMemoryCapBytes(): number | null {
-  const model = selectedModel("chat");
+  const model = runtime("chat").process ? getModel(runtime("chat").process!.modelId ?? "") : selectedModel("chat");
   if (!model || engineForRole("chat") !== "splash") return null;
   const pair = splashPairFor(model.id);
   const draft = getModel(pair.draftPin.id);

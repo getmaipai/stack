@@ -167,6 +167,14 @@
       "download_bytes": 14403496864,
       "installed_bytes": 14403496864
     },
+    "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m": {
+      "download_bytes": 21166758784,
+      "installed_bytes": 21166758784
+    },
+    "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft": {
+      "download_bytes": 1052513456,
+      "installed_bytes": 1052513456
+    },
     "qwen3-8-27b-huihui-abliterated-mmproj-bf16": {
       "download_bytes": 931145888,
       "installed_bytes": 931145888

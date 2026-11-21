@@ -65,6 +65,11 @@ export function videoInstallModels(installedIds: Iterable<string> = []): PlanMod
   const installed = new Set(installedIds);
   return STACK_VIDEO_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
+/** Optional Splash chat model and its required speculative draft, offered on p64 and p128 as an admin's choice (no tier binds it). */
+export function splashChatInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
+  const installed = new Set(installedIds);
+  return STACK_MODELS.filter((pin) => pin.id === "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m" || pin.id === "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft").flatMap((pin) => view(pin, installed, false, true) ?? []);
+}
 /** LTX25-ENGINE-01: the LTX-2.5 pack (one pin: weights, text encoder and VAEs together), in the shape of a pull. */
 export function videoLtx25InstallModels(installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);

@@ -10,6 +10,7 @@ import { getModel, installCatalogModel, isModelSelectable, reconcilePinDeclarati
 import { STACK_MODELS, STACK_STEMS_MODELS } from "@/lib/modelCatalog";
 import { modelsDir } from "@/lib/paths";
 import { restartForNewChatEngine, restartForNewProjector } from "@/lib/supervisor";
+import { prepareSplashModel } from "@/lib/splashStore";
 import { warmUp } from "@/lib/warmup";
 import { diskAdmission, DiskRefusalError } from "@/lib/diskState";
 import type { buildDiskPlan as BuildDiskPlan } from "@/lib/diskPlan";
@@ -55,6 +56,10 @@ export async function startModelInstall(model: Pin, role: RoleId, download?: Dow
       }
       // An oMLX model that finishes installing moves an idle llama-server chat onto it once its environment is built too (ENGINE-MLX-01).
       if (installed.engineRequirements.engine === "omlx") await restartForNewChatEngine().catch(() => false);
+      // The Splash chat model and its draft install as two pulls: once both are on disk Splash prepares its model folder (a failure here is not fatal, the launch prepares it again and says why if it cannot).
+      if (installed.id === "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m" || installed.id === "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft") {
+        if (onDisk("qwen3-6-35b-a3b-huihui-abliterated-q4-k-m") && onDisk("qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft")) await prepareSplashModel().catch(() => false);
+      }
       await warmUp("model-install").catch(() => {});
     })
     .catch((error) => { finishJob(job.id, { ok: false, reason: error instanceof Error ? error.message : String(error) }); })
