@@ -41,15 +41,103 @@ width, live through the SSE feed.
 5. **Health:** problem list, one fix button each.
 6. **Settings:** generic renderer over the declared settings, Apply.
 7. **Updates:** installed, available, last checked, check, apply, go back.
-8. **Hardware and memory:** live from `/memory` and `/hardware`.
-9. **Tools:** diagnostics zip, readiness check, restart Stack, reboot
+8. **Resources:** the beautiful part (see "Resource utilization" below).
+9. **Helper:** the admin chat assistant (see "The Helper" below).
+10. **Tools:** diagnostics zip, readiness check, restart Stack, reboot
    computer (confirm, needs a sudoers line the installer adds).
+
+## Look and feel (Valet as the reference)
+
+Valet (`askvalet/valet`, MIT, React 19, Tailwind, Radix, cmdk, motion,
+lucide, Geist, shadcn components) is the quality bar: one calm front door,
+live cards with real numbers, hover details in a top bar, `⌘K` to jump to
+anything, `/` commands in chat, smooth motion, light and dark, installable
+to a phone Home Screen. We take its ideas, not its code: our org rule is
+prebuilt kit primitives from `@maipai/ui` (commons) restyled by tokens, so
+the Stack page imports those and adds no library of its own. If any Valet
+code is ever copied, MIT notice goes in `NOTICE`. A design-resolver pass
+checks the page against the org UI rule before build.
+
+Adopted from Valet: command palette (`⌘K` for screens, roles, settings,
+actions), top bar with hover details (CPU, memory, tier), live everything
+over SSE, approvals before any change from chat, a `/wall` read-only
+display mode for a spare screen (later, not v1), installable web app.
+
+## Resource utilization (live and history)
+
+Existing data: `GET /stack/v1/memory` (5 s samples: available, wired,
+compressed, swap and growth, kernel pressure, the Stack's own processes by
+name and bytes, top consumers, other programs' load, admission queue) and
+`lib/dailyResources.ts`. New: a bounded history ring (for example 24 h at
+5 s, then hourly for 30 days, in the Stack database) behind
+`GET /stack/v1/resources/history?range=`, plus CPU, GPU where the OS gives
+it, disk used by models, and tokens per second per role.
+
+Screen:
+- A large **memory budget bar**: total, split by each loaded engine and
+  model (colored per role), other programs, free, with the pressure level
+  as a plain-words badge ("Comfortable", "Tight", "Critical").
+- **Live line charts** (1 h, 24 h, 7 d): memory by role stacked, swap, CPU,
+  GPU, tokens per second, queue depth.
+- **Per-engine rows:** memory now and peak, requests, last answer time,
+  load or unload timestamps.
+- **Admission queue and decisions:** who is waiting and why a request was
+  refused, in sentences.
+- **Disk:** models and engines by size, with the prune button.
+- Hover shows exact values; nothing needs a refresh.
+
+## The Helper (admin chat assistant with its own small model)
+
+A chat box in the admin page ("Ask the Stack") that answers questions
+about the machine and, with approval, changes things. It has its own model
+so it works when the `chat` role is down, which is exactly when you need it.
+
+- **Own role, own process.** A separate `helper` role on `llama-server`
+  (the baseline engine), its own model file, not routed through the `chat`
+  role and not exposed on `/v1` to Home. Declared in `components.md` like
+  every role. If `chat` is broken, the Helper still runs; it needs only the
+  `llama-server` build and its model file.
+- **Small but smart.** Target a 3 to 4 billion parameter instruct model
+  with solid tool calling, Q4, roughly 2.5 to 3 GB resident. The exact
+  model is chosen by a bench (tool-call accuracy on a fixed set of admin
+  questions, answer quality, speed, memory), then pinned by URL, revision,
+  checksum and licence like every model. No model is named in advance.
+- **On demand.** Loads on the first message, shows "waking up" for a few
+  seconds, unloads after N idle minutes (setting, default 5, never below
+  1). It takes a slot through the admission governor like any engine, so it
+  cannot starve chat; under critical pressure it is first to unload. Idle
+  cost is zero.
+- **What it can do.** Read tools run freely: roles, health, memory and
+  history, logs (redacted), settings, updates, hardware. Write tools need
+  an Approve click in the chat: change a setting, switch a feature, set
+  priority or tier, restart an engine or the Stack, check or apply an
+  update, roll back. It cannot reboot the computer, edit files, run shell
+  commands, read the admin password or tokens, or reach the network.
+- **Calls the same routes** as the page, in-process, with the signed-in
+  admin's authority, so one definition and one audit log. Every approved
+  change is logged with "by Helper, approved by admin".
+- **Safety.** Log lines, engine output and setting text are data, never
+  instructions; the Helper's system prompt says so and writes always need a
+  human click, which is the real barrier. It speaks only to the signed-in
+  admin, never to a household member, so Home's child and adult gates are
+  untouched. Chat history stays in the Stack database, with a clear button.
+  Nothing is sent anywhere.
+- **Chat niceties from Valet:** `/` commands (`/restart`, `/health`,
+  `/new`), `@role` to point it at one role, a context meter, a thinking
+  indicator while the model wakes.
+- **If the model is not installed:** the page shows "Install the Helper
+  (about 2.5 GB)" with one button; the standalone installer offers it as an
+  optional step.
 
 ## New backend pieces
 
 - Admin auth routes (setup, login, logout, change password).
 - `POST /stack/v1/service/restart`, `POST /stack/v1/engines/{name}/restart`,
   `POST /stack/v1/host/reboot`, `GET /stack/v1/logs?tail=` (redacted).
+- `GET /stack/v1/resources/history`, plus the history ring that feeds it.
+- The `helper` role: declaration, pinned model, on-demand load and idle
+  unload, `POST /stack/v1/helper/chat` (SSE stream, tool calls, approval
+  round trip) and `GET/DELETE /stack/v1/helper/history`.
 - Role enable/disable and role priority as declared settings (if not
   already), so Home and the page read one definition.
 - Every new route: Zod types, OpenAPI regeneration, `integrations.md` rows,
@@ -81,15 +169,19 @@ width, live through the SSE feed.
 2. Admin account, sessions, listener binding, tests.
 3. Restart, logs and reboot routes, tests.
 4. Role enable and priority settings, tests.
-5. Page shell with Overview, Health, Engines.
-6. Features, Models and priority, Settings, Updates, Tools screens.
-7. Screenshots from seeded data, opened and judged.
-8. Standalone installer and update path.
-9. README, user and dev docs, backlog rows, release.
-10. Update org `DECISIONS.md` in `getmaipai/.github` with the 2026-11-21
+5. Page shell (on `@maipai/ui`, `⌘K`, top bar) with Overview, Health, Engines.
+6. Resource history ring and the Resources screen.
+7. Features, Models and priority, Settings, Updates, Tools screens.
+8. Helper: model bench and pin, role, on-demand load and unload, tools and
+   approvals, chat screen.
+9. Screenshots from seeded data, opened and judged on desktop and phone.
+10. Standalone installer and update path.
+11. README, user and dev docs, backlog rows, release.
+12. Update org `DECISIONS.md` in `getmaipai/.github` with the 2026-11-21
     entry (separate repo, separate commit).
 
 ## Routing
 
-Steps 2 to 4 and 8: Claude API worker or Codex (decided, testable). Step 1,
-page design (5 to 7), the README and docs: this session.
+Steps 2 to 4, 6 (backend half) and 10: Claude API worker or Codex (decided,
+testable). Helper model bench (8): local-lane or Codex runs it, I judge the
+result. Step 1, page design (5 to 9), the README and docs: this session.
