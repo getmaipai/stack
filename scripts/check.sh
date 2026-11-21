@@ -85,6 +85,16 @@ if [ "$MODE" != docs ]; then
   echo "== backend: typecheck"
   (cd backend && bunx tsc --noEmit)
 
+  # admin-ui is not a root workspace (Home's installer cannot place its @maipai/ui), so it
+  # installs and typechecks on its own, here, where the ui tag is placed beside the repo.
+  UI_DEP="$(sed -n 's#.*"@maipai/ui"[[:space:]]*:[[:space:]]*"file:\([^"]*\)".*#\1#p' admin-ui/package.json)"
+  if [ -f "admin-ui/$UI_DEP/package.json" ]; then
+    echo "== admin-ui: install, typecheck"
+    (cd admin-ui && bun install --silent && bunx tsc --noEmit)
+  else
+    echo "== admin-ui: skipped (@maipai/ui not at admin-ui/$UI_DEP)"
+  fi
+
   echo "== backend: API docs, regenerate and check for drift"
   before="$(mktemp)"
   cp docs/api/openapi.json "$before"

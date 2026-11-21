@@ -36,7 +36,7 @@ if [ -n "${BUILD_DIR:-}" ]; then
   BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"
 else
   BUILD_DIR="$(mktemp -d)/maipai-stack"
-  OUT_DIR="$BUILD_DIR" SKIP_VERIFY="${SKIP_VERIFY:-1}" bash scripts/build-binary.sh
+  OUT_DIR="$BUILD_DIR" SKIP_VERIFY="${SKIP_VERIFY:-1}" REQUIRE_ADMIN_UI=1 bash scripts/build-binary.sh
 fi
 [ -x "$BUILD_DIR/maipai-stack-${PLATFORM}-${ARCH}" ] || { echo "No binary maipai-stack-${PLATFORM}-${ARCH} in $BUILD_DIR. Build first with scripts/build-binary.sh."; exit 1; }
 for part in admin-ui migrations backend-src; do [ -d "$BUILD_DIR/$part" ] || { echo "$BUILD_DIR has no $part/. The build is incomplete; run scripts/build-binary.sh again."; exit 1; }; done

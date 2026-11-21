@@ -67,9 +67,27 @@ echo "== compile: $BINARY_NAME"
 echo "== migrations (sibling directory, see this script's own header)"
 cp -R backend/src/db/migrations "$OUT_DIR/migrations"
 
+# The admin page is built apart from the backend: admin-ui/ is NOT a root
+# workspace, because its @maipai/ui dependency (file:../../commons-tags/ui-...)
+# points at a Commons tag Home's installer does not place (it reads only
+# backend/package.json), and a workspace that cannot link breaks the backend
+# install for everyone. So the page is built only where that folder exists
+# (a dev machine, the release build). Home's installer flow therefore ships
+# the binary without the page (/admin answers 503 admin_ui_missing, which is
+# fine: Home renders the Stack's state itself). REQUIRE_ADMIN_UI=1 (set by
+# scripts/release-stack.sh) makes a missing page a hard failure so a
+# standalone release can never ship without it. Guess recorded 2026-11-21:
+# no prebuilt admin-ui/dist is committed (a committed build drifts from source).
 echo "== admin page (admin-ui/, built with Vite; a sibling folder for the same reason as migrations, lib/adminUi.ts)"
-(cd admin-ui && bun run build)
-cp -R admin-ui/dist "$OUT_DIR/admin-ui"
+UI_DEP="$(sed -n 's#.*"@maipai/ui"[[:space:]]*:[[:space:]]*"file:\([^"]*\)".*#\1#p' admin-ui/package.json)"
+if [ -n "$UI_DEP" ] && [ -f "admin-ui/$UI_DEP/package.json" ]; then
+  (cd admin-ui && bun install --silent && bun run build)
+  cp -R admin-ui/dist "$OUT_DIR/admin-ui"
+elif [ "${REQUIRE_ADMIN_UI:-0}" = "1" ]; then
+  echo "admin-ui needs @maipai/ui at admin-ui/$UI_DEP, which is not there. Place that Commons tag (scripts/check.sh does it), then run this again."; exit 1
+else
+  echo "skipped: @maipai/ui is not at admin-ui/$UI_DEP, so the binary ships without the admin page (set REQUIRE_ADMIN_UI=1 to make this an error)"
+fi
 
 echo "== ort-wasm (onnxruntime-web loads these at runtime; smartTurn.ts points wasmPaths here)"
 mkdir -p "$OUT_DIR/ort-wasm"

@@ -5,14 +5,13 @@
   "description": "MaiPai Stack: the engine foundation of MaiPai Home. See docs/dev.md.",
   "license": "AGPL-3.0",
   "workspaces": [
-    "backend",
-    "admin-ui"
+    "backend"
   ],
   "scripts": {
     "start": "bun --cwd backend start",
     "dev": "bun --cwd backend dev",
     "test": "bun --cwd backend test",
     "check": "bash scripts/check.sh",
-    "build:admin": "cd admin-ui && bun run build"
+    "build:admin": "cd admin-ui && bun install --silent && bun run build"
   }
 }
