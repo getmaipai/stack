@@ -6,13 +6,17 @@ the same wire as Pocket TTS, so Home's voice session needs no change.
                  synthesis compiles kernels and costs 6 to 14 s; "ok" never
                  means a cold engine), {"status": "loading"} with 503 before.
   GET  /tags     {"engine": ..., "tags": [...]} the tags the engine honors.
-  POST /tts      multipart form: text (required), voice_url (optional). The reply
+  POST /tts      multipart form: text (required), voice_url, voice_text,
+                 temperature, pitch_semitones (optional). The reply
                  is chunked audio/wav, 24 kHz mono 16-bit, the header written with
                  the placeholder data size Pocket TTS writes, then PCM as it is
                  generated (first chunk about 0.45 s on an M5 Max).
 
-Engines are classes in ENGINES; a second MLX voice (Orpheus) is one more class
-with `load`, `stream` and the `tags` list. Runs offline: the Stack placed every
+Engines are classes in ENGINES; a further MLX voice is one more class with
+`load`, `stream` and the `tags` list. `--engine voxcpm2` serves VoxCPM2
+(VOICE-VOXCPM2-01) from its own environment (mlx-audio 0.6.x): same form, same
+chunked 24 kHz WAV; the optional `voice_text` field carries the reference clip's
+words (without it the engine transcribes the clip once and remembers it). Runs offline: the Stack placed every
 file in the hub cache and sets HF_HUB_OFFLINE=1. All MLX work happens on one
 worker thread (MLX streams are per thread); the HTTP threads only queue jobs
 and write chunks, so /health answers while a synthesis runs.
@@ -298,7 +302,7 @@ class ChatterboxTurbo:
         from mlx_audio.utils import load_audio
         return len(load_audio(path, sample_rate=SAMPLE_RATE)) / SAMPLE_RATE
 
-    def stream(self, text: str, voice: str | None, temperature: float | None = None, pitch: float = 0.0):
+    def stream(self, text: str, voice: str | None, temperature: float | None = None, pitch: float = 0.0, voice_text: str | None = None):
         try:
             if voice and (voice.startswith("http://") or voice.startswith("https://")):
                 data = self.fetch_clip(voice)
@@ -342,13 +346,299 @@ class ChatterboxTurbo:
             self.model._conds = self.default_conds
 
 
-ENGINES = {ChatterboxTurbo.id: ChatterboxTurbo}
+# ---- VoxCPM2 (VOICE-VOXCPM2-01) ------------------------------------------------------------------
+# The voice lab's chunked streaming wrapper (voxcpm_stream.py, beside this file): the package returns a whole clip at once,
+# so the wrapper repeats its loop and decodes after 1, then 2, then 4 patches (one patch is 160 ms of audio). 300 ms of
+# silence follows the reference clip and a space sits between its transcript and the new text: without them a casual
+# reference teaches the model to start with "um" (lab: 39 of 40 lines word-exact with them, 16 of 40 without).
+VOX_SCHEDULE = (1, 2, 4)
+VOX_PATCH_SECONDS = 0.16
+VOX_REFERENCE_TAIL_SECONDS = 0.3
+VOX_DEFAULT_TIMESTEPS = 6
+VOX_TIMESTEPS_RANGE = (4, 10)
+VOX_CFG_VALUE = 2.0
+VOX_CHARS_PER_SECOND = 14.0
+VOX_RUNAWAY_FACTOR = 2.2
+VOX_MIN_SECONDS = 1.5
+STT_REPO = "mlx-community/parakeet-tdt-0.6b-v2"
+
+
+def vox_timesteps_from_env(env=None) -> int:
+    """Diffusion steps per audio patch (fewer is faster, more is cleaner); the lab picked 6. MAIPAI_TTS_VOX_TIMESTEPS (4..10)
+    overrides it; anything that is not a whole number keeps the default."""
+    raw = (os.environ if env is None else env).get("MAIPAI_TTS_VOX_TIMESTEPS")
+    if raw is None:
+        return VOX_DEFAULT_TIMESTEPS
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return VOX_DEFAULT_TIMESTEPS
+    return min(VOX_TIMESTEPS_RANGE[1], max(VOX_TIMESTEPS_RANGE[0], value))
+
+
+def vox_piece_plan(total_patches: int, schedule=VOX_SCHEDULE) -> list[int]:
+    """How many patches each streamed piece holds for a reply of `total_patches`: the schedule's sizes in order (the last repeats),
+    then whatever is left. 7 patches give [1, 2, 4]; 1 gives [1]; 0 gives []."""
+    plan, left, index = [], max(0, total_patches), 0
+    while left > 0:
+        size = min(left, schedule[min(index, len(schedule) - 1)])
+        plan.append(size)
+        left -= size
+        index += 1
+    return plan
+
+
+def vox_runaway_limit_seconds(text: str) -> float:
+    """Audio longer than this for the text is a runaway (the model lost the end of the sentence): 2.2 times a length estimate of
+    14 characters a second, at least 1.5 s. Nothing looks at the audio itself."""
+    return VOX_RUNAWAY_FACTOR * max(VOX_MIN_SECONDS, len(text.strip()) / VOX_CHARS_PER_SECOND)
+
+
+def trim_silence(audio, sample_rate: int, pad_seconds: float = 0.05, db: float = -45.0):
+    """Cut the quiet before and after the speech of a reference clip (relative to its peak), keeping a little padding."""
+    audio = np.asarray(audio, dtype=np.float32).reshape(-1)
+    if not len(audio):
+        return audio
+    threshold = 10 ** (db / 20) * max(float(np.abs(audio).max()), 1e-6)
+    loud = np.where(np.abs(audio) > threshold)[0]
+    if not len(loud):
+        return audio[:0]
+    pad = int(pad_seconds * sample_rate)
+    return audio[max(0, loud[0] - pad): loud[-1] + pad]
+
+
+def loudness_normalize(audio, target_db: float = -20.0, peak: float = 0.95):
+    """Scale a clip so its speech (frames within 40 dB of the loudest) has an RMS of target_db, without clipping."""
+    audio = np.asarray(audio, dtype=np.float32).reshape(-1)
+    frame = 480
+    if len(audio) < frame * 2:
+        return audio
+    frames = np.lib.stride_tricks.sliding_window_view(audio, frame)[:: frame // 2]
+    energy = np.sqrt((frames ** 2).mean(1))
+    active = energy > 10 ** (-40 / 20) * energy.max()
+    rms = np.sqrt((frames[active] ** 2).mean()) if active.any() else energy.max()
+    gain = min(10 ** (target_db / 20) / max(float(rms), 1e-6), peak / max(float(np.abs(audio).max()), 1e-6))
+    return (audio * gain).astype(np.float32)
+
+
+class Resampler:
+    """Streaming sample-rate change: each piece is filtered with a little of the one before it in front, so piece borders do not click."""
+
+    def __init__(self, source: int, target: int = SAMPLE_RATE):
+        from math import gcd
+        self.source, self.target = source, target
+        divisor = gcd(source, target)
+        self.up, self.down = target // divisor, source // divisor
+        self.context = np.zeros(0, np.float32)
+        self.keep = self.down * 4  # input samples kept as context: a multiple of `down`, so the dropped part is exact
+
+    def __call__(self, audio):
+        audio = np.asarray(audio, dtype=np.float32).reshape(-1)
+        if self.source == self.target:
+            return audio
+        from scipy.signal import resample_poly
+        joined = np.concatenate([self.context, audio])
+        out = resample_poly(joined, self.up, self.down).astype(np.float32)
+        drop = len(self.context) * self.up // self.down
+        self.context = joined[-self.keep:]
+        return out[drop:]
+
+
+class SpeechShaper:
+    """Cuts the dead air a model adds: leading silence goes, trailing silence is capped at 80 ms, silence inside the speech stays. The
+    trailing silence of a piece is held back until the next piece shows whether speech follows (the lab's Shaper)."""
+    SILENCE = 10 ** (-45 / 20)
+    FIRST_MIN = int(0.08 * SAMPLE_RATE)
+
+    def __init__(self):
+        self.started = False
+        self.buffer = np.zeros(0, np.float32)
+        self.pending = np.zeros(0, np.float32)
+
+    def span(self, audio, frame: int = 120):
+        count = len(audio) // frame
+        if count == 0:
+            return None
+        rms = np.sqrt((audio[:count * frame].reshape(count, frame) ** 2).mean(1))
+        loud = np.where(rms > self.SILENCE)[0]
+        if not len(loud):
+            return None
+        return loud[0] * frame, min(len(audio), (loud[-1] + 1) * frame)
+
+    def feed(self, audio):
+        audio = np.asarray(audio, dtype=np.float32).reshape(-1)
+        if not self.started:
+            self.buffer = np.concatenate([self.buffer, audio])
+            found = self.span(self.buffer)
+            if found is None or found[1] - found[0] < self.FIRST_MIN:
+                return None  # silence, or a few ms of sound: wait for the next piece rather than emit a click
+            self.started, audio = True, self.buffer[max(0, found[0] - int(0.01 * SAMPLE_RATE)):]
+        found = self.span(audio)
+        if found is None:
+            self.pending = np.concatenate([self.pending, audio])
+            return None
+        out = np.concatenate([self.pending, audio[:found[1]]])
+        self.pending = audio[found[1]:]
+        return out
+
+    def finish(self):
+        return self.pending[:int(0.08 * SAMPLE_RATE)] if self.started else None
+
+
+class VoxCPM2:
+    """VoxCPM2 2B (OpenBMB, Apache-2.0) through mlx-audio 0.6.x and the lab's streaming wrapper. Native 48 kHz, sent as 24 kHz. The
+    voice is the reference clip: its two latent encodings plus its transcript, prepared once per clip and cached (8 clips). With no clip
+    the model speaks zero-shot in a voice of its own choosing."""
+    id = "voxcpm2"
+    tags: list[str] = []
+    min_clip_seconds, max_clip_seconds = 6.0, 30.0
+
+    def load(self, repo: str) -> None:
+        from mlx_audio.tts.utils import load_model
+        self.model = load_model(repo)
+        self.native_rate = int(getattr(self.model, "sample_rate", 48000))
+        self.sample_rate = SAMPLE_RATE
+        self.timesteps = vox_timesteps_from_env()
+        self.clips = collections.OrderedDict()
+        configured_clip_dir = os.environ.get("MLX_TTS_CLIP_DIR")
+        if configured_clip_dir:
+            self.clip_dir = configured_clip_dir
+            os.makedirs(self.clip_dir, exist_ok=True)
+        else:
+            self.clip_dir = tempfile.mkdtemp(prefix="mlx-tts-clips-")
+        self.cloner_ready = True  # nothing to fetch: the clip is encoded by the model's own audio encoder
+
+    fetch_clip = ChatterboxTurbo.fetch_clip
+
+    def read_clip(self, path: str):
+        """The clip as 24 kHz mono float32 (WAV, MP3 or FLAC)."""
+        from mlx_audio.utils import load_audio
+        audio = np.asarray(load_audio(path, sample_rate=SAMPLE_RATE), dtype=np.float32).reshape(-1)
+        return audio
+
+    def transcribe(self, path: str) -> str:
+        """The clip's words, when the request did not bring them: recognized once with the pinned speech-to-text model from the
+        hub cache, which is then freed. The prepared clip is cached, so this runs once per clip."""
+        try:
+            import gc
+            import mlx.core as mx
+            from mlx_audio.stt import load
+            recognizer = load(STT_REPO)
+            try:
+                text = str(recognizer.generate(path).text).strip()
+            finally:
+                del recognizer
+                gc.collect()
+                mx.clear_cache()
+        except Exception as error:
+            raise ClipError("This voice needs the words of its recording and they were not sent. Add the words to the voice, then try it again.") from error
+        if not text:
+            raise ClipError("No words could be read from the recording. Choose a clearer recording, or add its words to the voice.")
+        return text
+
+    def prepare(self, audio, text: str):
+        """Encode the clip (with 300 ms of silence after it) into the two latent forms the streaming loop needs."""
+        from scipy.io import wavfile
+        from voxcpm_stream import encode_reference
+        tail = np.zeros(int(VOX_REFERENCE_TAIL_SECONDS * SAMPLE_RATE), np.float32)
+        padded = np.concatenate([np.asarray(audio, dtype=np.float32), tail])
+        path = os.path.join(self.clip_dir, f"prep-{os.getpid()}-{threading.get_ident()}.wav")
+        wavfile.write(path, SAMPLE_RATE, (np.clip(padded, -1, 1) * 32767).astype(np.int16))
+        try:
+            prompt, reference = encode_reference(self.model, path)
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        return {"prompt_feat": prompt, "ref_feat": reference, "text": text}
+
+    def pieces(self, text: str, prepared, noise: float):
+        """The streamed audio pieces (native rate, float32). One place the model is touched, so a test stands in a fake here."""
+        from voxcpm_stream import stream_patches
+        if prepared is None:
+            return stream_patches(self.model, text, {"text": ""}, mode="none", cfg_value=VOX_CFG_VALUE, timesteps=self.timesteps, noise=noise, schedule=VOX_SCHEDULE)
+        return stream_patches(self.model, text, prepared, mode="cont", cfg_value=VOX_CFG_VALUE, timesteps=self.timesteps, noise=noise, schedule=VOX_SCHEDULE, sep=" ")
+
+    def prepared_for(self, voice: str | None, voice_text: str | None):
+        """The prepared clip for a clip address (from the cache, else fetched, checked and encoded); None when the request has no clip."""
+        if not (voice and (voice.startswith("http://") or voice.startswith("https://"))):
+            return None
+        data = self.fetch_clip(voice)
+        words = (voice_text or "").strip()
+        key = hashlib.sha256(data + b"\0" + words.encode()).hexdigest()
+        if key in self.clips:
+            self.clips.move_to_end(key)
+            return self.clips[key]
+        extension = clip_extension(data)
+        if extension is None:
+            raise ClipError("This recording is not a WAV, MP3 or FLAC file. Save it as one of those and choose it again.")
+        path = os.path.join(self.clip_dir, f"{key}.{extension}")
+        with open(path, "wb") as clip_file:
+            clip_file.write(data)
+        try:
+            audio = self.read_clip(path)
+            seconds = len(audio) / SAMPLE_RATE
+            if seconds < self.min_clip_seconds or seconds > self.max_clip_seconds:
+                raise ClipError(f"The reference recording must be 6 to 30 seconds long; this one is {seconds:.1f} seconds.")
+            audio = loudness_normalize(trim_silence(audio, SAMPLE_RATE))
+            if len(audio) / SAMPLE_RATE < 1.0:
+                raise ClipError("The reference recording is almost all silence. Choose a recording where someone is talking.")
+            if not words:
+                words = self.transcribe(path)
+            prepared = self.prepare(audio, words)
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        self.clips[key] = prepared
+        if len(self.clips) > 8:
+            self.clips.popitem(last=False)
+        return prepared
+
+    def stream(self, text: str, voice: str | None, temperature: float | None = None, pitch: float = 0.0, voice_text: str | None = None):
+        prepared = self.prepared_for(voice, voice_text)
+        noise = 1.0 if temperature is None else float(temperature)
+        resample, shaper = Resampler(self.native_rate, SAMPLE_RATE), SpeechShaper()
+        room = int(vox_runaway_limit_seconds(text) * SAMPLE_RATE)
+        kept = []
+        generator = self.pieces(text, prepared, noise)
+        try:
+            for piece in generator:
+                audio = resample(piece)
+                if len(audio) > room:
+                    audio, room = audio[:max(room, 0)], 0
+                else:
+                    room -= len(audio)
+                out = shaper.feed(audio)
+                if out is not None and len(out):
+                    if abs(pitch) < 0.001:
+                        yield out
+                    else:
+                        kept.append(out)
+                if room <= 0:
+                    break
+            tail = shaper.finish()
+            if tail is not None and len(tail):
+                if abs(pitch) < 0.001:
+                    yield tail
+                else:
+                    kept.append(tail)
+            if kept:
+                yield pitch_shift(np.concatenate(kept), SAMPLE_RATE, pitch)
+        finally:
+            generator.close()
+
+
+ENGINES = {ChatterboxTurbo.id: ChatterboxTurbo, VoxCPM2.id: VoxCPM2}
 
 
 class Job:
-    def __init__(self, text: str, voice: str | None, temperature: float | None = None, pitch: float = 0.0):
+    def __init__(self, text: str, voice: str | None, temperature: float | None = None, pitch: float = 0.0, voice_text: str | None = None):
         self.text = text
         self.voice = voice
+        self.voice_text = voice_text
         self.temperature = temperature
         self.pitch = pitch
         self.out: "queue.Queue" = queue.Queue()
@@ -389,7 +679,7 @@ def worker(engine_id: str, repo: str) -> None:
         if job is None:
             return
         try:
-            for chunk in engine.stream(job.text, job.voice, job.temperature, job.pitch):
+            for chunk in engine.stream(job.text, job.voice, job.temperature, job.pitch, job.voice_text):
                 if job.cancelled.is_set():
                     break
                 job.out.put(to_pcm16(chunk))
@@ -497,7 +787,8 @@ class Handler(BaseHTTPRequestHandler):
         voice = form.get("voice_url") or None
         if voice and not (str(voice).startswith("http://") or str(voice).startswith("https://")):
             voice = None
-        job = Job(text, voice, temperature, pitch)
+        voice_text = str(form.get("voice_text") or "").strip()[:2000] or None
+        job = Job(text, voice, temperature, pitch, voice_text)
         JOBS.put(job)
         first = job.out.get()
         if isinstance(first, Exception):

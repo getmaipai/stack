@@ -848,7 +848,40 @@ export const STACK_VOICE_CHANGE_CHATTERBOX: CatalogModelLike = {
   id: "chatterbox-vc-s3gen", role: "tts", repo: "ResembleAI/chatterbox", license: "MIT", revision: "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18", engine: "chatterbox-vc",
   download: { url: hfUrl("ResembleAI/chatterbox/resolve/5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18/s3gen.safetensors"), sha256: "2b78103c654207393955e4900aac14a12de8ef25f4b09424f1ef91941f161d4e", approx_bytes: 1_056_484_620, hub_file: "s3gen.safetensors" },
 };
-export const STACK_STAGED_MODELS: CatalogModelLike[] = [STACK_FACE_REPAIR_GFPGAN, STACK_FACE_REPAIR_DETECTOR, STACK_FACE_REPAIR_PARSER, STACK_VOICE_CHANGE_CHATTERBOX];
+/** VoxCPM2 (OpenBMB, Apache-2.0) as the mlx-community MLX conversions, VOICE-VOXCPM2-01 step 1: the owner's blind-listening pick for the conversation voice.
+ * Staged, not selected: no tier installs it until step 2 picks tiers (bf16 for Standard, 4-bit for Reduced). Every file is pinned by sha256 and size at the
+ * revision the voice lab measured, placed in the hub cache, and read offline by `mlx_tts_server.py --engine voxcpm2 --repo <repo>`. The README, .gitattributes and
+ * sample WAVs of the repositories are not installed. Measured in the lab (Apple M5 Max): first audio 114 to 196 ms over HTTP. */
+export const VOXCPM2_ENGINE = "voxcpm2";
+const VOXCPM2_FILES: Array<{ id: string; repo: string; revision: string; quantization: string; files: Array<{ file: string; sha256: string; bytes: number }> }> = [
+  { id: "voxcpm2-bf16", repo: "mlx-community/VoxCPM2-bf16", revision: "a7fb80d9056983135a54ca3f71fcc5a637ccddf5", quantization: "bf16", files: [
+    { file: "model-00001.safetensors", sha256: "676b05649d915e63f2291a0b091bd72250785b2448fe14ec81f3566cf5f47950", bytes: 4_286_190_791 },
+    { file: "model-00002.safetensors", sha256: "adddb9b85026763751beb20ba050aa46ef19b6b55cf6cb6a8c44ac8b06ec5cff", bytes: 669_068_875 },
+    { file: "model.safetensors.index.json", sha256: "e5c9dbe10f771ec0bc6ee244531475615547c1129b3adf6b51fd00b1466ee75a", bytes: 67_424 },
+    { file: "config.json", sha256: "cf9f7d2b880e63720b6d886319b0d6ab14182bcf2939915fdf3aad12d60bc071", bytes: 5_210 },
+    { file: "special_tokens_map.json", sha256: "068594063e37662c02b21acf42ebb334ef6a74fb810e68a2368f88f08351de76", bytes: 1_632 },
+    { file: "tokenizer.json", sha256: "f8984687e4a92a3503d521396d454b7d68e9fdaab2a0288eb3536c7c1aa4bc20", bytes: 3_676_772 },
+    { file: "tokenizer_config.json", sha256: "466575c55f0cf49530666c2e46ed14f26237dbd227ba7f4bb3bbec93df90edfc", bytes: 4_952 },
+  ] },
+  { id: "voxcpm2-4bit", repo: "mlx-community/VoxCPM2-4bit", revision: "dc9e5c187858da5f4a13dc4c247e297339216381", quantization: "MLX 4-bit", files: [
+    { file: "model.safetensors", sha256: "25bddc99a7cc6d28214f12dd676ed0afa9b0a805d6477f85c275bb113cb8acee", bytes: 2_297_215_329 },
+    { file: "config.json", sha256: "91bff6db1be27bc0f4f2a287cca7a8fbb8b1d7a0b026a5dc4a71bc5f2f1ddcfb", bytes: 5_332 },
+    { file: "special_tokens_map.json", sha256: "068594063e37662c02b21acf42ebb334ef6a74fb810e68a2368f88f08351de76", bytes: 1_632 },
+    { file: "tokenizer.json", sha256: "f8984687e4a92a3503d521396d454b7d68e9fdaab2a0288eb3536c7c1aa4bc20", bytes: 3_676_772 },
+    { file: "tokenizer_config.json", sha256: "466575c55f0cf49530666c2e46ed14f26237dbd227ba7f4bb3bbec93df90edfc", bytes: 4_952 },
+  ] },
+];
+export const STACK_TTS_VOXCPM2_MODELS: CatalogModelLike[] = VOXCPM2_FILES.flatMap((model) => model.files.map((part, index) => ({
+  id: index === 0 ? model.id : `${model.id}-${part.file.replace(/\.[^.]+$/, "").replace(/[._]/g, "-")}`,
+  role: "tts" as const,
+  ...(index === 0 ? { sizing: { profile: "p64", quantization: model.quantization } } : { component: `voxcpm2-${part.file.replace(/\.[^.]+$/, "").replace(/[._]/g, "-")}` }),
+  repo: model.repo,
+  license: "Apache-2.0",
+  revision: model.revision,
+  engine: VOXCPM2_ENGINE,
+  download: { url: hfUrl(`${model.repo}/resolve/${model.revision}/${part.file}`), sha256: part.sha256, approx_bytes: part.bytes, hub_file: part.file },
+})));
+export const STACK_STAGED_MODELS: CatalogModelLike[] = [STACK_FACE_REPAIR_GFPGAN, STACK_FACE_REPAIR_DETECTOR, STACK_FACE_REPAIR_PARSER, STACK_VOICE_CHANGE_CHATTERBOX, ...STACK_TTS_VOXCPM2_MODELS];
 /** Held by the coordinator on 2026-11-15 (a possible engine switch may replace them): recorded, never downloaded. */
 export const STACK_HELD_MODELS = ["LTX-2.5 IC-LoRA adapters", "CrossView-Warp adapter", "MoGe-2", "MuseTalk 1.5", "LatentSync 1.6"] as const;
 
