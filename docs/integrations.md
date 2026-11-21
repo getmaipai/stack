@@ -169,7 +169,7 @@ Each item has one fix action that Home renders as a button.
 
 | Surface | Path | What Home does with it |
 |---|---|---|
-| Roles | `GET /stack/v1/roles` | the Engines page: per role, its declaration; the derived state (`notInstalled`, `installed`, `loaded` with the reason it is not ready, `ready` with `checkedAt`, `offline` with `reason`) and `since`; the bound model with its measured or estimated footprint; `check` (what the last readiness run said: `not checked`, `passed`, `failed` with the reason, `skipped`; `stale` once a model, engine or setting changed after the run); `identity` (whether the process reports the expected model file or build); on the `chat` and `vision` rows, `reads_pictures` (true when the running process was launched with a projector, or, with nothing running, the selected model's projector is installed; a URL binding never claims it); on the `coding` row, `coding: { state, keep_warm_minutes, idle_seconds, slots, slots_busy, cannot_fit_reason }` (CODE-STACK-01 S2; `state` is `notInstalled`, `installed` = on disk and unloaded, `loading`, `ready`, `busy` or `offline`; reading it never starts the engine, and `cannot_fit_reason` is also the row's `reason` while `installed`) |
+| Roles | `GET /stack/v1/roles` | the Engines page: per role, its declaration, `enabled` and `priority` (ADMIN-04, below); the derived state (`notInstalled`, `installed`, `loaded` with the reason it is not ready, `ready` with `checkedAt`, `offline` with `reason`) and `since`; the bound model with its measured or estimated footprint; `check` (what the last readiness run said: `not checked`, `passed`, `failed` with the reason, `skipped`; `stale` once a model, engine or setting changed after the run); `identity` (whether the process reports the expected model file or build); on the `chat` and `vision` rows, `reads_pictures` (true when the running process was launched with a projector, or, with nothing running, the selected model's projector is installed; a URL binding never claims it); on the `coding` row, `coding: { state, keep_warm_minutes, idle_seconds, slots, slots_busy, cannot_fit_reason }` (CODE-STACK-01 S2; `state` is `notInstalled`, `installed` = on disk and unloaded, `loading`, `ready`, `busy` or `offline`; reading it never starts the engine, and `cannot_fit_reason` is also the row's `reason` while `installed`) |
 | Engines | `GET /stack/v1/engines`; `POST /stack/v1/engines/{name}/install` (no body: this machine's pin; `{ tag, url, sha256, size }`: stage a build beside the current one without activating it); `POST /stack/v1/engines/{name}/{start,stop,restart}`; `PUT /stack/v1/engines/{name}/current` (drain, relink, post-load check, relink back on failure); `DELETE /stack/v1/engines/{name}/builds/{tag}` (never the current one) | pinned builds and their install and version state (`current` / `notCurrent` with the reason, `needsRestart`), and `update: { newest, since } | null` (a newer upstream release than the installed build and the ISO date the Stack first noticed that tag; read from public release data at most every 12 hours while `stack.updates.enabled` is on, never downloaded); the actions behind Home's buttons |
 | Models | `GET /stack/v1/models`; `GET /stack/v1/models/catalog` (the pins this build ships); `POST /stack/v1/models` (pull by pin); `GET /stack/v1/models/{id}/file` (installed wakeword assets only, bytes rechecked against the pin); `POST /stack/v1/models/import`; `DELETE /stack/v1/models/{id}`; `POST /stack/v1/models/{id}/actions` (`load`, `unload`, `pin`, `unpin`) | the model list with provenance, install state, runtime state and measured footprint; install from the Catalog index or import a verified local file; give Home a verified wakeword asset to serve to its paired robots |
 | Jobs | `POST /stack/v1/jobs`; `GET /stack/v1/jobs/{id}`; `DELETE /stack/v1/jobs/{id}`; result by id | Home's picture, video and music packages |
@@ -310,6 +310,22 @@ promotes pending values (Home restarts the service through the service
 manager). Home never declares a Stack key of its own; the one Home-side
 setting is the Stack's port, declared once in Home's settings definition
 and filled by the installer.
+
+**Role switches (ADMIN-04).** Every role has two declared settings in the
+`roles` section ("Features"): `stack.roles.<role>.enabled` (boolean, default
+on, applies at once) and `stack.roles.<role>.priority` (integer 1 to 1000,
+lower is served first; defaults are the declaration order, ten apart). A
+role that is off is never started (`getProcess` refuses it) and never
+admitted (the governor refuses it, with the reason); its row on
+`GET /stack/v1/roles` has `enabled: false`, state `offline` with cause
+`disabled`, and `reason` and `plain_reason` say it is turned off and which
+setting turns it on. Turning a role off unloads a running engine (judge and
+router share chat's process and leave it alone). `priority` orders the
+governor's waiting queue within a class and caller rank, then arrival order.
+A `PUT /stack/v1/settings` that touches a `stack.roles.*` key writes one
+`admin.action.roles.update` log line with the time, source (`admin` or `home`),
+remote address and the changed keys. Home and the admin page read and write
+these through the same settings route.
 
 Keys as declared today, all under `stack.`: `memory.budget_percent`,
 `memory.low_water_pct`, `memory.low_water_floor_bytes`,

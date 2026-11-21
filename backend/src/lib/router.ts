@@ -2,6 +2,7 @@
 // id; the state of a role is derived from the supervisor and never
 // stored. `ready` is claimed only within READY_TTL_MS of a real request
 // through the public route (the STACK-87 promise).
+import { roleDisabledReason } from "@/lib/roleSwitches";
 import { ROLE_IDS, READY_TTL_MS, type RoleId, type RoleState, type RoleStateRecord } from "@/roles";
 import { identityHeaders } from "@/lib/identity";
 import { getModel, isModelSelectable } from "@/lib/modelStore";
@@ -61,6 +62,8 @@ function flatState(role: RoleId): RoleState {
 }
 
 export function resolveRoleState(role: RoleId): RoleStateRecord {
+  const switchedOff = roleDisabledReason(role);
+  if (switchedOff) return { state: "offline", since: new Date().toISOString(), reason: switchedOff, cause: "disabled" };
   if (homeModeSwitching() && ["chat", "judge", "router"].includes(role)) return { state: "loaded", since: new Date().toISOString(), cause: "mode_change" };
   const reduced = getReducedChatState();
   if ((reduced === "entering" || reduced === "leaving") && ["chat", "judge", "router"].includes(role)) return { state: "loaded", since: new Date().toISOString(), cause: "mode_change" };

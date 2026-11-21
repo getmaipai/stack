@@ -13938,6 +13938,14 @@
                               "music"
                             ]
                           },
+                          "enabled": {
+                            "type": "boolean",
+                            "description": "False when the role is turned off (stack.roles.<role>.enabled). A turned-off role is not started or admitted; its state is offline with the reason."
+                          },
+                          "priority": {
+                            "type": "integer",
+                            "description": "Where the role stands when work waits for memory; lower is served first (stack.roles.<role>.priority)."
+                          },
                           "state": {
                             "type": "object",
                             "properties": {
@@ -14255,6 +14263,8 @@
                           "endpoints",
                           "quality",
                           "id",
+                          "enabled",
+                          "priority",
                           "state",
                           "reason",
                           "pending_install",

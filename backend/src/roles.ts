@@ -189,6 +189,8 @@ export const RoleDefinitionSchema = z.object({
 
 export const RoleRecordSchema = RoleDefinitionSchema.extend({
   id: RoleIdSchema,
+  enabled: z.boolean().describe("False when the role is turned off (stack.roles.<role>.enabled). A turned-off role is not started or admitted; its state is offline with the reason."),
+  priority: z.number().int().describe("Where the role stands when work waits for memory; lower is served first (stack.roles.<role>.priority)."),
   state: RoleStateRecordSchema,
   reason: z.string().nullable(),
   model: z.object({ id: z.string(), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), measuredContextLength: z.number().int().nullable(), estimated: z.boolean(), imageInput: z.boolean().optional() }).nullable().optional(),

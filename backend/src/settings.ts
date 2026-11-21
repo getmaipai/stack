@@ -18,6 +18,8 @@ import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { ENGINE_BINARIES } from "@/lib/engineCatalog";
 import { partLabel } from "@/lib/partDefs";
 import { setBudgetPercent } from "@/profiles";
+import { ROLE_IDS, ROLES } from "@/roles";
+import { defaultRolePriority, ROLE_PRIORITY_MAX, ROLE_PRIORITY_MIN, setRoleSwitches } from "@/lib/roleSwitches";
 
 export type SettingValue = number | boolean | string;
 
@@ -26,6 +28,7 @@ export type SettingDeclaration = Omit<StackSetting, "in_effect" | "pending"> & {
 
 export const SETTING_SECTIONS = [
   { id: "memory", label: "Memory" },
+  { id: "roles", label: "Features" },
   { id: "updates", label: "Updates" },
   { id: "runtime", label: "Runtime" },
   { id: "engines.llama_server", label: "llama-server" },
@@ -72,7 +75,16 @@ export function gpuLayersFor(role: string, values: Record<string, SettingValue> 
   return (GPU_LAYER_ROLES as readonly string[]).includes(role) && String(values[`stack.engines.${role}.gpu_layers`]) === "0" ? 0 : "all";
 }
 
+/** ADMIN-04: every role can be turned off, and has an order (lower is served first when work waits for memory). One declaration, read by Home and the admin page. */
+function roleSwitchSettings(): SettingDeclaration[] {
+  return ROLE_IDS.flatMap((role, index): SettingDeclaration[] => [
+    { ...stack, key: `stack.roles.${role}.enabled`, selector: "boolean", default: true, label: `${ROLES[role].label} on`, help: `When off, the Stack does not start ${ROLES[role].label.toLowerCase()} and refuses its work with that reason. A running engine is stopped.`, section: { id: "roles", order: index * 10 + 10 }, level: "basic", needs_restart: false },
+    { ...stack, key: `stack.roles.${role}.priority`, selector: "number", range: { min: ROLE_PRIORITY_MIN, max: ROLE_PRIORITY_MAX }, default: defaultRolePriority(role), label: `${ROLES[role].label} priority`, help: `Where ${ROLES[role].label.toLowerCase()} stands when work waits for memory. A lower number is served first; roles of the same kind of work keep arrival order when equal.`, section: { id: "roles", order: index * 10 + 11 }, level: "advanced", needs_restart: false },
+  ]);
+}
+
 export const SETTINGS: SettingDeclaration[] = [
+  ...roleSwitchSettings(),
   { ...stack, key: "stack.storage.tidy_grace_hours", selector: "number", range: { min: 0, max: 8760 }, default: 24, label: "Storage tidy grace period", help: "How long a replacement must be ready before the Stack removes the older model.", section: { id: "storage", order: 10 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.memory.budget_percent", selector: "number", range: { min: 1, max: 100 }, default: 100, label: "Share of this computer for AI", help: "How much of this computer the Stack may use for models and jobs, as a percent. At 100 it uses everything the computer can give it; at 50 a 128 GB computer is treated like a 64 GB one. The rest stays for the rest of the computer.", section: { id: "memory", order: 10 }, level: "basic", needs_restart: false },
   { ...stack, key: "stack.memory.low_water_pct", selector: "number", range: { min: 1, max: 99 }, default: 10, label: "Low memory percentage", help: "Warn when available memory falls below this percentage.", section: { id: "memory", order: 20 }, level: "advanced", needs_restart: false },
@@ -308,6 +320,10 @@ export function applySettingsToRuntime(): void {
   setIdleTtlSeconds("coding", Number(values["stack.engines.coding.keep_warm_minutes"]) * 60);
   // Turning the coding engine's yield to chat off continues it at once if chat has it stopped (CODE-STACK-01 S3b).
   heavyGate.recheck();
+  setRoleSwitches({
+    disabled: ROLE_IDS.filter((role) => values[`stack.roles.${role}.enabled`] === false),
+    priority: Object.fromEntries(ROLE_IDS.map((role) => [role, Number(values[`stack.roles.${role}.priority`])])),
+  });
 }
 
 export function __resetSettingsForTests(): void {

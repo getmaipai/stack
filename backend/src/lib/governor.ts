@@ -1,4 +1,5 @@
 import { emit, emitGovernorWindow } from "@/lib/events";
+import { roleDisabledReason, rolePriorityOf } from "@/lib/roleSwitches";
 import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/memory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_JOB_CLASS, type JobClass } from "@/roles";
@@ -692,6 +693,8 @@ function admitFromQueue(): void {
 export async function admit(request: GovernorRequest): Promise<GovernorHandle | { queued: true; position: number; class: GovernorClass; admitted: Promise<GovernorHandle | { refused: true; reason: string }> } | { refused: true; reason: string }> {
   request = taggedRequest(request);
   if (runState !== "running") { decide("Refused", "The Stack is paused.", request.id, undefined, request.caller); return { refused: true, reason: "The Stack is paused." }; }
+  const switchedOff = roleDisabledReason(request.role ?? request.id);
+  if (switchedOff) { decide("Refused", switchedOff, request.id, undefined, request.caller); return { refused: true, reason: switchedOff }; }
   if (request.poolPeakBytes && request.poolPeakBytes > request.requestedBytes) {
     const pooledRequest: GovernorRequest = { ...request, requestedBytes: request.poolPeakBytes, measuredPeakBytes: null, dryRunPeakBytes: null, modelFileBytes: null, poolPeakBytes: undefined };
     const pooledPeak = peakFor(pooledRequest).bytes;
@@ -735,7 +738,9 @@ export async function admit(request: GovernorRequest): Promise<GovernorHandle | 
       notifyMaxWindow("draining", request.id, request);
     }
     const callerRank = (caller: AdmissionCaller | undefined) => caller === "household" || caller === undefined ? 0 : 1;
-    const insertAt = requestIsReserved ? queue.findIndex((row) => !row.settled && requestClass(row.request) !== "reserved") : queue.findIndex((row) => !row.settled && callerRank(row.request.caller) > callerRank(request.caller));
+    // ADMIN-04: inside a class (and a caller rank) the person's role priority decides the order, lower first; equal priority keeps arrival order.
+    const ahead = (row: QueuedEntry) => rolePriorityOf(row.request.role ?? row.request.id) > rolePriorityOf(request.role ?? request.id);
+    const insertAt = requestIsReserved ? queue.findIndex((row) => !row.settled && (requestClass(row.request) !== "reserved" || ahead(row))) : queue.findIndex((row) => !row.settled && (callerRank(row.request.caller) > callerRank(request.caller) || (callerRank(row.request.caller) === callerRank(request.caller) && ahead(row))));
     if (insertAt < 0) queue.push(entry); else queue.splice(insertAt, 0, entry);
     const unsettled = queue.filter((row) => !row.settled);
     if (unsettled.length > 0) {

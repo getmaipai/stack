@@ -7,6 +7,7 @@ import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, RoleRecordSchema, ROLES } from "@/roles";
 import { isComponent, listModels } from "@/lib/modelStore";
 import { activeTtsChoice, codingEngineStatus, getRoleStatus, identityCheck, pictureTokensMax, roleReadsPictures, selectableModels, selectedModel, ttsEngineInEffect } from "@/lib/supervisor";
+import { roleDisabledReason, rolePriorityOf } from "@/lib/roleSwitches";
 import { listJobs } from "@/lib/jobs";
 import { roleCheck } from "@/lib/readiness";
 import { TTS_ENGINES } from "@/speech/ttsEngines";
@@ -57,6 +58,6 @@ rolesRoutes.openapi(rolesRoute, (c) => c.json({
     const perSlot = contextLength;
     const total = perSlot === null ? null : sharedPool ? perSlot : perSlot * (slots ?? 1);
     const contextFields = { context_length: contextLength, context_per_slot: perSlot, context_total: total, slots, context_scope: status.contextScope ?? null };
-    return { id, ...ROLES[id], state, pending_install: pendingInstall(id), reason: state.reason ?? null, plain_reason: plainReasonOf(state.reason), model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, imageInput: roleReadsPictures(id, model) } : null, check: roleCheck(id), identity: identityCheck(id), ...(id === "chat" || id === "coding" ? contextFields : {}), ...(id === "chat" ? { models: selectableModels(id), picture_tokens_max: pictureTokensMax(id) } : {}), ...(id === "chat" || id === "vision" ? { reads_pictures: roleReadsPictures(id, model) } : {}), ...(id === "tts" ? { tts: ttsView() } : {}), ...(id === "coding" ? { coding: codingEngineStatus() } : {}) };
+    return { id, ...ROLES[id], enabled: roleDisabledReason(id) === null, priority: rolePriorityOf(id), state, pending_install: pendingInstall(id), reason: state.reason ?? null, plain_reason: roleDisabledReason(id) ?? plainReasonOf(state.reason), model: model ? { id: model.id, sizeBytes: model.sizeBytes, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, imageInput: roleReadsPictures(id, model) } : null, check: roleCheck(id), identity: identityCheck(id), ...(id === "chat" || id === "coding" ? contextFields : {}), ...(id === "chat" ? { models: selectableModels(id), picture_tokens_max: pictureTokensMax(id) } : {}), ...(id === "chat" || id === "vision" ? { reads_pictures: roleReadsPictures(id, model) } : {}), ...(id === "tts" ? { tts: ttsView() } : {}), ...(id === "coding" ? { coding: codingEngineStatus() } : {}) };
   }),
 }, 200));

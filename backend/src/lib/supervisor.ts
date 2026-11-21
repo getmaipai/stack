@@ -5,6 +5,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // supervisor (the generation guard, the free-port probe, the size-scaled
 // liveness wait, the post-load completion, the measured footprint, the
 // exit watch, the drain) are the same here, keyed by role.
+import { roleDisabledReason } from "@/lib/roleSwitches";
 import { noteComponentUse } from "@/lib/componentUse";
 import { existsSync } from "node:fs";
 import { CODING_GENERATION_PATHS, clampThinking, defaultThinkingOff, dropClientSampling } from "@/lib/codingWire";
@@ -2010,6 +2011,8 @@ export async function getProcess(requested: RoleId, modelId?: string): Promise<R
   const swapWaitUntil = Date.now() + 5 * 60_000;
   while (reducedSwapRunning && Date.now() < swapWaitUntil && !reducedSwapContext.getStore() && ["chat", "judge", "router"].includes(requested)) await new Promise((resolve) => setTimeout(resolve, 10));
   if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
+  const switchedOff = roleDisabledReason(requested) ?? roleDisabledReason(role);
+  if (switchedOff) throw new EngineUnavailableError(switchedOff);
   const current = runtime(role);
   if (current.manuallyStopped) throw new EngineUnavailableError(`The ${role} engine was stopped.`);
   if (yieldingJit.has(role)) throw new EngineUnavailableError(`The ${role} engine is finishing its current request so a resident engine can start.`);
