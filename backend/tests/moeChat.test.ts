@@ -67,7 +67,7 @@ test("pins are complete: revision, sha256, size and licence on the target, and e
 });
 
 test("install order: the optional part list is the target then its draft, and no tier plan or default binding carries either", () => {
-  expect(splashChatInstallModels().map((model) => model.id)).toEqual([MOE.id, DRAFT.id]);
+  expect(splashChatInstallModels([], "p64").map((model) => model.id)).toEqual([MOE.id, DRAFT.id]);
   for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw(gb)).models.map((model) => model.id)).not.toContain(MOE.id);
   expect(Object.values(PROFILE_MODEL_BINDINGS).flatMap((bound) => Object.values(bound ?? {}))).not.toContain(MOE.id);
   for (const profile of ["p64", "p128"] as const) expect(resolveLadder("chat", profile, 100 * GB).map((row) => row.resolved?.model)).not.toContain(MOE.id);
@@ -174,37 +174,37 @@ test("prepare runs once after both files verify, writes a note, is skipped while
   installPin(MOE); installPin(DRAFT); installSplashEngine();
   const prepared = join(splashModelsDir(), ".resolved", "abc");
   const calls: string[][] = [];
-  expect(await prepareSplashModel(okRunner(calls, prepared))).toBe(true);
+  expect(await prepareSplashModel(MOE.id, okRunner(calls, prepared))).toBe(true);
   expect(calls).toHaveLength(1);
   expect(calls[0]!.join(" ")).toContain("prepare_local_model");
-  expect(splashPreparedCurrent()).toBe(true);
-  await prepareSplashModel(okRunner(calls, prepared));
+  expect(splashPreparedCurrent(MOE.id)).toBe(true);
+  await prepareSplashModel(MOE.id, okRunner(calls, prepared));
   expect(calls).toHaveLength(1);
-  const note = JSON.parse(readFileSync(splashPreparedNotePath(), "utf8"));
-  writeFileSync(splashPreparedNotePath(), JSON.stringify({ ...note, draft: "older-revision:00" }));
-  expect(splashPreparedCurrent()).toBe(false);
-  await prepareSplashModel(okRunner(calls, prepared));
+  const note = JSON.parse(readFileSync(splashPreparedNotePath(MOE.id), "utf8"));
+  writeFileSync(splashPreparedNotePath(MOE.id), JSON.stringify({ ...note, draft: "older-revision:00" }));
+  expect(splashPreparedCurrent(MOE.id)).toBe(false);
+  await prepareSplashModel(MOE.id, okRunner(calls, prepared));
   expect(calls).toHaveLength(2);
 });
 
 test("prepare refuses, in plain words, an unverified draft and a Splash failure, and waits for a missing engine", async () => {
   installPin(MOE);
-  await expect(prepareSplashModel(okRunner([], "/x"))).rejects.toThrow(/DFlash2 draft/);
+  await expect(prepareSplashModel(MOE.id, okRunner([], "/x"))).rejects.toThrow(/DFlash2 draft/);
   installPin(DRAFT);
-  expect(await prepareSplashModel(okRunner([], "/x"))).toBe(false);
+  expect(await prepareSplashModel(MOE.id, okRunner([], "/x"))).toBe(false);
   installSplashEngine();
-  await expect(prepareSplashModel(async () => ({ code: 1, out: "", err: "cannot prepare: bad draft" }))).rejects.toThrow(/could not prepare the chat model: cannot prepare: bad draft/);
-  expect(existsSync(splashPreparedNotePath())).toBe(false);
+  await expect(prepareSplashModel(MOE.id, async () => ({ code: 1, out: "", err: "cannot prepare: bad draft" }))).rejects.toThrow(/could not prepare the chat model: cannot prepare: bad draft/);
+  expect(existsSync(splashPreparedNotePath(MOE.id))).toBe(false);
 });
 
 test("removal cleans the prepared folder and the note", async () => {
   installPin(MOE); installPin(DRAFT); installSplashEngine();
   const prepared = join(splashModelsDir(), ".resolved", "abc");
-  await prepareSplashModel(okRunner([], prepared));
+  await prepareSplashModel(MOE.id, okRunner([], prepared));
   expect(existsSync(prepared)).toBe(true);
   removeModel(MOE.id);
   expect(existsSync(prepared)).toBe(false);
-  expect(existsSync(splashPreparedNotePath())).toBe(false);
+  expect(existsSync(splashPreparedNotePath(MOE.id))).toBe(false);
 });
 
 test("governor budget: the tier peak is the measured 23 GB, and the launch budget covers the 21 to 23 GB footprint at 32k context", () => {

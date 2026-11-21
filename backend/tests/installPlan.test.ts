@@ -148,7 +148,7 @@ test("plan: the coding model adds its size to the totals and a pull body for it 
 });
 test("plan: the optional 35B and its draft are offered as removable parts and never join a tier's plan", () => {
   for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.map((model) => model.id)).not.toContain("qwen3-6-35b-a3b-huihui-abliterated-q4-k-m");
-  const optional = splashChatInstallModels();
+  const optional = splashChatInstallModels([], "p64");
   expect(optional.map((model) => model.id)).toEqual(["qwen3-6-35b-a3b-huihui-abliterated-q4-k-m", "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft"]);
   expect(optional[0]).toMatchObject({ removable: true, approx_bytes: 21_166_758_784, engine: "splash" });
   expect(optional[1]).toMatchObject({ removable: true, component: "draft", engine: "splash", approx_bytes: 1_052_513_456 });

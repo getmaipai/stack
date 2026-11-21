@@ -36,6 +36,15 @@ Restart the chat engine after changing either setting. If Splash is unsupported,
 
 The launch passes `--model <repo> --model-dir <gguf> --draft-model <draft folder>` and the same flags as the dense chat launch (`--offline`, `--served-model-name`, `--thinking-token-budget`, `--max-context`, `--max-memory`, `--idle-release off`, `--max-cache-disk 0`).
 
+## Flash Next 177B (the Max chat model)
+
+`qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs` (Huihui Qwen3.8 Flash Next abliterated v2, UD-IQ4_XS, Qwen community licence) with its draft `qwen3-8-flash-next-177b-dflash2-draft` (Apache-2.0). It uses the same path as the 35B, from one list (`SPLASH_LOCAL_CHAT_MODELS` in `modelCatalog.ts`): optional disk row `chat-splash-qwen38-flash-next` on p128 only (about 94.9 GB), selection by `stack.engines.chat.model`, prepare step, launch with `--model-dir` and `--draft-model`.
+
+- **Split GGUF.** The weights are three parts (93.68 GB together). They are one directory model: the existing `download.files` list pins each part by size and sha256, the first part is the pin's file, and the parts land in one folder. Splash is given the first part and reads the others beside it. No new download code.
+- **Memory.** Measured on a 128 GB M5 Max with Splash 1.7.0: 70 GB loaded at a 32K window, 74 GB after long code replies, 81 tokens per second, first token 1.13 s on a 6,400-token prompt. Splash keeps about 27 GB of the weights on the SSD, so the estimate counts only the rest (`ssdBytes` in the list). The pin fixes the window at 32,768 (`launch.contextLength`); the launch budget is the estimate plus the headroom setting.
+- **Tier.** A Max chat candidate on p128 (peak 75 GB, measured), listed after Ornith so it is never the recommendation, and excluded from the automatic ladder. It runs alone: Max drains the other loads first. Home chooses it by sending its id.
+- **Adopting files already on the disk.** Before the install job runs, put (hardlink or move) each part at `<data dir>/models/<model id>/Qwen3.8-Flash-Next-UD-IQ4_XS/unsloth-UD-IQ4_XS/<part name>` and the draft's `config.json` and `model.safetensors` at `<data dir>/models/<draft id>/Qwen3.8-Flash-Next-DFlash2/`. The install hashes each file, fetches only what is missing or wrong, and nothing is downloaded when all match.
+
 ## Not verified without a live install
 
 The pins, optional plan rows, selection by setting, launch arguments, prepare step (against a fake Splash and once against the real files in a scratch folder) and removal are tested. A real first start of the launcher with `--model-dir`, the first-token numbers on this build, and the fallback when macOS is older than Splash needs have not been run on a live Stack.

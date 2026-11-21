@@ -32,9 +32,9 @@ import { newLaunchKey, omlxCommand, omlxEnv, omlxInstalled, omlxSupportedHere, O
 import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
-import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashChatMemoryPlan, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
-import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor } from "@/lib/splashStore";
+import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor, splashResidentWeightsBytes } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
 import { registerOwned, type OwnedHandle } from "@/lib/ownedProcesses";
 import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkCheckpoint, probeGenerator } from "@/generators/comfyui";
@@ -619,8 +619,9 @@ function omlxModelInstalled(): boolean {
 function chatEngineInstalled(id: ChatEngineId): boolean {
   return id === "omlx" ? omlxInstalled() && omlxModelInstalled() : id === "splash" ? chatSplashEngineInstalled() && splashModelPairInstalled() : engineInstalled(id);
 }
-const MOE_CHAT_ID = STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.id;
-const SPLASH_CHAT_IDS: string[] = [STACK_CHAT_QWEN38_UNCENSORED_MODEL.id, MOE_CHAT_ID];
+/** The optional chat models only Splash runs (a pinned GGUF plus its draft); each is chosen by hand and never recommended by a tier. */
+const SPLASH_ONLY_CHAT_IDS: string[] = SPLASH_LOCAL_CHAT_MODELS.map((entry) => entry.pin.id);
+const SPLASH_CHAT_IDS: string[] = [STACK_CHAT_QWEN38_UNCENSORED_MODEL.id, ...SPLASH_ONLY_CHAT_IDS];
 function splashPairReady(id: string): boolean {
   const pair = splashPairFor(id);
   return [pair.pin, pair.draftPin].every((pin) => {
@@ -645,12 +646,12 @@ function chatEngineAvailableForChoice(id: ChatEngineId): boolean {
  * this run (ENGINE-MLX-01). */
 export function activeChatChoice(): ChatEngineChoice {
   const setting = settingValues()[CHAT_ENGINE_SETTING];
-  // Home's "load this model" (preferModel) comes before the stored setting is written, so the 35B must pick Splash on the preference too.
+  // Home's "load this model" (preferModel) comes before the stored setting is written, so a Splash-only model must pick Splash on the preference too.
   const stored = preferredModels.get("chat") ?? String(settingValues()["stack.engines.chat.model"] ?? "");
-  // `auto` picks Splash only when the stored chat model is the 35B, which only Splash can run; every other choice keeps its engine.
+  // `auto` picks Splash only when the stored chat model is one only Splash can run (the 35B, Flash Next); every other choice keeps its engine.
   const auto = setting === undefined || setting === "auto" || setting === "";
   return resolveChatEngine({
-    setting: auto && stored === MOE_CHAT_ID ? "splash" : setting,
+    setting: auto && SPLASH_ONLY_CHAT_IDS.includes(stored) ? "splash" : setting,
     tier: machineTier,
     installed: (id) => id === "splash" ? chatEngineInstalled("splash") : chatEngineAvailableForChoice(id),
     unsupported: (id) => id === "omlx" ? omlxSupportedHere().reason : id === "splash" ? splashChatUnsupportedReason() : null,
@@ -914,8 +915,8 @@ export function projectorFor(model: ModelRecord): ModelRecord | null {
  * input. */
 function servesRole(model: ModelRecord, role: RoleId, engine: string | null): boolean {
   const selectedChatSplash = role === "chat" && SPLASH_CHAT_IDS.includes(model.id) && engineForRole(role) === "splash" && model.id === splashChatModelId();
-  // The optional 35B is a Splash-only chat model that `recordEngineFor` (which maps Splash to llama-server records) would hide: it is listed and loadable once it and its draft are installed, so Home's chooser can pick it. Never bound or recommended by a tier.
-  const optionalSplashChat = role === "chat" && model.id === MOE_CHAT_ID && splashPairReady(MOE_CHAT_ID);
+  // The optional Splash-only chat models (the 35B, Flash Next) are ones `recordEngineFor` (which maps Splash to llama-server records) would hide: each is listed and loadable once it and its draft are installed, so Home's chooser can pick it. Never bound or recommended by a Standard or Boost tier.
+  const optionalSplashChat = role === "chat" && SPLASH_ONLY_CHAT_IDS.includes(model.id) && splashPairReady(model.id);
   return model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (selectedChatSplash || optionalSplashChat || !engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine) && (role !== "vision" || declaresImageInput(model));
 }
 
@@ -1539,7 +1540,7 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   const governor = getGovernorStatus();
   const stayingBytes = modeCoding ? governor.loaded.filter((item) => !["chat", "judge", "coding"].includes(item.id)).reduce((sum, item) => sum + item.peakBytes, 0) : 0;
   const draftRecord = getModel(pair.draftPin.id);
-  const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: draftRecord?.sizeBytes ?? pair.draftPin.download!.approx_bytes, contextTokens: contextLength });
+  const estimate = splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(model.id, model.sizeBytes ?? 0), draftBytes: draftRecord?.sizeBytes ?? pair.draftPin.download!.approx_bytes, contextTokens: contextLength });
   const chatRole = pinName === "splash-chat";
   // Owner ruling 2026-11-04 lifts resource-management R1 for chat only: Splash gets a full-context Metal cap, and the watchdog may restart this process at its ceiling.
   // SPLASH-MEM-01: that cap is the model's need plus the headroom setting and nothing more (`splashChatMemoryPlan`); Splash fills
@@ -1681,8 +1682,8 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const onChatSplash = role === "chat" && engineForRole(role) === "splash";
   const onSplash = (coding !== null && engineForRole(role) === "splash") || onChatSplash;
   const splashPair = onSplash ? splashPairFor(model.id) : null;
-  const splashContext = onChatSplash ? Math.max(32_768, Math.floor(Number(settingValues()["stack.engines.chat.context_length"] ?? model.measuredContextLength ?? 131_072))) : coding?.contextLength ?? 0;
-  const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: getModel(splashPair!.draftPin.id)?.sizeBytes ?? splashPair!.draftPin.download!.approx_bytes, contextTokens: splashContext }) : null;
+  const splashContext = onChatSplash ? declaredLaunchContext(model) ?? Math.max(32_768, Math.floor(Number(settingValues()["stack.engines.chat.context_length"] ?? model.measuredContextLength ?? 131_072))) : coding?.contextLength ?? 0;
+  const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(model.id, model.sizeBytes ?? 0), draftBytes: getModel(splashPair!.draftPin.id)?.sizeBytes ?? splashPair!.draftPin.download!.approx_bytes, contextTokens: splashContext }) : null;
   const codingWindow = coding ? (onSplash ? { contextLength: coding.contextLength, dryRunPeakBytes: splashEstimate } : await codingContextFor(model, coding.contextLength)) : null;
   const ownContext = coding ? codingWindow!.contextLength : declaredLaunchContext(model);
   const declaredContextLength = ownContext ?? (onChatSplash ? settingValues()["stack.engines.chat.context_length"] as number : launchConfig.context_length);

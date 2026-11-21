@@ -24,7 +24,7 @@
     "p64.ai_required_free_bytes": 191231792656,
     "p128.required_free_bytes": 197949623094,
     "p128.minimum_required_free_bytes": 37187187977,
-    "p128.everything_required_free_bytes": 663328827469,
+    "p128.everything_required_free_bytes": 777195296547,
     "p128.needed_bytes": 166083740632,
     "p128.home_required_free_bytes": 3176323277,
     "p128.ai_required_free_bytes": 194773299817
@@ -1999,6 +1999,24 @@
           "basis": "pins"
         },
         {
+          "id": "chat-splash-qwen38-flash-next",
+          "label": "Qwen3.8 Flash Next 177B (Huihui)",
+          "note": "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.",
+          "kind": "model",
+          "need": "optional",
+          "selectable": true,
+          "download_bytes": 94888724232,
+          "installed_bytes": 94888724232,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs",
+            "qwen3-8-flash-next-177b-dflash2-draft"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins"
+        },
+        {
           "id": "vision",
           "label": "Qwen3-VL 4B",
           "note": "Describes pictures for the parts of Home that need to look at one.",
@@ -3125,11 +3143,11 @@
         "required_free_bytes": 37187187977
       },
       "everything": {
-        "download_bytes": 532687937444,
-        "installed_bytes": 541282722392,
+        "download_bytes": 627576661676,
+        "installed_bytes": 636171446624,
         "peak_temp_bytes": 13789560598,
-        "needed_bytes": 555072282990,
-        "required_free_bytes": 663328827469
+        "needed_bytes": 649961007222,
+        "required_free_bytes": 777195296547
       },
       "measured_on": "2026-10-17",
       "default_selected": [
