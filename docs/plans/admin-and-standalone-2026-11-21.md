@@ -160,6 +160,65 @@ so it works when the `chat` role is down, which is exactly when you need it.
   (about 2.5 GB)" with one button; the standalone installer offers it as an
   optional step.
 
+## Profiles: matched, custom recommended, custom (owner, 2026-11-21)
+
+Today the Stack picks the highest fixed tier (`p16`, `p32`, `p64`, `p128`
+in `backend/src/profiles.ts`) whose memory floor the machine clears. A 48 GB
+Mac mini lands on `p32` and wastes a third of its memory. The admin page
+and Home's setup wizard both offer three ways to choose, from one Stack
+route, so there is one definition:
+
+1. **Matched.** A shipped template (tier) that fits well. A tier counts as
+   a good match when it is the highest tier the machine clears and the
+   machine is within 25 percent above that tier's floor (24 GB matches
+   `p16`, 32 to 40 GB match `p32`, 48 GB matches nothing well).
+   Shown as "Matches the 32 GB setup".
+2. **Custom recommended.** Computed for this exact machine by a
+   deterministic planner, not a template. It takes the measured memory
+   budget (sizing memory minus the OS reserve and the governor margin),
+   the role priority order, and each pinned model's measured footprint
+   (pinned estimate, flagged "estimated", when never measured here), then:
+   fills resident roles by priority, upgrades models (for example a larger
+   chat model, a separate judge) while they fit with headroom, and keeps
+   the largest on-demand generator slot that still fits. Output has the
+   same shape as a tier plus model bindings and a plain-words "why"
+   ("Chat uses the 14B model because 11 GB are spare"). Same inputs always
+   give the same plan; golden tests at 16, 24, 32, 48, 64, 96 and 128 GB.
+3. **Custom.** The person chooses roles, models and priority by hand on
+   the Features and Models screens; a live budget bar says what fits, what
+   will queue, and what will be refused, using the same fit check.
+
+The wizard and the admin page show Matched when it is good, and always
+show Custom recommended beside it when it differs ("Recommended for your
+48 GB Mac mini"), with a Customize button into mode 3. A saved choice
+records its mode (`matched`, `custom_recommended`, `custom`) and, for the
+first two, re-plans when the memory changes (new RAM, a changed budget)
+and asks before switching.
+
+Stack routes (additive, Zod, OpenAPI): `GET /stack/v1/profiles/recommend`
+returns `{ memory, matched: {tier, quality, reason} | null,
+custom_recommended: {plan, why[]}, templates[] }`;
+`POST /stack/v1/profiles/apply {mode, plan?}` validates through the fit
+check and installs what is missing as normal pull jobs.
+`GET /stack/v1/install-plan` keeps working unchanged for Home today.
+
+**Home today (read-only audit, 2026-11-21).** Home's wizard reads the plan
+from Home's own backend (`/api/setup/plan`, client `setupPlan` in
+`frontend/src/lib/api.ts`, screen `frontend/src/apps/setup/PlanStep.tsx`,
+choices in `planChoices.ts`), stores `{option: "recommended", tier}`
+(`backend/src/lib/installActions.ts`), and trusts the Stack's tier; it does
+not score hardware itself, which is right. It has no whole-setup
+"customize" choice, only per-job picks. So Home needs the three-way choice
+too.
+
+**Validate that Home works this way.** A read-only audit of Home's setup
+wizard first (which routes it calls, whether it picks a profile itself or
+trusts the Stack, how "customize" works today). Then a Home change, landed
+spec first in this repo's contract, to call `profiles/recommend` and
+`profiles/apply` and never choose a tier itself, plus a contract test on
+each side that pins the wire shape, so the two can't drift. Home work goes
+to Home's own worktree and lane.
+
 ## New backend pieces
 
 - Admin auth routes (setup, login, logout, change password).
@@ -200,6 +259,10 @@ so it works when the `chat` role is down, which is exactly when you need it.
 2. Admin account, sessions, listener binding, tests.
 3. Restart, logs and reboot routes, tests.
 4. Role enable and priority settings, tests.
+4b. Profile planner (`lib/profilePlanner.ts`), `profiles/recommend` and
+    `profiles/apply`, golden tests, then the Home audit and Home change.
+    Planner and routes go to the API worker; the Home audit is a read-only
+    scan (Haiku).
 5. Design note and clickable mockup, judged against the design bar.
 5b. Page shell (on `@maipai/ui`, `⌘K`, top bar) with Overview, Health, Engines.
 6. Resource history ring and the Resources screen.
