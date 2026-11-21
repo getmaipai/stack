@@ -30,6 +30,8 @@ export interface TierCandidate {
   tiers: TierId[];
   /** Measured but not on any tier: waiting on MODEL-VET-01. Never resolved, never offered as a pick. */
   vetting?: string;
+  /** The voice engine id the Stack runs for this model (`stack.voice.engine`); only voice rows carry it. A pick of the row sets that setting (VOICE-VOXCPM2-01). */
+  engine?: string;
 }
 
 // Peaks marked "measured" come from docs/design/tier-evaluations-2026-10-30.md in getmaipai/home (Mac Studio, Apple M5 Max, 128 GB). Max video is LTX-2.5 Video Max on p128 (LTX25-MAX-01); Max music has no candidate on purpose: a Max slot is catalogued only with a measured, heard gain over the slot below.
@@ -61,12 +63,12 @@ export const TIER_CANDIDATES: TierCandidate[] = [
   { id: STACK_VIDEO_H3_MODEL_ID, category: "video", family: H3_FAMILY, profiles: ["p128"], peaks: [{ options: { size: "864x480", seconds: 5 }, peakBytes: 34_000_000_000, status: "measured", note: "Studio bakeoff 2026-11-15, 4-bit weights, 864x480, 5 s with sound, 34 GB footprint." }], tiers: ["standard"] },
   { id: STACK_VIDEO_LTX25_MAX_MODEL_ID, category: "video", family: "ltx", profiles: ["p128"], peaks: [{ options: { input: "words" }, peakBytes: 51_000_000_000, status: "measured", note: "LTX25 Max words peak from video/ltx25.ts." }, { options: { input: "picture" }, peakBytes: 61_500_000_000, status: "measured", note: "LTX25 Max picture peak from video/ltx25.ts." }, { options: { input: "words", size: "1920x1088", seconds: 5 }, peakBytes: 77_700_000_000, status: "unverified", note: "1920x1088 proof-of-concept footprint, not yet re-measured by the Stack." }], tiers: ["max"] },
   { id: STACK_MUSIC_MODEL_ID, category: "music", family: "ace-step", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 16_400_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
-  { id: "chatterbox-turbo-fp16", category: "voice", family: "chatterbox", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_580_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
+  { id: "chatterbox-turbo-fp16", category: "voice", family: "chatterbox", engine: "chatterbox-turbo", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 4_580_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak." }], tiers: ["standard"] },
   { id: "chatterbox-nano", category: "voice", family: "chatterbox", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 2_770_000_000, status: "measured", note: "Tier eval 2026-10-30, MLX peak with cloning; needs a pinned mlx-audio or a config-reading patch before it ships." }], tiers: ["reduced"] },
-  { id: "pocket-tts-english", category: "voice", family: "pocket", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_600_000_000, status: "measured", note: "Tier eval 2026-10-30, whole process peak." }], tiers: ["reduced", "standard"] },
+  { id: "pocket-tts-english", category: "voice", family: "pocket", engine: "pocket", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_600_000_000, status: "measured", note: "Tier eval 2026-10-30, whole process peak." }], tiers: ["reduced", "standard"] },
   // VOICE-VOXCPM2-01: listed after Chatterbox and Pocket so it is never the recommended pick; an admin chooses it by name. Peaks from the scratch-Stack run, 2026-11-21 (resident memory, built-in voice).
-  { id: "voxcpm2-bf16", category: "voice", family: "voxcpm2", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 5_100_000_000, status: "measured", note: "Scratch Stack 2026-11-21, resident memory 5.1 GB; first sound 142 to 284 ms." }], tiers: ["standard"] },
-  { id: "voxcpm2-4bit", category: "voice", family: "voxcpm2", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 2_500_000_000, status: "measured", note: "Scratch Stack 2026-11-21, resident memory 2.5 GB; first sound 90 to 236 ms." }], tiers: ["standard"] },
+  { id: "voxcpm2-bf16", category: "voice", family: "voxcpm2", engine: "voxcpm2", profiles: ["p64", "p128"], peaks: [{ options: {}, peakBytes: 5_100_000_000, status: "measured", note: "Scratch Stack 2026-11-21, resident memory 5.1 GB; first sound 142 to 284 ms." }], tiers: ["standard"] },
+  { id: "voxcpm2-4bit", category: "voice", family: "voxcpm2", engine: "voxcpm2-reduced", profiles: ["p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 2_500_000_000, status: "measured", note: "Scratch Stack 2026-11-21, resident memory 2.5 GB; first sound 90 to 236 ms." }], tiers: ["standard"] },
   { id: "htdemucs", category: "stems", family: "demucs", profiles: ["p16", "p32", "p64", "p128"], peaks: [{ options: {}, peakBytes: 1_210_000_000, status: "measured", note: "Tier eval 2026-10-30, 40 s song in 2 to 5 s. Boost htdemucs_ft stays out until a listen finds it cleaner." }], tiers: ["standard"] },
 ];
 

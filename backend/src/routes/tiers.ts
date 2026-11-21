@@ -7,7 +7,9 @@ import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
 import { proposeProfile } from "@/profiles";
 import { reducedRoomBytes, tierRoomBytes } from "@/lib/governor";
-import { tierCandidateLists, type TierCategory } from "@/lib/tiers";
+import { tierCandidateLists, TIER_CANDIDATES, type TierCategory } from "@/lib/tiers";
+import { updateSettings } from "@/settings";
+import { TTS_ENGINE_SETTING } from "@/speech/ttsEngines";
 import { controlReducedChat } from "@/lib/reducedChatLease";
 
 const Candidate = z.object({
@@ -51,4 +53,25 @@ const reducedRoute = createRoute({
 tiersRoutes.openapi(reducedRoute, async (c) => {
   const result = await controlReducedChat(c.req.valid("json").on);
   return c.json(result.body, result.status) as never;
+});
+
+// VOICE-VOXCPM2-01 / stack-owns-model-choices: the Stack applies a model pick itself. A voice pick sets the voice engine the row names, so a model
+// listed above and chosen in Home's picker is the model that speaks after the voice engine restarts; a category whose rows name no engine stores nothing yet.
+const choiceRoute = createRoute({
+  method: "put", path: "/choice", tags: ["Tiers"], summary: "Pick a model for a level; the Stack applies it (stack-owns-model-choices)",
+  description: "Validates that the model is a candidate of the category, then applies what the pick means to the Stack. For voice, the engine the candidate names is saved in `stack.voice.engine` and starts at the next voice engine restart. `applied` is false when the candidate names no engine to apply.",
+  request: { body: { required: true, content: { "application/json": { schema: z.object({ category: z.enum(["chat", "pictures", "video", "music", "voice", "stems"]), tier: z.enum(["reduced", "standard", "boost", "max"]), model: z.string().min(1) }) } } } },
+  responses: {
+    200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), applied: z.boolean(), pending_restart: z.boolean() }) } }, description: "The pick is valid; `applied` says whether the Stack changed a setting for it." },
+    404: { content: { "application/json": { schema: z.object({ error: z.string(), code: z.string() }) } }, description: "No such candidate in that category." },
+  },
+});
+tiersRoutes.openapi(choiceRoute, async (c) => {
+  const { category, tier, model } = c.req.valid("json");
+  const candidate = TIER_CANDIDATES.find((item) => item.category === category && item.id === model);
+  if (!candidate) return c.json({ error: `${model} is not a model this Stack offers for ${category}. Pick one from the list.`, code: "unknown_candidate" }, 404);
+  // Only the Standard voice pick selects the speaking engine; Reduced is the memory fallback and Boost and Max do not exist for voice.
+  if (category !== "voice" || tier !== "standard" || !candidate.engine) return c.json({ ok: true as const, applied: false, pending_restart: false }, 200);
+  const setting = updateSettings({ [TTS_ENGINE_SETTING]: candidate.engine }).find((item) => item.key === TTS_ENGINE_SETTING);
+  return c.json({ ok: true as const, applied: true, pending_restart: setting?.pending !== null && setting?.pending !== undefined }, 200);
 });
