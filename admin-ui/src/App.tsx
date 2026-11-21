@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, ToggleRight, Boxes, SlidersHorizontal, CircleArrowUp, Wrench } from "lucide-react";
+import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, ToggleRight, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles } from "lucide-react";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Status, StatusIndicator } from "@maipai/ui/src/ui/status";
 import { Toaster } from "@maipai/ui/src/ui/sonner";
@@ -16,9 +16,10 @@ import { Models } from "./Models";
 import { SettingsScreen } from "./SettingsScreen";
 import { Updates } from "./Updates";
 import { Tools } from "./Tools";
+import { Helper } from "./Helper";
 import { Engines, Health, Overview, healthKind, healthWord } from "./screens";
 
-type Screen = "overview" | "features" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools";
+type Screen = "overview" | "features" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper";
 const NAV: { id: Screen; label: string; Icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Overview", Icon: LayoutDashboard },
   { id: "features", label: "Features", Icon: ToggleRight },
@@ -28,6 +29,7 @@ const NAV: { id: Screen; label: string; Icon: typeof LayoutDashboard }[] = [
   { id: "health", label: "Health", Icon: HeartPulse },
   { id: "updates", label: "Updates", Icon: CircleArrowUp },
   { id: "settings", label: "Settings", Icon: SlidersHorizontal },
+  { id: "helper", label: "Helper", Icon: Sparkles },
   { id: "tools", label: "Tools", Icon: Wrench },
 ];
 
@@ -109,6 +111,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
           {screen === "models" && <Models snap={snap} refresh={refresh} notify={notify} />}
           {screen === "updates" && <Updates refresh={refresh} notify={notify} />}
           {screen === "settings" && <SettingsScreen refresh={refresh} notify={notify} />}
+          {screen === "helper" && <Helper notify={notify} />}
           {screen === "tools" && <Tools roleLabels={roleLabels} notify={notify} />}
         </main>
       </div>

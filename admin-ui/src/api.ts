@@ -77,6 +77,15 @@ export interface Updates {
   checksEnabled: boolean; engines: UpdateEngine[];
   models: { lastChecked: string; entries: { id: string; installed: string; available: string }[] };
 }
+export interface HelperStatus {
+  installed: boolean; state: string; reason: string | null; keep_warm_minutes: number;
+  model: { id: string; repo: string; revision: string; licence: string; approx_bytes: number; url: string; sha256: string; engine: string; role: string };
+  tools: { name: string; kind: "read" | "write"; description: string }[];
+}
+export interface HelperMessage { role: "user" | "assistant"; content: string; at: string; tools?: string[] }
+export interface HelperPending { id: string; tool: string; args: Record<string, unknown>; summary: string; at: string }
+export interface HelperReply { reply: string; pending: HelperPending[]; tools: string[]; wake_ms: number }
+
 export interface CheckResult {
   at: string; ok: boolean; results: { role: string; ok: boolean; ms: number; reason?: string; skipped?: boolean }[];
   fitTogether?: { ok: boolean; reason?: string }; reason?: string;
@@ -135,6 +144,13 @@ export const api = {
   rollbackEngine: (name: string, tag: string) => call<{ ok: true; tag: string }>("POST", `/stack/v1/updates/engines/${encodeURIComponent(name)}/rollback`, { tag }),
   readiness: () => call<CheckResult>("POST", "/stack/v1/check", {}),
   latestReadiness: () => call<{ latest: (CheckResult & { stale?: boolean; staleReason?: string }) | null; running: { startedAt: string } | null }>("GET", "/stack/v1/check/latest"),
+  helperStatus: () => call<HelperStatus>("GET", "/stack/v1/helper/status"),
+  helperHistory: () => call<{ messages: HelperMessage[]; pending: HelperPending[] }>("GET", "/stack/v1/helper/history"),
+  helperChat: (message: string) => call<HelperReply>("POST", "/stack/v1/helper/chat", { message }),
+  helperClear: () => call<{ ok: true }>("DELETE", "/stack/v1/helper/history"),
+  helperApprove: (id: string) => call<{ ok: true; summary: string }>("POST", `/stack/v1/helper/approvals/${encodeURIComponent(id)}/approve`, {}),
+  helperDeny: (id: string) => call<{ ok: true }>("POST", `/stack/v1/helper/approvals/${encodeURIComponent(id)}/deny`, {}),
+  installHelperModel: (m: HelperStatus["model"]) => call<unknown>("POST", "/stack/v1/models", { id: m.id, role: m.role, repo: m.repo, url: m.url, sha256: m.sha256, approx_bytes: m.approx_bytes, licence: m.licence, revision: m.revision, engine: m.engine }),
   rebootHost: () => call<{ ok: true }>("POST", "/stack/v1/host/reboot", {}),
   restartStack: () => call<{ ok: true }>("POST", "/stack/v1/service/restart"),
 };

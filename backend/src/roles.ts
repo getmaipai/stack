@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const ROLE_IDS = [
   "chat", "coding", "judge", "router", "embed", "rerank", "vision",
-  "stt", "tts", "wakeword", "image", "video", "music",
+  "stt", "tts", "wakeword", "image", "video", "music", "helper",
 ] as const;
 export type RoleId = typeof ROLE_IDS[number];
 
@@ -164,6 +164,18 @@ export const ROLES = {
     endpoints: ["/v1/audio/music"],
     quality: ["fast", "everyday", "best"],
   },
+  // HELPER-01: the admin page's chat assistant. Its own small model and its
+  // own process (never chat's), loaded on the first message and unloaded
+  // after `stack.engines.helper.keep_warm_minutes` idle; not on /v1 and not
+  // reachable by Home. It works while `chat` is down.
+  helper: {
+    label: "Helper",
+    wire: "chat",
+    residency: "jit",
+    memoryClass: "warm",
+    endpoints: [],
+    quality: [],
+  },
 } satisfies Record<RoleId, RoleDefinition>;
 
 /** DEV-CHECKOUT-01 (2026-11-12): every Stack job has one of three classes, defined here and nowhere else.
@@ -174,7 +186,7 @@ export const ROLES = {
 export type JobClass = "essential" | "interactive" | "heavy";
 export const ROLE_JOB_CLASS: Record<RoleId, JobClass> = {
   chat: "essential", judge: "essential", router: "essential", embed: "essential", rerank: "essential", vision: "essential",
-  stt: "essential", tts: "essential", wakeword: "essential", coding: "interactive", image: "interactive", video: "heavy", music: "heavy",
+  stt: "essential", tts: "essential", wakeword: "essential", coding: "interactive", image: "interactive", video: "heavy", music: "heavy", helper: "essential",
 };
 
 export const RoleDefinitionSchema = z.object({

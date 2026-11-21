@@ -13922,7 +13922,8 @@
                               "wakeword",
                               "image",
                               "video",
-                              "music"
+                              "music",
+                              "helper"
                             ]
                           },
                           "id": {
@@ -13940,7 +13941,8 @@
                               "wakeword",
                               "image",
                               "video",
-                              "music"
+                              "music",
+                              "helper"
                             ]
                           },
                           "enabled": {
@@ -15222,7 +15224,8 @@
                       "wakeword",
                       "image",
                       "video",
-                      "music"
+                      "music",
+                      "helper"
                     ]
                   },
                   "repo": {
@@ -15452,7 +15455,8 @@
                         "wakeword",
                         "image",
                         "video",
-                        "music"
+                        "music",
+                        "helper"
                       ]
                     },
                     "minItems": 1
@@ -20567,7 +20571,8 @@
                       "wakeword",
                       "image",
                       "video",
-                      "music"
+                      "music",
+                      "helper"
                     ]
                   },
                   "input": {
@@ -22791,7 +22796,8 @@
                               "wakeword",
                               "image",
                               "video",
-                              "music"
+                              "music",
+                              "helper"
                             ]
                           }
                         },
@@ -22812,7 +22818,8 @@
                               "wakeword",
                               "image",
                               "video",
-                              "music"
+                              "music",
+                              "helper"
                             ]
                           }
                         },
@@ -22833,7 +22840,8 @@
                               "wakeword",
                               "image",
                               "video",
-                              "music"
+                              "music",
+                              "helper"
                             ]
                           }
                         },
@@ -22854,7 +22862,8 @@
                               "wakeword",
                               "image",
                               "video",
-                              "music"
+                              "music",
+                              "helper"
                             ]
                           }
                         },
@@ -22938,7 +22947,8 @@
                                 "wakeword",
                                 "image",
                                 "video",
-                                "music"
+                                "music",
+                                "helper"
                               ]
                             }
                           },
@@ -22959,7 +22969,8 @@
                                 "wakeword",
                                 "image",
                                 "video",
-                                "music"
+                                "music",
+                                "helper"
                               ]
                             }
                           },
@@ -22980,7 +22991,8 @@
                                 "wakeword",
                                 "image",
                                 "video",
-                                "music"
+                                "music",
+                                "helper"
                               ]
                             }
                           },
@@ -23001,7 +23013,8 @@
                                 "wakeword",
                                 "image",
                                 "video",
-                                "music"
+                                "music",
+                                "helper"
                               ]
                             }
                           },
@@ -23656,7 +23669,8 @@
                             "wakeword",
                             "image",
                             "video",
-                            "music"
+                            "music",
+                            "helper"
                           ]
                         },
                         "enabled": {
@@ -23816,7 +23830,8 @@
                                       "wakeword",
                                       "image",
                                       "video",
-                                      "music"
+                                      "music",
+                                      "helper"
                                     ]
                                   },
                                   "enabled": {
@@ -23961,7 +23976,8 @@
                                 "wakeword",
                                 "image",
                                 "video",
-                                "music"
+                                "music",
+                                "helper"
                               ]
                             }
                           },
@@ -23982,7 +23998,8 @@
                                 "wakeword",
                                 "image",
                                 "video",
-                                "music"
+                                "music",
+                                "helper"
                               ]
                             }
                           },
@@ -24003,7 +24020,8 @@
                                 "wakeword",
                                 "image",
                                 "video",
-                                "music"
+                                "music",
+                                "helper"
                               ]
                             }
                           }
@@ -24142,7 +24160,8 @@
                                 "wakeword",
                                 "image",
                                 "video",
-                                "music"
+                                "music",
+                                "helper"
                               ]
                             },
                             "enabled": {
@@ -24268,7 +24287,8 @@
                                   "wakeword",
                                   "image",
                                   "video",
-                                  "music"
+                                  "music",
+                                  "helper"
                                 ]
                               },
                               "enabled": {
@@ -26757,6 +26777,666 @@
         }
       }
     },
+    "/stack/v1/helper/status": {
+      "get": {
+        "tags": [
+          "Helper"
+        ],
+        "summary": "Whether the Helper is installed and awake",
+        "description": "The Helper is the admin page's chat assistant, with its own small model and process. `state` is the role state (`notInstalled`, `installed`, `loaded`, `ready`, `busy`, `offline`); it loads on the first message and unloads after `keep_warm_minutes` idle. `model` is the pinned catalog entry to install when `installed` is false.",
+        "responses": {
+          "200": {
+            "description": "The Helper's status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "installed": {
+                      "type": "boolean"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "keep_warm_minutes": {
+                      "type": "number"
+                    },
+                    "model": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "repo": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "licence": {
+                          "type": "string"
+                        },
+                        "approx_bytes": {
+                          "type": "integer"
+                        },
+                        "url": {
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "type": "string"
+                        },
+                        "engine": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "repo",
+                        "revision",
+                        "licence",
+                        "approx_bytes",
+                        "url",
+                        "sha256",
+                        "engine",
+                        "role"
+                      ]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "write"
+                            ]
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "kind",
+                          "description"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "installed",
+                    "state",
+                    "reason",
+                    "keep_warm_minutes",
+                    "model",
+                    "tools"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only a signed-in admin may use the Helper.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/helper/history": {
+      "get": {
+        "tags": [
+          "Helper"
+        ],
+        "summary": "The chat so far and what waits for approval",
+        "responses": {
+          "200": {
+            "description": "Kept in the Stack's database until cleared.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string",
+                            "enum": [
+                              "user",
+                              "assistant"
+                            ]
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "tools": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "content",
+                          "at"
+                        ]
+                      }
+                    },
+                    "pending": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "tool": {
+                            "type": "string"
+                          },
+                          "args": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "nullable": true
+                            }
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "tool",
+                          "args",
+                          "summary",
+                          "at"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "messages",
+                    "pending"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only a signed-in admin may use the Helper.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Helper"
+        ],
+        "summary": "Clear the chat and drop anything waiting for approval",
+        "responses": {
+          "200": {
+            "description": "Cleared.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only a signed-in admin may use the Helper.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/helper/chat": {
+      "post": {
+        "tags": [
+          "Helper"
+        ],
+        "summary": "Send the Helper a message",
+        "description": "Loads the Helper's model if it is asleep (a few seconds), lets it call read tools, and returns its answer. Any change it wants comes back in `pending`; nothing changes until `POST /stack/v1/helper/approvals/{id}/approve`. Messages are at most 2000 characters. 409 `not_installed` when the model is not on disk, 503 `helper_unavailable` when it cannot start (not enough memory, engine missing).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "message"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reply": {
+                      "type": "string"
+                    },
+                    "pending": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "tool": {
+                            "type": "string"
+                          },
+                          "args": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "nullable": true
+                            }
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "tool",
+                          "args",
+                          "summary",
+                          "at"
+                        ]
+                      }
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "wake_ms": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "reply",
+                    "pending",
+                    "tools",
+                    "wake_ms"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only a signed-in admin may use the Helper.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The Helper's model is not installed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Helper could not start.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/helper/approvals/{id}/approve": {
+      "post": {
+        "tags": [
+          "Helper"
+        ],
+        "summary": "Approve one change the Helper asked for",
+        "description": "Runs the change through the same route the page uses and logs it as `admin.action.helper.approved` (by Helper, approved by admin). A request waits at most 10 minutes.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "summary": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "summary",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only a signed-in admin may use the Helper.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "That request is no longer waiting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The change was tried and the Stack refused it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/helper/approvals/{id}/deny": {
+      "post": {
+        "tags": [
+          "Helper"
+        ],
+        "summary": "Turn down one change the Helper asked for",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dropped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only a signed-in admin may use the Helper.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "That request is no longer waiting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/disk": {
       "get": {
         "tags": [
@@ -27019,7 +27699,8 @@
                               "wakeword",
                               "image",
                               "video",
-                              "music"
+                              "music",
+                              "helper"
                             ]
                           },
                           "repo": {
@@ -27335,7 +28016,8 @@
                               "wakeword",
                               "image",
                               "video",
-                              "music"
+                              "music",
+                              "helper"
                             ]
                           },
                           "repo": {

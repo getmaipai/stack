@@ -46,7 +46,7 @@ test("a shared role shows the role it shares; a role with candidates says so; a 
 
 test("the real catalog renders the household chat and judge pins", () => {
   const doc = renderComponentsDoc(collectComponentsCatalog());
-  expect([...doc.matchAll(/^## (\S+)/gm)]).toHaveLength(14);
+  expect([...doc.matchAll(/^## (\S+)/gm)]).toHaveLength(15);
   expect(doc).toContain("`qwen3-8b-instruct-q4-k-m`");
   expect(doc).toContain("`qwen3-4b-q4-k-m`");
   expect(doc.startsWith("<!-- GENERATED")).toBe(true);

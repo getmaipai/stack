@@ -34,7 +34,8 @@ import { newLaunchKey, omlxCommand, omlxEnv, omlxInstalled, omlxSupportedHere, O
 import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, isVoxcpm2Engine, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
-import { STACK_CODING_DRAFT_MODEL, voxcpm2PackFor, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { HELPER_CONTEXT_TOKENS } from "@/lib/helperTools";
+import { STACK_HELPER_MODEL_ID, STACK_CODING_DRAFT_MODEL, voxcpm2PackFor, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashChatMemoryPlan, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
 import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor, splashResidentWeightsBytes, codingModeHeavy } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
@@ -154,7 +155,7 @@ export class EngineDoesNotFitError extends EngineUnavailableError {
 // post-load check sends. Roles that share chat's model run on chat's
 // process; embed has its own model and its own launch flag.
 const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === "chat");
-const SPAWNABLE_ROLES: RoleId[] = ["chat", "coding", "judge", "embed", "vision", "stt", "tts", "image"];
+const SPAWNABLE_ROLES: RoleId[] = ["chat", "coding", "judge", "embed", "vision", "stt", "tts", "image", "helper"];
 /** The roles the speech worker serves: their runtime ships with the
  * Stack (sherpa-onnx-node in package.json), never as an engine build. */
 const SPEECH_ROLES: RoleId[] = ["stt"];
@@ -169,7 +170,7 @@ const GENERATOR_ROLES: RoleId[] = ["image"];
  * limit of its own and yielding to generator jobs): the
  * governor admits them as `jit`, they yield to a resident role's start,
  * and an admission never evicts or shrinks a resident. */
-const JIT_ROLES: RoleId[] = ["vision", "coding"];
+const JIT_ROLES: RoleId[] = ["vision", "coding", "helper"];
 export const SPEECH_PATH = "/tts";
 
 /** The role whose process serves this role: `coding`, `judge` and
@@ -717,7 +718,7 @@ function engineForRole(role: RoleId): string | null {
   if (role === "coding") return currentHomeMode() === "coding" || homeModeEnteringCoding() ? "splash" : activeCodingChoice().engine;
   // The vision projector is a llama-server feature (mtmd); the MLX
   // engine choice for chat never moves it.
-  if (role === "vision") return "llama-server";
+  if (role === "vision" || role === "helper") return "llama-server";
   // A chat-wire role with a process of its own (the judge on the tiers that
   // bind a 4B model to it) runs on llama-server whatever engine chat uses:
   // the MLX pin is chat's model, not the judge's.
@@ -937,6 +938,11 @@ function servesRole(model: ModelRecord, role: RoleId, engine: string | null): bo
 }
 
 export function selectedModel(role: RoleId): ModelRecord | null {
+  // HELPER-01: the Helper always runs its one pinned model (the same file the judge pins, so one copy on disk), never chat's.
+  if (role === "helper") {
+    const pinned = getModel(STACK_HELPER_MODEL_ID);
+    return pinned && isModelSelectable(pinned) && !!pinned.modelPath ? pinned : null;
+  }
   if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && ["chat", "judge", "router"].includes(role)) {
     const heavy = getModel(codingModeHeavy().pin.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
@@ -1495,8 +1501,8 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   // The coding role sizes its own window (codingContextFor) and never reaches the chat launch's context fit.
   const codingRole = role === "coding";
   // A record with its own launch (vision) runs one slot, as its args say.
-  const slots = declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-  const contextLength = capChatWindow(role, resolvedContextLength ?? (codingRole ? declaredLaunchContext(model) ?? codingLaunchSettings().contextLength : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role))));
+  const slots = role === "helper" || declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
+  const contextLength = capChatWindow(role, resolvedContextLength ?? (codingRole ? declaredLaunchContext(model) ?? codingLaunchSettings().contextLength : role === "helper" ? HELPER_CONTEXT_TOKENS : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role))));
   if (role === "chat" && engineForRole(role) === "splash") return splashLaunchPlan(model, port, contextLength, "splash-chat");
   if (codingRole && engineForRole(role) === "splash") return splashLaunchPlan(model, port, resolvedContextLength ?? declaredLaunchContext(model) ?? codingLaunchSettings().contextLength);
   if (engineForRole(role) === "omlx") {
@@ -1710,7 +1716,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const splashContext = onChatSplash ? declaredLaunchContext(model) ?? Math.max(32_768, Math.floor(Number(settingValues()["stack.engines.chat.context_length"] ?? model.measuredContextLength ?? 131_072))) : coding ? declaredLaunchContext(model) ?? coding.contextLength : 0;
   const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(model.id, model.sizeBytes ?? 0), draftBytes: getModel(splashPair!.draftPin.id)?.sizeBytes ?? splashPair!.draftPin.download!.approx_bytes, contextTokens: splashContext }) : null;
   const codingWindow = coding ? (onSplash ? { contextLength: splashContext, dryRunPeakBytes: splashEstimate } : await codingContextFor(model, coding.contextLength)) : null;
-  const ownContext = coding ? codingWindow!.contextLength : declaredLaunchContext(model);
+  const ownContext = coding ? codingWindow!.contextLength : role === "helper" ? HELPER_CONTEXT_TOKENS : declaredLaunchContext(model);
   const declaredContextLength = ownContext ?? (onChatSplash ? settingValues()["stack.engines.chat.context_length"] as number : launchConfig.context_length);
   const slots = coding ? coding.slots : ownContext !== null ? 1 : typeof launchConfig.slots === "number" && launchConfig.slots > 0 ? launchConfig.slots : 1;
   const contextLength = capChatWindow(role, typeof declaredContextLength === "number" && declaredContextLength > 0 ? declaredContextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, launchConfig) : await contextForLaunch(model, { ...launchConfig, contextLength: 0 }, slots, gpuLayersFor(role)));

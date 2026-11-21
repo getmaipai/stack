@@ -9,7 +9,7 @@ import { POCKET_TTS_CLONING_REVISION, POCKET_TTS_CLONING_WEIGHTS, POCKET_TTS_PRE
 import { FFMPEG_PINS, FPCALC_PINS, MEDIA_COMPONENTS } from "@/media/pins";
 import { BUNDLED_RUNTIMES, ENGINE_BINARIES, engineRole, MANAGED_RUNTIMES, type BundledRuntime, type EngineBinaryPin, type ManagedRuntime } from "@/lib/engineCatalog";
 import packageJson from "../../package.json";
-import { ROLE_CANDIDATES, STACK_MODELS, type RoleCandidate } from "@/lib/modelCatalog";
+import { ROLE_CANDIDATES, STACK_HELPER_MODEL_ID, STACK_MODELS, type RoleCandidate } from "@/lib/modelCatalog";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { PROFILE_MODEL_BINDINGS, PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
@@ -80,6 +80,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     lines.push("");
     const shares = catalog.shares?.[role];
     if (shares) { lines.push(`Shares \`${shares}\`'s model and process unless bound elsewhere; the rows below are \`${shares}\`'s pins seen from this role.`); lines.push(""); }
+    if (role === "helper") { lines.push(`The admin page's chat assistant (HELPER-01). Not part of any machine profile: it runs the judge's pinned model \`${STACK_HELPER_MODEL_ID}\` (Qwen3-4B Q4_K_M, Apache-2.0) in a process of its own on llama-server, loaded by the first admin message and unloaded after \`stack.engines.helper.keep_warm_minutes\` idle (default 5). It is never on \`/v1\`. The bench that chose the model is \`docs/helper-bench.md\`; the model row is under judge.`); lines.push(""); continue; }
     if (role === "coding") { lines.push("Runs on its own on-demand process (not chat's): Splash on an Apple silicon Mac with an M3 chip or newer, 64 GB of memory or more and macOS 26.4 or later (about 124 tokens/s against 27.6 on llama-server, measured on the same weights), and llama-server everywhere else and whenever Splash cannot start (`stack.engines.coding.engine`: auto, llama-server or splash). Started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model. While a chat, voice or picture-reading request is answered it is paused for at most 120 s at a time (`stack.engines.coding.yield_to_chat`, default on), so chat stays as fast as when coding is idle."); lines.push(""); }
     lines.push("Engines per platform:");
     lines.push("");

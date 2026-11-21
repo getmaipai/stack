@@ -309,6 +309,12 @@ to Home's own worktree and lane.
    helpers in `manage.ts`, ADMIN-08). Route gaps are listed in the ADMIN-08 backlog row.
 8. Helper: model bench and pin, role, on-demand load and unload, tools and
    approvals, chat screen.
+   Built 2026-11-21 (`lib/helper.ts`, `routes/helper.ts`, `admin-ui/src/Helper.tsx`,
+   ADMIN-09; bench and the model choice in `docs/helper-bench.md`). Choices where
+   the plan was open: the model is Qwen3-4B Q4_K_M, the judge's pinned file, so the
+   Helper has no pin of its own; chat history is one `meta` row; the wording of an
+   ask is fixed, not the model's; `stack.admin.*` and secret settings are refused to
+   the Helper even with a click.
 9. Screenshots from seeded data, opened and judged on desktop and phone.
 10. Standalone installer and update path.
     Built 2026-11-21 (`scripts/release-stack.sh`, `scripts/install.sh`, ADMIN-10).

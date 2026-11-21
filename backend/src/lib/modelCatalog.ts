@@ -245,6 +245,11 @@ export const STACK_JUDGE_MODEL: CatalogModelLike = {
   },
 };
 
+// HELPER-01: the admin Helper runs this same pinned file (Qwen3-4B Q4_K_M) in
+// its own process, so one copy on disk serves the judge and the Helper.
+// Chosen by the bench in docs/helper-bench.md.
+export const STACK_HELPER_MODEL_ID = STACK_JUDGE_MODEL.id;
+
 // The `coding` pin (CODE-STACK-01 S1, owner decision 2026-10-18): Qwen3.8-27B,
 // dense, at Unsloth's UD-Q4_K_M, bound on p64 and p128 and loaded only while
 // someone is coding. unsloth/Qwen3.8-27B-GGUF at HEAD 4ca72078 (read from
