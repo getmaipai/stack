@@ -104,7 +104,8 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
         if (role === owner || (role === "judge" && owner === "judge")) await unloadRole(owner, "Home is changing modes.", "home-mode-change");
       }
     },
-    startHeavy: async () => { setCodingModeActive(true); await retryWhileResidentStarts(() => getProcess("coding", codingModeHeavy().pin.id)); },
+    // A resident start already past its guard when the switch began can finish after stopResidents; stop it again before the large model asks for memory.
+    startHeavy: async () => { setCodingModeActive(true); await adapter.stopResidents(); await retryWhileResidentStarts(() => getProcess("coding", codingModeHeavy().pin.id)); },
     stopHeavy: async () => { await unloadRole("coding", "Home is changing modes.", "home-mode-change"); },
     startResidents: async () => {
       setCodingModeActive(false);

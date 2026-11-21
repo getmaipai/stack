@@ -61,3 +61,27 @@ test("a warm-up loads each installed role in order, primes it, and the idle unlo
   expect(result.roles.map((row) => [row.role, row.state])).toEqual([["chat", "warm"], ["embed", "warm"]]);
   expect(warmedRoles().sort()).toEqual(["chat", "embed"]);
 });
+
+test("a warm-up that runs while Home switches into the large coding mode loads neither chat nor judge", async () => {
+  const { configureHomeMode, initializeHomeMode, switchHomeMode } = await import("@/lib/homeMode");
+  const verified = { source: "catalog" as const, provenance: {}, revision: "r", sha256: "a".repeat(64), licence: "MIT", verifiedAt: new Date().toISOString(), modelPath: "/tmp/never-opened.gguf", sizeBytes: 1_000_000 };
+  upsertModel({ id: "chat-a", roles: ["chat"], ...verified });
+  upsertModel({ id: "judge-a", roles: ["judge"], ...verified });
+  upsertModel({ id: "embed-a", roles: ["embed"], ...verified });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  configureHomeMode({
+    inspect: () => ({ available: true, reason: null, checks: { engine: true, pieces: true, hardware: true, memory: true, bench: true }, memory: { plan_bytes: 1, budget_bytes: 2 } }),
+    stopResidents: async () => {}, startHeavy: async () => { await held; }, stopHeavy: async () => {}, startResidents: async () => {},
+    checkHeavy: async () => {}, bind: () => {}, transition: () => {}, persistMode: () => {}, pins: () => "p",
+  });
+  initializeHomeMode("normal");
+  const switching = switchHomeMode("coding");
+  await Promise.resolve();
+  const result = await warmUp("home-request");
+  release(); await switching;
+  expect(started).not.toContain("chat");
+  expect(started).not.toContain("judge");
+  expect(result.roles.filter((row) => row.role === "chat" || row.role === "judge").every((row) => row.state === "skipped" || !row)).toBe(true);
+  initializeHomeMode("normal");
+});
