@@ -2437,6 +2437,11 @@
                     "type": "number",
                     "nullable": true
                   },
+                  "voice_text": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "The words spoken in the recording named by `voice_url` (VoxCPM2 only; other engines ignore it). Optional: without it the engine reads the words from the recording itself, once per recording."
+                  },
                   "model": {
                     "type": "string",
                     "minLength": 1,

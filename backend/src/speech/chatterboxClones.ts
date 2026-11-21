@@ -65,14 +65,16 @@ export async function ensureChatterboxCloner(options: { signal?: AbortSignal; do
   await installCatalogModel(STACK_TTS_CHATTERBOX_CLONER, { destination: join(modelsDir, STACK_TTS_CHATTERBOX_CLONER.id, "model.safetensors"), download: options.download ?? downloadUrl, signal: options.signal });
 }
 
-/** What a request's voice becomes on the Chatterbox engine: nothing (its default voice) for a preset name or no voice; for a
+/** What a request's voice becomes on the Chatterbox engine (and, with `needsTokenizer: false`, on VoxCPM2, which keeps the host check and skips the tokenizer): nothing (its default voice) for a preset name or no voice; for a
  * clip address, the same address once its host is on the household's own network and the clip tokenizer is on disk. */
-export async function prepareChatterboxVoice(voiceUrl: string | undefined, options: { signal?: AbortSignal; download?: typeof downloadUrl } = {}): Promise<string | undefined> {
+export async function prepareChatterboxVoice(voiceUrl: string | undefined, options: { signal?: AbortSignal; download?: typeof downloadUrl; needsTokenizer?: boolean } = {}): Promise<string | undefined> {
   const address = clipVoiceAddress(voiceUrl);
   if (!address) return undefined;
   let host: string;
   try { host = new URL(address).hostname; } catch { throw new VoiceRefusedError("The voice address is not a web address.", 400, "voice-not-pinnable"); }
   if (!privateHost(host)) throw new VoiceRefusedError(`The voice at ${host} is not on this household's own network, so the Stack will not fetch it. Make the voice in Home instead.`, 400, "voice-not-pinnable");
+  // VoxCPM2 encodes a clip with its own audio encoder: no tokenizer helper is fetched or checked for it.
+  if (options.needsTokenizer === false) return address;
   try {
     await ensureChatterboxCloner(options);
   } catch (error) {

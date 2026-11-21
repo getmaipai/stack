@@ -22,7 +22,7 @@ describe("canonical parts", () => {
     const { STACK_MODELS } = require("@/lib/modelCatalog") as typeof import("@/lib/modelCatalog");
     const runners = STACK_MODELS.map((pin) => pin.engine).filter((value): value is string => !!value);
     const required = new Set([...runners, ...ENGINE_BINARIES.map((pin) => pin.name)]);
-    const aliases = new Map([["mflux", "image-gen"], ["chatterbox-turbo", "chatterbox-vc"]]);
+    const aliases = new Map([["mflux", "image-gen"], ["chatterbox-turbo", "chatterbox-vc"], ["voxcpm2-reduced", "voxcpm2"], ["voxcpm2-stt", "voxcpm2"]]);
     const expected = new Set([...required].map((id) => aliases.get(id) ?? id));
     // A runner that is already a tool part (image-tools, liveportrait, score-gen) has no second engine row.
     const engineDefs = ALL_PART_DEFS.filter((part) => part.kind !== "model");

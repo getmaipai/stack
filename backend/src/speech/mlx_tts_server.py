@@ -516,9 +516,20 @@ class VoxCPM2:
         audio = np.asarray(load_audio(path, sample_rate=SAMPLE_RATE), dtype=np.float32).reshape(-1)
         return audio
 
+    def stt_installed(self) -> bool:
+        """Whether the pinned listening model's weights are in the hub cache (the Stack placed them with the voice)."""
+        try:
+            from huggingface_hub import try_to_load_from_cache
+            return isinstance(try_to_load_from_cache(STT_REPO, "model.safetensors"), str)
+        except Exception:
+            return False
+
     def transcribe(self, path: str) -> str:
         """The clip's words, when the request did not bring them: recognized once with the pinned speech-to-text model from the
-        hub cache, which is then freed. The prepared clip is cached, so this runs once per clip."""
+        hub cache, which is then freed. The prepared clip is cached, so this runs once per clip. Offline always: files the Stack did not
+        place are a clear error, never a download."""
+        if not self.stt_installed():
+            raise ClipError("This voice needs the words of its recording and the listening helper that reads them is not installed. Install the VoxCPM2 voice again from the engines page, or add the words to the voice.")
         try:
             import gc
             import mlx.core as mx

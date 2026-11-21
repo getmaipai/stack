@@ -28,12 +28,13 @@ import { TRANSCRIBE_PATH } from "@/speech/server";
 import { loadedWeightsRepo, materializeLauncher as materializePocketLauncher, pocketTtsCommand, pocketTtsEnv, pocketTtsInstalled, POCKET_TTS_VERSION } from "@/speech/pocketTts";
 import { ensureCloningWeights, POCKET_TTS_PRESET_VOICES, voiceCloningOn } from "@/speech/voices";
 import { materializeServerScript, mlxAudioCommand, mlxAudioEnv, mlxAudioInstalled, MLX_AUDIO_VERSION } from "@/speech/mlxAudio";
+import { materializeVoxcpm2Server, voxcpm2Command, voxcpm2Installed, VOXCPM2_RUNTIME_VERSION } from "@/speech/voxcpm2";
 import { ENGINE_KEY_ENV } from "@/lib/loopbackGuard";
 import { newLaunchKey, omlxCommand, omlxEnv, omlxInstalled, omlxSupportedHere, OMLX_VERSION, prepareModelFolder, resetState as resetOmlxState } from "@/chat/omlx";
 import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
-import { clearTtsEngineFailures, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
-import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { clearTtsEngineFailures, isVoxcpm2Engine, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
+import { STACK_CODING_DRAFT_MODEL, voxcpm2PackFor, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashChatMemoryPlan, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
 import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
@@ -399,13 +400,15 @@ export const PROBE_SENTENCE = "Clover, the kitchen light is on.";
 /** What the scripted engine received on the speech path, one object per request (for the suite). */
 export const scriptedSpeechLog: Array<Record<string, string>> = [];
 
-export function speechForm(text: string, voiceUrl?: string, voice: { temperature?: number; pitch_semitones?: number } = {}): FormData {
+export function speechForm(text: string, voiceUrl?: string, voice: { temperature?: number; pitch_semitones?: number; voice_text?: string } = {}): FormData {
   const form = new FormData();
   form.append("text", text);
   if (voiceUrl) form.append("voice_url", voiceUrl);
   // VOICES-02: a voice made from a clip carries its own sampling temperature and pitch offset (a zero offset is no shift).
   if (voice.temperature !== undefined) form.append("temperature", String(voice.temperature));
   if (voice.pitch_semitones !== undefined && voice.pitch_semitones !== 0) form.append("pitch_semitones", String(voice.pitch_semitones));
+  // The words spoken in a clip voice's recording (VoxCPM2 reads the clip with them; sent only with a clip address and only when there are some).
+  if (voice.voice_text !== undefined && voice.voice_text.trim()) form.append("voice_text", voice.voice_text);
   return form;
 }
 /** The speech wire's probe: the form through the engine's own shape, the
@@ -738,7 +741,19 @@ export function ttsEngineInstalled(id: TtsEngineId): boolean {
     const have = new Set(listModels().filter((model) => model.roles.includes("tts") && isModelSelectable(model) && !!model.modelPath).map((model) => model.id));
     return [STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS].every((pin) => have.has(pin.id));
   }
+  // VoxCPM2: its own environment, the size's files and the clip speech-to-text companion, every one a verified record on disk. Nothing here fetches.
+  if (isVoxcpm2Engine(id)) {
+    if (!voxcpm2Installed()) return false;
+    const have = new Set(listModels().filter((model) => model.roles.includes("tts") && isModelSelectable(model) && !!model.modelPath).map((model) => model.id));
+    return voxcpm2PackFor(TTS_ENGINES[id].catalogEngine).every((pin) => have.has(pin.id));
+  }
   return false;
+}
+
+/** The hub-cache repository an MLX voice engine (Chatterbox Turbo, VoxCPM2) loads, by the engine name a launch plan carries; null for any other engine. */
+function mlxTtsRepoFor(engine: string): string | null {
+  const found = (Object.values(TTS_ENGINES)).find((definition) => definition.built && definition.runtime !== "pocket-tts" && definition.catalogEngine === engine);
+  return found?.repo ?? null;
 }
 
 /** Which voice engine answers: the setting (`auto` is the tier's
@@ -753,8 +768,8 @@ export function activeTtsChoice(): TtsEngineChoice {
 export function ttsEngineInEffect(): TtsEngineId {
   const running = runtime("tts").process;
   if (running && !running.retired) {
-    if (running.engine === TTS_ENGINES["chatterbox-turbo"].catalogEngine) return "chatterbox-turbo";
-    if (running.engine === TTS_ENGINES.pocket.catalogEngine) return "pocket";
+    const running_ = (Object.keys(TTS_ENGINES) as TtsEngineId[]).find((id) => TTS_ENGINES[id].built && TTS_ENGINES[id].catalogEngine === running.engine);
+    if (running_) return running_;
   }
   return activeTtsChoice().engine;
 }
@@ -1460,6 +1475,13 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
     const script = await materializeServerScript();
     return { command: mlxAudioCommand(script, port, "chatterbox-turbo", TTS_ENGINES["chatterbox-turbo"].repo!), engine: "chatterbox-turbo", build: MLX_AUDIO_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: mlxAudioEnv(), apiKey: newLaunchKey() };
   }
+  if (role === "tts" && isVoxcpm2Engine(activeTtsChoice().engine)) {
+    const choice = TTS_ENGINES[activeTtsChoice().engine];
+    if (!voxcpm2Installed()) throw new EngineUnavailableError("The VoxCPM2 voice environment is not built on this machine.");
+    const script = await materializeVoxcpm2Server();
+    // The same offline, quiet environment the Chatterbox engine gets; the Python in the command is the VoxCPM2 environment's own.
+    return { command: voxcpm2Command(script, port, choice.repo!), engine: choice.catalogEngine, build: VOXCPM2_RUNTIME_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: mlxAudioEnv(), apiKey: newLaunchKey() };
+  }
   if (role === "tts") {
     if (!pocketTtsInstalled()) throw new EngineUnavailableError("The Pocket TTS environment is not built on this machine.");
     // Offline always; the token never travels (STACK-94d).
@@ -1670,7 +1692,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
       : engineForRole(role) === "mlx-serve" ? "No installed mlx-serve build is available for this machine."
       : engineForRole(role) === "omlx" ? "The oMLX environment or its model is not installed on this machine."
       : engineForRole(role) === "splash" ? "Splash or its draft model is not installed on this machine."
-      : role === "tts" ? (activeTtsChoice().engine === "chatterbox-turbo" ? "The Chatterbox Turbo files are not all installed." : pocketTtsInstalled() ? "The tts tokenizer or default voice is not installed." : "The Pocket TTS environment is not built on this machine.")
+      : role === "tts" ? (activeTtsChoice().engine === "chatterbox-turbo" ? "The Chatterbox Turbo files are not all installed." : isVoxcpm2Engine(activeTtsChoice().engine) ? "The VoxCPM2 files are not all installed (the voice, its listening helper and its environment)." : pocketTtsInstalled() ? "The tts tokenizer or default voice is not installed." : "The Pocket TTS environment is not built on this machine.")
       : "No installed llama-server build is available for this machine.";
     throw new EngineUnavailableError(reason);
   }
@@ -1814,7 +1836,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // checkpoint file for ComfyUI; for Pocket TTS the weights the hub
     // cache holds, read after health and never assumed from the config).
     if (plan.kind === "managed") {
-      const model_ = GENERATOR_ROLES.includes(role) ? basename(model.modelPath!) : plan.engine === "chatterbox-turbo" ? TTS_ENGINES["chatterbox-turbo"].repo : loadedWeightsRepo()?.repo ?? null;
+      const model_ = GENERATOR_ROLES.includes(role) ? basename(model.modelPath!) : mlxTtsRepoFor(plan.engine) ?? loadedWeightsRepo()?.repo ?? null;
       identity = { ...identity, build: `${plan.engine}-${plan.build}`, model: model_ };
     }
     // mlx-serve's /props carries no build_info or model_path: the build
@@ -1840,7 +1862,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     runtime(role).status.postLoadCheck = check;
     resolveHealth(`engine.crashed.${role}`);
     resolveHealth(`post-load-check-failed.${role}`);
-    const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? (plan.engine === "chatterbox-turbo" ? model.revision : loadedWeightsRepo()?.revision) ?? null : null;
+    const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? (mlxTtsRepoFor(plan.engine) ? model.revision : loadedWeightsRepo()?.revision) ?? null : null;
     // The coding engine is the one engine the isolation gate may stop (it yields to chat); no other engine gets a pausable handle.
     const codingPausable = role === "coding" && plan.kind === "spawned" ? new PausableProcess(handle.pid, handle.exited, { engine: true, tree: plan.tree === true }) : undefined;
     const processRecord: RoleProcess = {
