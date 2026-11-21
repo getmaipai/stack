@@ -27,6 +27,7 @@ with Home's releases, so this file tracks what a Home release picks up.
 - VF-ROLES-01 (accept and ignore safely): the generic door's `clip` request now accepts the spec's `inputs` (typed roles), `dialogue` and `intent` (`@maipai/spec` 0.1.431). The inputs are read, hashed and recorded in the receipt by role; nothing acts on them yet and the dialogue and intent change nothing (the capability and route rows do that). An input that cannot be read is refused plainly, never dropped. `start_picture` and `end_picture` still mean the opening and closing frames.
 
 ### Changed
+- The llama-server engine pin moves from build b10797 to llama.cpp b12589 (macOS arm64 asset 16,569,293 bytes, sha256 711006321bbac464624da19f2333b49e8e0d5e6aa75c867b5323d88818abff2f, matching the GitHub release digest; the Windows CUDA 12.4 entry follows to b12589 with the release digest, not yet verified on Windows). Every flag the Stack passes (chat, judge, embed, vision, coding) is present in b12589 `--help`. A scratch run of the judge launch (Qwen3-4B Q4_K_M) and the embed launch (nomic-embed-text v1.5) answered a chat completion and a 768-dimension embedding, and `/props` reports `b12589-6f5c9ad21`. `llama-server --version` now prints `version: 1.0.0-dev (build 12589, ...)` with no `b` prefix, so a script that greps the version text for the tag must match `build 12589`. The Linux CUDA entry stays at b11476.
 
 - Video results are kept for 24 hours and the newest 120 (was 24), so a film's first shots keep their native files and receipts until the cut.
 

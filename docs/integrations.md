@@ -94,7 +94,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 |---|---|---|
 | `POST /v1/chat/completions` | `chat`, `coding`, `judge`, `router`, `vision` | chat completions; `stream: true` passes the engine's SSE bytes through unchanged including `[DONE]`; `tools`, `tool_choice`, `response_format` and `chat_template_kwargs` pass through |
 | `POST /v1/tokenize` | `chat`, `coding`, `judge`, `router`, `vision` | the engine's own token count, `{ count }`: send `messages` (with `tools` and `chat_template_kwargs` when the turn carries them, rendered with the engine's chat template, no generation prompt, then tokenized) or a raw `content` string, exactly one; an image part counts as the template's media marker only, not the image's own tokens; an engine with no token-count route is a 501 that says so, never an estimate (oMLX has none; the Stack asks it for one token and reads its own prompt size, which is exact) |
-| `POST /v1/messages` | `coding` | Anthropic Messages, served natively by the coding engine (llama-server b10797): `stream: true` is the engine's SSE bytes unchanged, with `tool_use` and `tool_result` blocks, thinking blocks, usage and stop reasons. The Stack drops client sampling, bounds `thinking.budget_tokens` by `stack.engines.coding.thinking_budget_ceiling`, and translates nothing. `model` is `coding` or the coding model's id. |
+| `POST /v1/messages` | `coding` | Anthropic Messages, served natively by the coding engine (llama-server b12589): `stream: true` is the engine's SSE bytes unchanged, with `tool_use` and `tool_result` blocks, thinking blocks, usage and stop reasons. The Stack drops client sampling, bounds `thinking.budget_tokens` by `stack.engines.coding.thinking_budget_ceiling`, and translates nothing. `model` is `coding` or the coding model's id. |
 | `POST /v1/messages/count_tokens` | `coding` | Anthropic token count, the engine's own, unchanged. |
 | `POST /v1/responses` | `coding` | OpenAI Responses, served natively by the coding engine (no `previous_response_id`: the engine refuses it). Same sampling and thinking rules as above. A wire the engine does not serve answers `501` with a sentence saying what to use, without starting the engine. |
 | `POST /v1/embeddings` | `embed` | embeddings |
@@ -125,7 +125,7 @@ unchanged.
 
 | Header | Value |
 |---|---|
-| `x-maipai-engine` | the engine host and build that answered (`local b10797-832fd6f17`, or `local omlx-0.7.0` when chat runs on oMLX), or `none` |
+| `x-maipai-engine` | the engine host and build that answered (`local b12589-6f5c9ad21`, or `local omlx-0.7.0` when chat runs on oMLX), or `none` |
 | `x-maipai-model` | the model file that answered (`Qwen3-8B-Q4_K_M.gguf`), or `none` |
 | `x-maipai-revision` | the model's pinned revision (`7c41481f…`) when the process knows its model record, the engine build otherwise, or `none` |
 

@@ -33,7 +33,7 @@ describe("selectEngineBinary", () => {
 
   test("macOS arm64 matches the verified pin", () => {
     const result = selectEngineBinary(hw({}));
-    expect(result?.id).toBe("llama-server-b10797-macos-arm64");
+    expect(result?.id).toBe("llama-server-b12589-macos-arm64");
     expect(result?.verified).toBe(true);
   });
 
@@ -43,7 +43,7 @@ describe("selectEngineBinary", () => {
 
   test("Windows x64 with NVIDIA matches the unverified CUDA pin", () => {
     const result = selectEngineBinary(hw({ platform: "win32", arch: "x64", isAppleSilicon: false, unifiedMemoryGb: 0, cudaDevices: [{ index: 0, name: "RTX 2070 Super", vramBytes: 8_000_000_000 }] }));
-    expect(result?.id).toBe("llama-server-b10797-win-cuda-x64");
+    expect(result?.id).toBe("llama-server-b12589-win-cuda-x64");
     expect(result?.verified).toBe(false);
   });
 

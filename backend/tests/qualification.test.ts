@@ -71,12 +71,12 @@ describe("chat model pin", () => {
 });
 
 describe("engine pin", () => {
-  const pin: EngineBinaryPin | undefined = ENGINE_BINARIES.find((entry) => entry.id === "llama-server-b10797-macos-arm64");
+  const pin: EngineBinaryPin | undefined = ENGINE_BINARIES.find((entry) => entry.id === "llama-server-b12589-macos-arm64");
 
   test("the macOS pin declares its build tag", () => {
-    expect(pin?.id).toBe("llama-server-b10797-macos-arm64");
-    expect(pin?.archive?.url).toContain("/releases/download/b10797/");
-    expect(pin?.label).toContain("b10797");
+    expect(pin?.id).toBe("llama-server-b12589-macos-arm64");
+    expect(pin?.archive?.url).toContain("/releases/download/b12589/");
+    expect(pin?.label).toContain("b12589");
   });
 
   test("every engine pin declares an asset digest", () => {

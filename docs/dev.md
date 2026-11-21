@@ -313,7 +313,7 @@ declarations offline. The chat pin is `Qwen/Qwen3-8B-GGUF`, Q4_K_M,
 Apache-2.0, at Hub commit `7c41481f57cb95916b40956ab2f0b139b296d974`,
 sha256 `d98cdcbd…5745785`, declared size `5,027,783,488` bytes
 (the first pin here was the Qwen3 1.7B Q8_0, removed 2026-11-17). The
-engine pin is `llama-server` build `b10797` (macOS arm64 verified),
+engine pin is `llama-server` build `b12589` (macOS arm64 verified),
 each archive carrying its own asset digest. The test asserts the
 revision is an immutable commit, never `main`; digest, size and licence
 are present; the declared footprint plus the default context and the
@@ -335,7 +335,7 @@ data/models/manifests/<id>.json
 
 Engine builds use a versioned layout whose `current` link is the
 selection and rollback pointer; the tag is the upstream build tag
-(`b10797`), the same one the Catalog's engine index names, so
+(`b12589`), the same one the Catalog's engine index names, so
 installed and available compare directly (a store from before the
 tags were upstream build tags is renamed once at start):
 

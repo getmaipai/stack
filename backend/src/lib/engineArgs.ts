@@ -175,7 +175,7 @@ export interface CodingServerArgsOptions {
  * budget, the cache is q8_0 on every platform, the window is one shared
  * KV pool, and the process never reaches the network (`--offline`; the
  * build has no telemetry or update check of its own). Flag spellings are
- * those of llama-server b10797 `--help`. `--cache-reuse` is left out on
+ * those of llama-server b12589 `--help`. `--cache-reuse` is left out on
  * purpose: its KV shifting is not measured on this model, and the prompt
  * cache and context checkpoints stay at the engine's defaults. */
 export function codingServerArgs(options: CodingServerArgsOptions): string[] {

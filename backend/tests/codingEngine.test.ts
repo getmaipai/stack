@@ -37,7 +37,7 @@ afterEach(() => { setMachineTier(null); setSupervisorFactoryForTests(null); rese
 
 // ---- the launch ---------------------------------------------------------------
 
-test("the coding launch is exactly this argument list (flags checked against llama-server b10797 --help)", () => {
+test("the coding launch is exactly this argument list (flags checked against llama-server b12589 --help)", () => {
   expect(codingServerArgs({ modelPath: "/m/q.gguf", port: 8801, contextLength: 131_072, slots: 2, thinkingBudgetTokens: 2000, alias: "qwen3.8-27b-ud-q4-k-m" })).toEqual([
     "--model", "/m/q.gguf",
     "--alias", "qwen3.8-27b-ud-q4-k-m",
