@@ -1,6 +1,6 @@
 # Qwen3.6-35B-A3B chat on Splash
 
-The Huihui Qwen3.6-35B-A3B abliterated Q4_K_M is an optional chat model run by Splash with a DFlash2 draft. Like the dense Huihui Qwen3.8-27B, an admin installs it on purpose and chooses it in Settings; no tier binds or downloads it, and the default chat model and engine are unchanged. This page covers what installs, how an admin selects it, and how to set it back. (The file name keeps the trial's name.)
+The Huihui Qwen3.6-35B-A3B abliterated Q4_K_M is an optional chat model run by Splash with a DFlash2 draft. Like the dense Huihui Qwen3.8-27B, an admin installs it on purpose and chooses it in Settings; no tier recommends, binds or downloads it, and the default chat model and engine are unchanged. This page covers what installs, how an admin selects it, and how to set it back. (The file name keeps the trial's name.)
 
 ## What it is
 
@@ -21,6 +21,10 @@ On p64 and p128 the disk plan offers an optional row, "chat-splash-qwen36-ablite
 - Removing the model or its draft deletes the prepared folder and the note.
 
 ## Select it, and set it back
+
+In Settings, AI and models, "Choose a model for Chat, Standard" lists the 35B on p64 and p128 once the room holds its 23 GB (the row says so when it does not). It is the last Standard candidate, so the recommended model for Standard, Boost and Max on every profile is unchanged and nothing picks it by itself. To set it back, choose the recommended model (or the dense 27B) in the same dialog, or clear `stack.engines.chat.model`.
+
+What the Stack does when the model is loaded (`POST /stack/v1/models/<id>/load`, which is how Home's chat model choice reaches it): the load prefers the 35B before the setting exists, `auto` picks Splash for it, the Stack stores `stack.engines.chat.model`, and one chat model stays resident with the memory guard on. The Stack never sees Home's saved tier slot, so the slot alone does not change the running model; a load or the setting below does.
 
 | To get | Set |
 |---|---|

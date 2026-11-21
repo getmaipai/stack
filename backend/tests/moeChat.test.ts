@@ -10,7 +10,8 @@ import { clearModelsForTests, getModel, removeModel, upsertModel } from "@/lib/m
 import { buildInstallPlan, splashChatInstallModels } from "@/lib/installPlan";
 import { buildDiskPlan } from "@/lib/diskPlan";
 import { PROFILE_MODEL_BINDINGS, PROFILE_TIERS } from "@/profiles";
-import { resolveLadder, TIER_CANDIDATES } from "@/lib/tiers";
+import { customPickRefusal, resolveLadder, resolveTier, tierCandidateLists, tierCapBytes, TIER_CANDIDATES, type ProfileId } from "@/lib/tiers";
+import { preferModel } from "@/lib/supervisor";
 import { splashFootprintEstimateBytes, splashChatMemoryPlan } from "@/lib/splash";
 import { prepareSplashModel, splashModelsDir, splashPreparedCurrent, splashPreparedNotePath, splashRoot, type PrepareRunner } from "@/lib/splashStore";
 import { chatEngine, resetSupervisorForTests, selectedModel, setCodingMachineFacts, setMachineTier, splashLaunchPlan } from "@/lib/supervisor";
@@ -74,6 +75,44 @@ test("install order: the optional part list is the target then its draft, and no
   const row = (id: string) => buildDiskPlan(PROFILE_TIERS.find((tier) => tier.id === id)!).rows.find((item) => item.id === "chat-splash-qwen36-abliterated");
   expect(row("p64")).toMatchObject({ need: "optional", model_ids: [MOE.id, DRAFT.id] });
   expect(row("p32")).toBeUndefined();
+});
+
+test("pickable at Standard on p64 and p128, never the recommendation: the resolved recommendation is what it was before, for every profile, tier and room", () => {
+  const chat = TIER_CANDIDATES.filter((item) => item.category === "chat");
+  // It sits after every other Standard candidate, so the first fit is never it.
+  const standardOrder = chat.filter((item) => item.tiers.includes("standard")).map((item) => item.id);
+  expect(standardOrder.at(-1)).toBe(MOE.id);
+  const profiles: ProfileId[] = ["p16", "p32", "p64", "p128"];
+  for (const profile of profiles) for (const tier of ["standard", "boost", "max"] as const) for (let gb = 1; gb <= 200; gb += 1) {
+    const room = gb * GB;
+    // The reference: the same first-fit rule over the candidate list with the 35B left out.
+    const cap = tierCapBytes(tier, room);
+    const expected = chat.filter((item) => item.id !== MOE.id && item.profiles.includes(profile) && item.tiers.includes(tier))
+      .flatMap((item) => item.peaks.filter((peak) => peak.peakBytes <= cap && (tier !== "boost" || peak.options.thinking === true)).slice(0, 1).map(() => item.id))[0] ?? null;
+    const got = resolveTier({ category: "chat", tier, profile, roomBytes: room });
+    expect(got?.model ?? null).toBe(expected);
+    expect(got?.model).not.toBe(MOE.id);
+  }
+  // Pickable in the chooser: Standard on p64 and p128 only, when the room holds its 23 GB.
+  for (const profile of ["p64", "p128"] as const) {
+    const standard = tierCandidateLists("chat", profile, 60 * GB).find((level) => level.tier === "standard")!;
+    expect(standard.candidates.find((item) => item.id === MOE.id)).toMatchObject({ fits: true, refusal: null });
+    expect(standard.recommended).not.toBe(MOE.id);
+    expect(customPickRefusal({ category: "chat", tier: "standard", profile, roomBytes: 60 * GB, model: MOE.id })).toBeNull();
+  }
+  expect(tierCandidateLists("chat", "p32", 60 * GB)[0]!.candidates.map((item) => item.id)).not.toContain(MOE.id);
+  expect(resolveTier({ category: "chat", tier: "standard", profile: "p64", roomBytes: 60 * GB, slot: { model: MOE.id } })?.model).toBe(MOE.id);
+});
+
+test("Home's load of the 35B (the model preference, before the setting is stored) serves it on Splash, and clearing the preference returns to llama-server", () => {
+  installPin(STACK_CHAT_8B_MODEL); installPin(MOE); installPin(DRAFT); installSplashEngine();
+  preferModel("chat", MOE.id);
+  expect(chatEngine()).toBe("splash");
+  expect(selectedModel("chat")?.id).toBe(MOE.id);
+  // The Stack's load route then stores the choice; the stored setting keeps it across a restart.
+  updateSettings({ "stack.engines.chat.model": MOE.id }); applyPendingSettings(); preferModel("chat", null);
+  expect(chatEngine()).toBe("splash");
+  expect(selectedModel("chat")?.id).toBe(MOE.id);
 });
 
 test("selecting it: a stored choice of the 35B makes auto pick Splash and serve it; before it is installed, and for every other choice, chat stays on llama-server", () => {
@@ -150,7 +189,7 @@ test("removal cleans the prepared folder and the note", async () => {
 
 test("governor budget: the tier peak is the measured 23 GB, and the launch budget covers the 21 to 23 GB footprint at 32k context", () => {
   const candidate = TIER_CANDIDATES.find((item) => item.id === MOE.id)!;
-  expect(candidate.tiers).toEqual([]);
+  expect(candidate.tiers).toEqual(["standard"]);
   expect(candidate.peaks.every((peak) => peak.status === "measured" && peak.peakBytes === 23 * GB)).toBe(true);
   const estimate = splashFootprintEstimateBytes({ weightsBytes: MOE.download!.approx_bytes, draftBytes: DRAFT.download!.approx_bytes, contextTokens: 32_768 });
   expect(estimate).toBeGreaterThanOrEqual(21 * GB);

@@ -630,7 +630,7 @@ function splashPairReady(id: string): boolean {
 }
 /** The model Splash serves for chat: the one Home chose (the stored setting) when it is a Splash model, else the household's Huihui Qwen3.8-27B. */
 function splashChatModelId(): string {
-  const stored = String(settingValues()["stack.engines.chat.model"] ?? "");
+  const stored = preferredModels.get("chat") ?? String(settingValues()["stack.engines.chat.model"] ?? "");
   if (SPLASH_CHAT_IDS.includes(stored)) return stored;
   return STACK_CHAT_QWEN38_UNCENSORED_MODEL.id;
 }
@@ -645,7 +645,8 @@ function chatEngineAvailableForChoice(id: ChatEngineId): boolean {
  * this run (ENGINE-MLX-01). */
 export function activeChatChoice(): ChatEngineChoice {
   const setting = settingValues()[CHAT_ENGINE_SETTING];
-  const stored = String(settingValues()["stack.engines.chat.model"] ?? "");
+  // Home's "load this model" (preferModel) comes before the stored setting is written, so the 35B must pick Splash on the preference too.
+  const stored = preferredModels.get("chat") ?? String(settingValues()["stack.engines.chat.model"] ?? "");
   // `auto` picks Splash only when the stored chat model is the 35B, which only Splash can run; every other choice keeps its engine.
   const auto = setting === undefined || setting === "auto" || setting === "";
   return resolveChatEngine({
