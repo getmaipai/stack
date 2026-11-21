@@ -1,0 +1,8 @@
+/* The kit's tokens and Tailwind root, nothing of the page's own: every
+ * color, radius and type size comes from @maipai/ui. */
+@import "@maipai/ui/src/dashboard/css/globals.css";
+@import "@maipai/ui/src/tokens.css";
+@source "../node_modules/@maipai/ui/src";
+
+html, body, #root { min-height: 100dvh; }
+body { background: var(--surface-page, var(--background)); color: var(--foreground); font-family: var(--font-sans); }

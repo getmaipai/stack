@@ -9,3 +9,6 @@ node_modules/
 .DS_Store
 __pycache__/
 *.pyc
+
+# The admin page build (bun run build:admin).
+admin-ui/dist/

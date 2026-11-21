@@ -67,6 +67,10 @@ echo "== compile: $BINARY_NAME"
 echo "== migrations (sibling directory, see this script's own header)"
 cp -R backend/src/db/migrations "$OUT_DIR/migrations"
 
+echo "== admin page (admin-ui/, built with Vite; a sibling folder for the same reason as migrations, lib/adminUi.ts)"
+(cd admin-ui && bun run build)
+cp -R admin-ui/dist "$OUT_DIR/admin-ui"
+
 echo "== ort-wasm (onnxruntime-web loads these at runtime; smartTurn.ts points wasmPaths here)"
 mkdir -p "$OUT_DIR/ort-wasm"
 cp backend/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs backend/node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm "$OUT_DIR/ort-wasm/"

@@ -14,6 +14,7 @@
 import { guardRequest } from "@/lib/requestGuard";
 import { checkLoopbackCaller, refuse } from "@/lib/loopbackGuard";
 import { validateSession } from "@/lib/adminAuth";
+import { isAdminUiPath } from "@/lib/adminUi";
 
 export const ADMIN_COOKIE = "stack_admin";
 export const ADMIN_HEADER = "x-stack-admin";
@@ -81,6 +82,8 @@ export async function guardAdminAware(request: Request, mode: GuardMode = {}): P
   const token = adminCookie(request);
   if (tailscale) {
     if (path === "/healthz") return null;
+    // The admin page itself is static (GET only); every number on it still needs the session below.
+    if (isAdminUiPath(path) && !write) return null;
     if (!path.startsWith("/stack/v1/")) return refuse(404, "not_found", "Not found. Only the admin routes are served on this address.");
     if (path === "/stack/v1/admin/setup") return refuse(403, "setup_local_only", "First-run setup is done on the computer the Stack runs on, not over Tailscale. Open the admin page there.");
   }

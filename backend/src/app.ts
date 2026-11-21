@@ -83,6 +83,7 @@ import { adminRoutes } from "@/routes/admin";
 import { adminActionRoutes } from "@/routes/adminActions";
 import { diskRoutes } from "@/routes/disk";
 import { isStopping } from "@/lib/lifecycle";
+import { serveAdminUi } from "@/lib/adminUi";
 import { fullViewAllowed, fullViewAsked } from "@/lib/adultView";
 import { speechRoutes, websocket } from "@/routes/speech";
 import { registerGenerators } from "@/generators";
@@ -210,5 +211,9 @@ app.route("/stack/v1/settings", settingsRoutes);
 app.route("/stack/v1", declarationRoutes);
 app.route("/stack/v1/voices", voicesRoutes);
 app.route("/stack/v1", homeModeRoutes);
+
+// The admin page (admin-ui/, built with `bun run build:admin`): static files only, GET and HEAD; its data comes from /stack/v1/* behind the sign-in.
+app.on(["GET", "HEAD"], "/admin/*", (c) => serveAdminUi(c.req.path));
+app.on(["GET", "HEAD"], "/admin", (c) => serveAdminUi(c.req.path));
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
