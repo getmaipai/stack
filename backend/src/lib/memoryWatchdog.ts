@@ -288,6 +288,10 @@ export interface MemoryReport {
   history: Array<{ at: string; available_bytes: number; swap_used_bytes: number; pressure_level: number }>;
 }
 
+const sampleListeners = new Set<(sample: SystemSample) => void>();
+/** Subscribes to every 5 s sample (resource history uses this instead of a second poller). Returns the unsubscribe function. */
+export function onMemorySample(listener: (sample: SystemSample) => void): () => void { sampleListeners.add(listener); return () => { sampleListeners.delete(listener); }; }
+
 function reducedStateNow(): ReducedState { return getReducedChatState(); }
 
 export class MemoryWatchdog {
@@ -411,6 +415,7 @@ export class MemoryWatchdog {
       this.ring.push(sample);
       if (this.ring.length > WatchdogRules.ringSize) this.ring.shift();
       setLatestSample(sample);
+      for (const listener of sampleListeners) { try { listener(sample); } catch { /* a listener never disturbs the watchdog */ } }
       this.ticks++;
       this.survivorsStopped = 0;
       if (this.ticks % 12 === 0) {
@@ -767,6 +772,13 @@ export class MemoryWatchdog {
         raise({ code: "memory-unaccounted", severity: "warning", title: "MaiPai is using more memory than its models account for", text: `${gb(bytes)} GB is unaccounted for, with ${report.stack.unregistered.count} unregistered helper processes. Idle helpers were unloaded.`, cause: "The Stack process tree uses more memory than loaded models account for.", fix: { label: "Restart engine", action: "restart_engine" } });
       }
     } else { this.unaccountedSince = null; if (bytes < 2 * GB && this.unaccountedRaised) { resolveHealth("memory-unaccounted"); this.unaccountedRaised = false; } }
+  }
+
+  /** A light view for resource history: Stack process bytes by name, no folder walk. */
+  resourceView(): { stackBytes: number; nonStackBytes: number; procs: Array<{ name: string; bytes: number }> } {
+    const tree = descendantsOf(this.rows, liveStackRoots(this.rows, this.ownPid));
+    const own = this.rows.filter((row) => row.pid === this.ownPid || tree.has(row.pid));
+    return { stackBytes: own.reduce((t, r) => t + r.rssBytes, 0), nonStackBytes: this.rows.filter((r) => !tree.has(r.pid) && r.pid !== this.ownPid).reduce((t, r) => t + r.rssBytes, 0), procs: own.map((r) => ({ name: r.name, bytes: r.rssBytes })) };
   }
 
   report(): MemoryReport {

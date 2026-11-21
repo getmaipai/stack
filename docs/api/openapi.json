@@ -24651,6 +24651,445 @@
         }
       }
     },
+    "/stack/v1/resources/history": {
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Memory, CPU and queue history for charts",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "24h",
+                "7d",
+                "30d"
+              ],
+              "default": "1h"
+            },
+            "required": false,
+            "name": "range",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "auto"
+                  ]
+                },
+                {
+                  "type": "integer",
+                  "minimum": 5
+                }
+              ],
+              "default": "auto",
+              "description": "Bucket size in seconds, or auto. The Stack raises it when the range would exceed 600 points."
+            },
+            "required": false,
+            "description": "Bucket size in seconds, or auto. The Stack raises it when the range would exceed 600 points.",
+            "name": "step",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "At most 600 points, oldest first. Raw 5 s samples for 24 h, 1 minute means for 7 days, 1 hour means for 30 days. Read only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "range": {
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "24h",
+                        "7d",
+                        "30d"
+                      ]
+                    },
+                    "step_seconds": {
+                      "type": "number"
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "t": {
+                            "type": "number",
+                            "description": "Start of the sample or bucket, milliseconds since the epoch."
+                          },
+                          "n": {
+                            "type": "number",
+                            "description": "How many 5-second samples this point averages."
+                          },
+                          "total": {
+                            "type": "number"
+                          },
+                          "avail": {
+                            "type": "number"
+                          },
+                          "wired": {
+                            "type": "number"
+                          },
+                          "compressed": {
+                            "type": "number"
+                          },
+                          "swap": {
+                            "type": "number"
+                          },
+                          "pressure": {
+                            "type": "number",
+                            "description": "Kernel pressure level, worst in the bucket: 1 normal, 2 warn, 4 critical."
+                          },
+                          "used": {
+                            "type": "number",
+                            "description": "Total minus available memory, mean."
+                          },
+                          "used_max": {
+                            "type": "number"
+                          },
+                          "stack": {
+                            "type": "number",
+                            "description": "Bytes held by the Stack's processes, mean."
+                          },
+                          "stack_max": {
+                            "type": "number"
+                          },
+                          "other": {
+                            "type": "number",
+                            "description": "Bytes held by everything outside the Stack."
+                          },
+                          "procs": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "description": "Stack bytes by process name."
+                          },
+                          "cpu": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Whole-machine CPU percent, mean; null before the second sample."
+                          },
+                          "cpu_max": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "stack_cpu": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "CPU percent of the whole machine used by the Stack's own process; engine children are not counted."
+                          },
+                          "stack_cpu_max": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "gpu": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "GPU utilisation percent; null where the OS gives no cheap figure (macOS today)."
+                          },
+                          "disk": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Bytes used by models and engines."
+                          },
+                          "tps": {
+                            "type": "object",
+                            "nullable": true,
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "description": "Tokens per second by role; null until a role keeps a counter."
+                          },
+                          "queue": {
+                            "type": "number",
+                            "description": "Requests waiting in the admission queue."
+                          }
+                        },
+                        "required": [
+                          "t",
+                          "n",
+                          "total",
+                          "avail",
+                          "wired",
+                          "compressed",
+                          "swap",
+                          "pressure",
+                          "used",
+                          "used_max",
+                          "stack",
+                          "stack_max",
+                          "other",
+                          "procs",
+                          "cpu",
+                          "cpu_max",
+                          "stack_cpu",
+                          "stack_cpu_max",
+                          "gpu",
+                          "disk",
+                          "tps",
+                          "queue"
+                        ]
+                      }
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "color_key": {
+                            "type": "string",
+                            "description": "A stable palette slot (series-1 to series-8) for this name."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "color_key"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "range",
+                    "step_seconds",
+                    "points",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/resources/summary": {
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Current resource numbers with last-hour peak and mean",
+        "responses": {
+          "200": {
+            "description": "For the admin Overview cards. Read only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sampled_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "current": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "t": {
+                          "type": "number",
+                          "description": "Start of the sample or bucket, milliseconds since the epoch."
+                        },
+                        "n": {
+                          "type": "number",
+                          "description": "How many 5-second samples this point averages."
+                        },
+                        "total": {
+                          "type": "number"
+                        },
+                        "avail": {
+                          "type": "number"
+                        },
+                        "wired": {
+                          "type": "number"
+                        },
+                        "compressed": {
+                          "type": "number"
+                        },
+                        "swap": {
+                          "type": "number"
+                        },
+                        "pressure": {
+                          "type": "number",
+                          "description": "Kernel pressure level, worst in the bucket: 1 normal, 2 warn, 4 critical."
+                        },
+                        "used": {
+                          "type": "number",
+                          "description": "Total minus available memory, mean."
+                        },
+                        "used_max": {
+                          "type": "number"
+                        },
+                        "stack": {
+                          "type": "number",
+                          "description": "Bytes held by the Stack's processes, mean."
+                        },
+                        "stack_max": {
+                          "type": "number"
+                        },
+                        "other": {
+                          "type": "number",
+                          "description": "Bytes held by everything outside the Stack."
+                        },
+                        "procs": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "number"
+                          },
+                          "description": "Stack bytes by process name."
+                        },
+                        "cpu": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Whole-machine CPU percent, mean; null before the second sample."
+                        },
+                        "cpu_max": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "stack_cpu": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "CPU percent of the whole machine used by the Stack's own process; engine children are not counted."
+                        },
+                        "stack_cpu_max": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "gpu": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "GPU utilisation percent; null where the OS gives no cheap figure (macOS today)."
+                        },
+                        "disk": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Bytes used by models and engines."
+                        },
+                        "tps": {
+                          "type": "object",
+                          "nullable": true,
+                          "additionalProperties": {
+                            "type": "number"
+                          },
+                          "description": "Tokens per second by role; null until a role keeps a counter."
+                        },
+                        "queue": {
+                          "type": "number",
+                          "description": "Requests waiting in the admission queue."
+                        }
+                      },
+                      "required": [
+                        "t",
+                        "n",
+                        "total",
+                        "avail",
+                        "wired",
+                        "compressed",
+                        "swap",
+                        "pressure",
+                        "used",
+                        "used_max",
+                        "stack",
+                        "stack_max",
+                        "other",
+                        "procs",
+                        "cpu",
+                        "cpu_max",
+                        "stack_cpu",
+                        "stack_cpu_max",
+                        "gpu",
+                        "disk",
+                        "tps",
+                        "queue"
+                      ]
+                    },
+                    "last_hour": {
+                      "type": "object",
+                      "properties": {
+                        "memory_used_peak_bytes": {
+                          "type": "number"
+                        },
+                        "memory_used_mean_bytes": {
+                          "type": "number"
+                        },
+                        "cpu_peak": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "cpu_mean": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "queue_peak": {
+                          "type": "number"
+                        },
+                        "samples": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "memory_used_peak_bytes",
+                        "memory_used_mean_bytes",
+                        "cpu_peak",
+                        "cpu_mean",
+                        "queue_peak",
+                        "samples"
+                      ]
+                    },
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "color_key": {
+                            "type": "string"
+                          },
+                          "current_bytes": {
+                            "type": "number"
+                          },
+                          "peak_bytes": {
+                            "type": "number"
+                          },
+                          "mean_bytes": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "color_key",
+                          "current_bytes",
+                          "peak_bytes",
+                          "mean_bytes"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "sampled_at",
+                    "current",
+                    "last_hour",
+                    "roles"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/disk": {
       "get": {
         "tags": [

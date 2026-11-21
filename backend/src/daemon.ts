@@ -35,6 +35,7 @@ import { imageGen } from "@/images/imageEngine";
 import { runSweeps } from "@/lib/sweeps";
 import { beginStopping } from "@/lib/lifecycle";
 import { startMemoryWatchdog } from "@/lib/memoryWatchdog";
+import { startResourceHistory } from "@/lib/resourceHistory";
 import { execFileSync } from "node:child_process";
 import { readMetalCapBytes } from "@/lib/metalCap";
 import { setMetalCapBytes, getGovernorStatus } from "@/lib/governor";
@@ -103,6 +104,7 @@ async function serve(): Promise<void> {
   hostLimiter.load();
   // The memory watchdog (2026-10-17): samples the whole computer every 5 s, gates generative starts on real free memory, and acts on pressure.
   const stopMemoryWatchdog = startMemoryWatchdog();
+  const stopResourceHistory = startResourceHistory();
   // Clips an earlier run left half-made are removed and old results swept; the video worker itself starts on the first clip and exits after ten idle minutes.
   // Songs: half-made work removed and old results swept; the music worker starts on the first song and exits after five idle minutes.
   // The same for pictures (IMGGEN-STACK-02): half-made work removed, old results swept; the picture worker starts on the first request and exits after ten idle minutes.
@@ -127,6 +129,7 @@ async function serve(): Promise<void> {
     // From here a new request gets 503 stack_restarting with Retry-After; Home retries after the restart.
     beginStopping();
     stopMemoryWatchdog();
+    stopResourceHistory();
     clearInterval(idle);
     clearInterval(sweeps);
     clearInterval(releaseCheck);
