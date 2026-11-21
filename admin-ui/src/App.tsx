@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Search, LogOut, RotateCw } from "lucide-react";
+import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw } from "lucide-react";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Status, StatusIndicator } from "@maipai/ui/src/ui/status";
 import { Toaster } from "@maipai/ui/src/ui/sonner";
@@ -10,11 +10,13 @@ import { useTheme } from "./theme";
 import { Login } from "./Login";
 import { Palette } from "./Palette";
 import type { PaletteItem } from "./Palette";
+import { Resources } from "./Resources";
 import { Engines, Health, Overview, healthKind, healthWord } from "./screens";
 
-type Screen = "overview" | "health" | "engines";
+type Screen = "overview" | "resources" | "health" | "engines";
 const NAV: { id: Screen; label: string; Icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Overview", Icon: LayoutDashboard },
+  { id: "resources", label: "Resources", Icon: Gauge },
   { id: "health", label: "Health", Icon: HeartPulse },
   { id: "engines", label: "Engines", Icon: Cpu },
 ];
@@ -89,11 +91,12 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
         <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6">
           <h2 className="mb-4 text-2xl font-semibold">{NAV.find((n) => n.id === screen)?.label}</h2>
           {screen === "overview" && <Overview snap={snap} />}
+          {screen === "resources" && <Resources changed={snap.status} />}
           {screen === "health" && <Health snap={snap} refresh={refresh} notify={notify} />}
           {screen === "engines" && <Engines snap={snap} refresh={refresh} notify={notify} />}
         </main>
       </div>
-      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-3 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {NAV.map(({ id, label, Icon }) => (
           <Button key={id} variant="ghost" className="h-14 flex-col gap-0.5 rounded-none text-xs" aria-current={screen === id ? "page" : undefined} onClick={() => go(id)}>
             <Icon aria-hidden="true" className={screen === id ? "text-primary" : "text-muted-foreground"} />{label}

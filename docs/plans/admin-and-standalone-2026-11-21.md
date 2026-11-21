@@ -302,6 +302,8 @@ to Home's own worktree and lane.
 5b. Page shell (on `@maipai/ui`, `⌘K`, top bar) with Overview, Health, Engines.
     Built 2026-11-21 (`admin-ui/`, `lib/adminUi.ts`; `bun run build:admin`).
 6. Resource history ring and the Resources screen.
+    Built 2026-11-21 (`admin-ui/src/Resources.tsx`, ADMIN-07). Gaps that need
+    new route fields are listed in the ADMIN-07 backlog row.
 7. Features, Models and priority, Settings, Updates, Tools screens.
 8. Helper: model bench and pin, role, on-demand load and unload, tools and
    approvals, chat screen.

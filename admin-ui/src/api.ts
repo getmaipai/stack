@@ -37,6 +37,8 @@ export interface Engine {
 }
 export interface Healthz { ok: true; version: string; contract: number; uptimeSeconds: number }
 
+import type { History, Range, Summary } from "./resourceData";
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const write = method !== "GET";
   const response = await fetch(path, {
@@ -68,5 +70,7 @@ export const api = {
   engines: () => call<{ engines: Engine[] }>("GET", "/stack/v1/engines"),
   restartEngine: (name: string) => call<{ ok: boolean; reason?: string }>("POST", `/stack/v1/engines/${encodeURIComponent(name)}/restart`),
   logs: (tail = 200) => call<{ lines: string[] }>("GET", `/stack/v1/logs?tail=${tail}`),
+  resourcesSummary: () => call<Summary>("GET", "/stack/v1/resources/summary"),
+  resourcesHistory: (range: Range) => call<History>("GET", `/stack/v1/resources/history?range=${range}`),
   restartStack: () => call<{ ok: true }>("POST", "/stack/v1/service/restart"),
 };
