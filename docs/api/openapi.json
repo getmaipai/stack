@@ -23630,6 +23630,109 @@
         }
       }
     },
+    "/stack/v1/tiers/choice": {
+      "put": {
+        "tags": [
+          "Tiers"
+        ],
+        "summary": "Pick a model for a level; the Stack applies it (stack-owns-model-choices)",
+        "description": "Validates that the model is a candidate of the category, then applies what the pick means to the Stack. For voice, the engine the candidate names is saved in `stack.voice.engine` and starts at the next voice engine restart. `applied` is false when the candidate names no engine to apply.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "chat",
+                      "pictures",
+                      "video",
+                      "music",
+                      "voice",
+                      "stems"
+                    ]
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "reduced",
+                      "standard",
+                      "boost",
+                      "max"
+                    ]
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "category",
+                  "tier",
+                  "model"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The pick is valid; `applied` says whether the Stack changed a setting for it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "applied": {
+                      "type": "boolean"
+                    },
+                    "pending_restart": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "applied",
+                    "pending_restart"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such candidate in that category.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/profiles/recommend": {
       "post": {
         "tags": [
