@@ -25708,6 +25708,211 @@
         }
       }
     },
+    "/stack/v1/service/restart": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Restart the Stack through its launchd or systemd unit",
+        "description": "Answers 202 first, then asks the service manager to restart the Stack about a second later, so the answer arrives. Calls made while it restarts get 503 `stack_restarting`; poll `/healthz`. Needs Home's token or a signed-in admin session. Logged as `admin.action.service.restart` with time, source and remote address.",
+        "responses": {
+          "202": {
+            "description": "The restart was requested.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "service.restart",
+                        "host.reboot"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "home"
+                      ]
+                    },
+                    "at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "action",
+                    "source",
+                    "at"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The Stack was started by hand, not by a service unit, so there is nothing to restart it through.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/host/reboot": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Restart the computer (off by default)",
+        "description": "Refused with 403 `reboot_disabled` unless the setting `stack.admin.allow_reboot` is on. Answers 202, then asks the operating system to restart about a second later. Logged as `admin.action.host.reboot` (or `.refused`).",
+        "responses": {
+          "202": {
+            "description": "The restart was requested.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "service.restart",
+                        "host.reboot"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "home"
+                      ]
+                    },
+                    "at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "action",
+                    "source",
+                    "at"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Restarting the computer is switched off in the Stack's settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/logs": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "The last lines of the Stack log, redacted",
+        "description": "Tokens, keys, cookies, passwords, admin session ids and setup codes are replaced with `[redacted]` before the lines leave the Stack. `tail` is 1 to 2000 lines (default 200).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000,
+              "default": 200,
+              "example": 200
+            },
+            "required": false,
+            "name": "tail",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The newest lines, oldest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "tail": {
+                      "type": "integer"
+                    },
+                    "redacted": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "lines",
+                    "tail",
+                    "redacted"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/disk": {
       "get": {
         "tags": [

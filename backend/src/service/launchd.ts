@@ -90,6 +90,14 @@ export function restartLaunchdService(): void {
   startLaunchdService();
 }
 
+/** Restart the running agent in place (`kickstart -k`): the process is killed and started again by launchd, so this works from inside the Stack itself (bootout-then-bootstrap would end before the second step). */
+export function kickstartLaunchdService(): void {
+  if (!existsSync(launchAgentPath())) throw new Error(`Service is not installed at ${launchAgentPath()}.`);
+  launchctl(["kickstart", "-k", launchTarget()]);
+}
+
+export function launchdInstalled(): boolean { return existsSync(launchAgentPath()); }
+
 export function uninstallLaunchdService(): void {
   stopLaunchdService();
   if (existsSync(launchAgentPath())) unlinkSync(launchAgentPath());

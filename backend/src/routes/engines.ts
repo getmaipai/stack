@@ -24,6 +24,7 @@ import { currentEngine, stagingPin, swapEngine } from "@/updates/engines";
 import { deriveEngineVersionState } from "@/lib/engineState";
 import { chatEngine, getProcess, getRoleStatus, restartForNewChatEngine, restartRole, roleCanBeStartedByStack, runningEngine, stopRole, EngineUnavailableError } from "@/lib/supervisor";
 import { readSettings } from "@/settings";
+import { auditAction, remoteOf, sourceOf } from "@/lib/adminActions";
 import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
 import { requestEngineRestart, selfHealSummary } from "@/lib/selfHeal";
@@ -233,6 +234,7 @@ function unchosenChatEngine(name: string, options: { stoppable?: boolean } = {})
 for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openapi(controlRoute(action), async (c) => {
   const { name } = c.req.valid("param");
   if (!ENGINE_BINARIES.some((pin) => pin.name === name) && !MANAGED_RUNTIMES.some((runtime) => runtime.name === name)) return c.json({ error: "Unknown engine" }, 404);
+  if (action === "restart") auditAction("engine.restart", sourceOf(c), remoteOf(c), { engine: name });
   // The picture worker is the picture service's, started by the first picture and stopped after ten idle minutes.
   if (name === IMAGE_GEN_NAME) {
     if (action === "stop" || action === "restart") { imageGen.stop(); return c.json({ ok: true }, 200); }

@@ -82,6 +82,14 @@ export function startSystemdService(): void {
   systemctl(["start", `${serviceName()}.service`]);
 }
 
+/** Restart the unit (`systemctl --user restart`); systemd stops and starts it itself, so this works from inside the Stack. */
+export function restartSystemdService(): void {
+  if (!existsSync(systemdUnitPath())) throw new Error(`Service is not installed at ${systemdUnitPath()}.`);
+  systemctl(["restart", `${serviceName()}.service`]);
+}
+
+export function systemdInstalled(): boolean { return existsSync(systemdUnitPath()); }
+
 export function stopSystemdService(): void {
   systemctl(["stop", `${serviceName()}.service`], true);
 }
