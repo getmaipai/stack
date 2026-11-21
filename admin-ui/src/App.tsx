@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw } from "lucide-react";
+import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, ToggleRight, Boxes, SlidersHorizontal, CircleArrowUp, Wrench } from "lucide-react";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Status, StatusIndicator } from "@maipai/ui/src/ui/status";
 import { Toaster } from "@maipai/ui/src/ui/sonner";
@@ -11,14 +11,24 @@ import { Login } from "./Login";
 import { Palette } from "./Palette";
 import type { PaletteItem } from "./Palette";
 import { Resources } from "./Resources";
+import { Features } from "./Features";
+import { Models } from "./Models";
+import { SettingsScreen } from "./SettingsScreen";
+import { Updates } from "./Updates";
+import { Tools } from "./Tools";
 import { Engines, Health, Overview, healthKind, healthWord } from "./screens";
 
-type Screen = "overview" | "resources" | "health" | "engines";
+type Screen = "overview" | "features" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools";
 const NAV: { id: Screen; label: string; Icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Overview", Icon: LayoutDashboard },
+  { id: "features", label: "Features", Icon: ToggleRight },
+  { id: "models", label: "Models", Icon: Boxes },
+  { id: "engines", label: "Engines", Icon: Cpu },
   { id: "resources", label: "Resources", Icon: Gauge },
   { id: "health", label: "Health", Icon: HeartPulse },
-  { id: "engines", label: "Engines", Icon: Cpu },
+  { id: "updates", label: "Updates", Icon: CircleArrowUp },
+  { id: "settings", label: "Settings", Icon: SlidersHorizontal },
+  { id: "tools", label: "Tools", Icon: Wrench },
 ];
 
 function screenFromHash(): Screen {
@@ -62,6 +72,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
     { id: "signout", label: "Sign out", run: () => { void signOut(); } },
   ], [refresh, dark, toggle, restartStack, signOut]);
 
+  const roleLabels = useMemo(() => Object.fromEntries((snap.roles ?? []).map((r) => [r.id, r.label])), [snap.roles]);
   const health = snap.status?.health;
   const problems = snap.health?.length ?? 0;
   return (
@@ -94,11 +105,16 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
           {screen === "resources" && <Resources changed={snap.status} />}
           {screen === "health" && <Health snap={snap} refresh={refresh} notify={notify} />}
           {screen === "engines" && <Engines snap={snap} refresh={refresh} notify={notify} />}
+          {screen === "features" && <Features snap={snap} refresh={refresh} notify={notify} />}
+          {screen === "models" && <Models snap={snap} refresh={refresh} notify={notify} />}
+          {screen === "updates" && <Updates refresh={refresh} notify={notify} />}
+          {screen === "settings" && <SettingsScreen refresh={refresh} notify={notify} />}
+          {screen === "tools" && <Tools roleLabels={roleLabels} notify={notify} />}
         </main>
       </div>
-      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-10 flex overflow-x-auto border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {NAV.map(({ id, label, Icon }) => (
-          <Button key={id} variant="ghost" className="h-14 flex-col gap-0.5 rounded-none text-xs" aria-current={screen === id ? "page" : undefined} onClick={() => go(id)}>
+          <Button key={id} variant="ghost" className="h-14 min-w-20 flex-1 flex-col gap-0.5 rounded-none text-xs" aria-current={screen === id ? "page" : undefined} onClick={() => go(id)}>
             <Icon aria-hidden="true" className={screen === id ? "text-primary" : "text-muted-foreground"} />{label}
           </Button>
         ))}

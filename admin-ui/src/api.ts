@@ -37,6 +37,51 @@ export interface Engine {
 }
 export interface Healthz { ok: true; version: string; contract: number; uptimeSeconds: number }
 
+export type SettingValue = string | number | boolean | null;
+export interface Setting {
+  key: string; selector: "number" | "select" | "text" | "boolean"; label: string; help: string;
+  range?: { min?: number; max?: number; options?: { value: string; label: string }[] } | null;
+  default?: SettingValue; section: { id: string; collapsed?: boolean; order: number }; level: "basic" | "advanced" | "expert";
+  secret?: boolean; needs_restart: boolean; in_effect: SettingValue; pending: SettingValue;
+}
+export interface SettingsDoc { sections: { id: string; label: string }[]; settings: Setting[] }
+
+export interface CatalogModel {
+  id: string; role: string; repo?: string; license?: string; revision?: string; engine?: string;
+  sizing?: { profile?: string; quantization?: string };
+  download?: { url?: string; sha256?: string; approx_bytes?: number; files?: unknown };
+}
+export interface InstalledModel {
+  id: string; roles: string[]; state: "notInstalled" | "installed"; runtimeState?: "loaded" | "ready" | null; pinned?: boolean;
+  sizeBytes?: number | null; fileMissing?: boolean; estimated?: boolean;
+}
+export type Tier = "p16" | "p32" | "p64" | "p128";
+export type Mode = "matched" | "custom_recommended" | "custom";
+export interface PlanRole {
+  role: string; enabled: boolean; priority: number; state: "resident" | "on_demand" | "installed" | "shared" | "off" | "unavailable";
+  model?: string; peak_bytes?: number; fit: "fits" | "queues" | "refused" | "n/a"; reason: string;
+}
+export interface Plan { tier: Tier; chat_model: string; budget: { total_bytes: number; resident_cap_bytes: number; resident_bytes: number; room_bytes: number; tight: boolean }; roles: PlanRole[]; notes: string[] }
+export interface Recommendation {
+  memory: { gb: number; source: string; bytes: number };
+  matched: { tier: Tier; quality: string; reason: string } | null;
+  custom_recommended: { plan: Plan; why: string[] };
+  templates: { tier: Tier; label: string; min_gb: number; cleared: boolean; match: boolean; resident: string[]; on_demand: string[]; not_available: string[] }[];
+  saved?: { mode: Mode; tier: string; memory_gb: number; at: string } | null;
+  replan?: { needed: boolean; reason: string | null } | null;
+}
+export interface Applied { mode: Mode; tier: Tier; plan: Plan; installs: { model: string; job: string }[]; skipped: { model: string; reason: string }[] }
+
+export interface UpdateEngine { name: string; installed: string; available: string; availableKnown: boolean; lastChecked: string; notes?: string }
+export interface Updates {
+  checksEnabled: boolean; engines: UpdateEngine[];
+  models: { lastChecked: string; entries: { id: string; installed: string; available: string }[] };
+}
+export interface CheckResult {
+  at: string; ok: boolean; results: { role: string; ok: boolean; ms: number; reason?: string; skipped?: boolean }[];
+  fitTogether?: { ok: boolean; reason?: string }; reason?: string;
+}
+
 import type { History, Range, Summary } from "./resourceData";
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -72,5 +117,24 @@ export const api = {
   logs: (tail = 200) => call<{ lines: string[] }>("GET", `/stack/v1/logs?tail=${tail}`),
   resourcesSummary: () => call<Summary>("GET", "/stack/v1/resources/summary"),
   resourcesHistory: (range: Range) => call<History>("GET", `/stack/v1/resources/history?range=${range}`),
+  settings: () => call<SettingsDoc>("GET", "/stack/v1/settings"),
+  putSettings: (values: Record<string, SettingValue>) => call<SettingsDoc>("PUT", "/stack/v1/settings", values),
+  applySettings: () => call<SettingsDoc>("POST", "/stack/v1/settings/apply", {}),
+  catalog: () => call<{ models: CatalogModel[] }>("GET", "/stack/v1/models/catalog"),
+  models: () => call<{ models: InstalledModel[] }>("GET", "/stack/v1/models"),
+  installModel: (m: CatalogModel) => call<unknown>("POST", "/stack/v1/models", {
+    id: m.id, role: m.role, repo: m.repo, url: m.download?.url, sha256: m.download?.sha256, approx_bytes: m.download?.approx_bytes,
+    licence: m.license, revision: m.revision, engine: m.engine,
+  }),
+  removeModel: (id: string) => call<unknown>("DELETE", `/stack/v1/models/${encodeURIComponent(id)}`),
+  recommend: () => call<Recommendation>("POST", "/stack/v1/profiles/recommend", {}),
+  applyProfile: (body: { mode: Mode; tier?: Tier; plan?: { roles: { role: string; enabled: boolean; priority: number }[] } }) => call<Applied>("POST", "/stack/v1/profiles/apply", body),
+  updates: () => call<Updates>("GET", "/stack/v1/updates"),
+  checkUpdates: () => call<Updates>("POST", "/stack/v1/updates/check", {}),
+  applyEngine: (name: string) => call<{ applied: boolean; tag?: string; previous?: string }>("POST", `/stack/v1/updates/engines/${encodeURIComponent(name)}/apply`, {}),
+  rollbackEngine: (name: string, tag: string) => call<{ ok: true; tag: string }>("POST", `/stack/v1/updates/engines/${encodeURIComponent(name)}/rollback`, { tag }),
+  readiness: () => call<CheckResult>("POST", "/stack/v1/check", {}),
+  latestReadiness: () => call<{ latest: (CheckResult & { stale?: boolean; staleReason?: string }) | null; running: { startedAt: string } | null }>("GET", "/stack/v1/check/latest"),
+  rebootHost: () => call<{ ok: true }>("POST", "/stack/v1/host/reboot", {}),
   restartStack: () => call<{ ok: true }>("POST", "/stack/v1/service/restart"),
 };
