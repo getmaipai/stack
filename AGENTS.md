@@ -4,7 +4,8 @@ MaiPai Stack is the engine foundation of MaiPai Home: the headless
 service that installs, sizes, runs, watches, updates and tests the
 engines and models behind Home, and gives Home one stable address by
 role. It has no interface and no users of its own; Home is its only
-caller. Home's installer installs the Stack; a person never installs the Stack by itself.
+caller. Home's installer installs the Stack, and since 2026-11-21 a person may also
+install and run the Stack by itself, with no Home (owner decision, below).
 
 Local AI is a pile of parts. One program runs the chat model, a
 different one turns speech into text, another turns text into speech, a
@@ -59,13 +60,36 @@ what is missing.
    org `SERVICES.md` lists.
 7. **Nothing leaves the house.** When Home runs on another computer at home, requests cross the home network, or the owner's own Tailscale network when an admin allows it, only inside that encrypted link.
 
+## Standalone and admin exception (Owner-approved: 2026-11-21)
+
+Jesse approved two changes to the limits below:
+
+1. **A local admin interface.** One web page served by the Stack, one
+   admin account (password set at first run, reset only by a local
+   command on the machine), reachable on loopback and, when the admin
+   switches it on, on the owner's own Tailscale address. Sign-in is
+   always required; the network is never the login. It shows what runs,
+   the configuration, restarts, settings and updates, through the same
+   `/stack/v1/*` routes Home uses. It is for when Home is down or absent.
+2. **Standalone use.** People who do not want MaiPai Home can install and
+   run the Stack alone: choose which features (roles) run, which models,
+   their priority and the tier, from the admin page. This allows a public
+   release, a standalone installer, a README and docs site for the Stack,
+   and a model picker over the pinned catalog. Pinning, checksums,
+   loopback-by-default and "nothing leaves the house" still apply.
+
+The limits below still hold except where this section says otherwise.
+Open design questions (client keys for other apps, LAN exposure, model
+search beyond the pinned catalog) are decided in
+[docs/plans/admin-and-standalone-2026-11-21.md](docs/plans/admin-and-standalone-2026-11-21.md).
+
 ## Limits (what the Stack is not, and never grows into)
 
-No user interface of any kind (Home's admin renders the Stack's state
-from its declarations). No people, no clients, no keys, no LAN exposure: the Stack listens on loopback only. Its one caller is the household's paired Home, on the same machine or on another computer in the same home that reaches this machine's loopback through the SSH link Home's installer sets up, with a key that can open this one port and nothing else. That other computer is on the household's home network or, only when an admin turns it on, on the owner's own Tailscale network; the SSH key and the pinned host key are the only authentication either way, never Tailscale access rules. Those keys belong to the operating system's SSH service and to Home, never to the Stack.
+No user interface beyond the admin page above (Home's admin renders the Stack's state
+from its declarations too). No people beyond the one admin, no clients, no keys, no LAN exposure: the Stack listens on loopback only. Its one caller is the household's paired Home, on the same machine or on another computer in the same home that reaches this machine's loopback through the SSH link Home's installer sets up, with a key that can open this one port and nothing else. That other computer is on the household's home network or, only when an admin turns it on, on the owner's own Tailscale network; the SSH key and the pinned host key are the only authentication either way, never Tailscale access rules. Those keys belong to the operating system's SSH service and to Home, never to the Stack.
 No second copy of any Home fundamental. No apps, packages or extension
-system. No general model search as an install promise. No public
-release, standalone installer, docs site or brand pitch. No control of
+system. No general model search as an install promise. No brand pitch
+(the public release, standalone installer and docs site are allowed by the exception above). No control of
 other tools (Ollama, LM Studio, Msty are never governed, updated or
 adopted; their files may be imported by verified copy after an explicit
 choice). The moment something needs to know who is asking, it belongs
