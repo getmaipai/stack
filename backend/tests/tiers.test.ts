@@ -167,3 +167,17 @@ describe("tier candidate lists for the slot dialog", () => {
     expect(resolveTier({ category: "chat", tier: "standard", profile: "p128", roomBytes: 72 * GB, slot: { model: "qwen3-6-35b-a3b-ud-q4-k-xl" } })).toBeNull();
   });
 });
+
+describe("voice candidates name their engine (VOICE-VOXCPM2-01)", () => {
+  test("every voice row that names an engine names one the Stack builds, and VoxCPM2 is never the recommended pick", async () => {
+    const { TTS_ENGINES } = await import("@/speech/ttsEngines");
+    const voice = TIER_CANDIDATES.filter((item) => item.category === "voice");
+    for (const row of voice) if (row.engine) expect(Object.keys(TTS_ENGINES)).toContain(row.engine);
+    expect(voice.find((item) => item.id === "voxcpm2-bf16")?.engine).toBe("voxcpm2");
+    expect(voice.find((item) => item.id === "voxcpm2-4bit")?.engine).toBe("voxcpm2-reduced");
+    for (const profile of ["p16", "p32", "p64", "p128"] as const) {
+      const standard = tierCandidateLists("voice", profile, 72 * GB, 0).find((level) => level.tier === "standard");
+      expect(standard?.recommended ?? "").not.toContain("voxcpm2");
+    }
+  });
+});
