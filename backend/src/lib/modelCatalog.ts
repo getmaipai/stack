@@ -157,6 +157,75 @@ export const STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT: CatalogModelLike = 
   },
 };
 
+// Optional Huihui Qwen3.8 Flash Next 177B abliterated chat model, the Max chat
+// model, served by Splash with its DFlash2 draft (measured 2026-11-21 on a
+// 128 GB M5 Max, Splash 1.7.0: 70 GB in memory at a 32K window, 74 GB after
+// long code replies, 81 tokens/s, first token 1.13 s on a 6,400-token prompt).
+// Splash keeps about 27 GB of the 94 GB of weights on the SSD, so only the rest
+// counts as resident. The GGUF is split in three parts (a split GGUF is one
+// model, Splash reads the parts from one folder): the three parts are one
+// directory model, each part pinned by size and sha256 (git-lfs oids). It runs
+// alone (Max drains the other loads first), is never a tier's recommended
+// model and is never installed by default. Licence: Qwen community licence.
+const FLASH_NEXT_REPO = "huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated-v2-GGUF";
+const FLASH_NEXT_REVISION = "cbc7fba13f1939ac3fa42b18d77ccf43847d74ef";
+const FLASH_NEXT_FOLDER = "unsloth-UD-IQ4_XS";
+const FLASH_NEXT_PARTS: Array<{ path: string; sha256: string; bytes: number }> = [
+  { path: `${FLASH_NEXT_FOLDER}/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf`, sha256: "5ce89370720f8bf90890f439361282104c1aa1482d4013bb9a50923e758e71a4", bytes: 10_946_624 },
+  { path: `${FLASH_NEXT_FOLDER}/Qwen3.8-Flash-Next-UD-IQ4_XS-00002-of-00003.gguf`, sha256: "ede87d3bd3e354d43f0e710b2df6791d3479e396847e53adbe2b48be7ba6d663", bytes: 49_835_229_856 },
+  { path: `${FLASH_NEXT_FOLDER}/Qwen3.8-Flash-Next-UD-IQ4_XS-00003-of-00003.gguf`, sha256: "f8aa8bd7ba134b3b7fe4fc95b9131fc8f6678ace374a0fa6e632225031665995", bytes: 43_836_407_744 },
+];
+export const STACK_CHAT_QWEN38_FLASH_NEXT_MODEL: CatalogModelLike = {
+  id: "qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs",
+  role: "chat",
+  repo: FLASH_NEXT_REPO,
+  license: "qwen-community-1.0",
+  revision: FLASH_NEXT_REVISION,
+  engine: "splash",
+  companions: ["qwen3-8-flash-next-177b-dflash2-draft"],
+  sizing: { profile: "p128", quantization: "UD-IQ4_XS" },
+  // The window Splash was measured and budgeted at; the chat launch honours it instead of the window setting.
+  launch: { contextLength: 32_768 },
+  download: {
+    // The first part names the pin (the weights file of a directory model); `files` holds all three, which a re-install verifies and fetches one by one.
+    url: hfUrl(`${FLASH_NEXT_REPO}/resolve/${FLASH_NEXT_REVISION}/${FLASH_NEXT_PARTS[0]!.path}`),
+    sha256: FLASH_NEXT_PARTS[0]!.sha256,
+    approx_bytes: FLASH_NEXT_PARTS.reduce((sum, part) => sum + part.bytes, 0),
+    directory: "Qwen3.8-Flash-Next-UD-IQ4_XS",
+    files: FLASH_NEXT_PARTS,
+  },
+  sampling: { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, source: "Qwen3.8 family non-thinking sampling, as the Qwen3.8-27B card (the Flash Next card was not checked)" },
+};
+
+const FLASH_NEXT_DRAFT_REPO = "incoai/Qwen3.8-Flash-Next-DFlash2";
+const FLASH_NEXT_DRAFT_REVISION = "a22a1744e85c17364dcc54a6a420af7135d4c7f6";
+export const STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT: CatalogModelLike = {
+  id: "qwen3-8-flash-next-177b-dflash2-draft",
+  role: "chat",
+  component: "draft",
+  repo: FLASH_NEXT_DRAFT_REPO,
+  license: "Apache-2.0",
+  revision: FLASH_NEXT_DRAFT_REVISION,
+  engine: "splash",
+  sizing: { profile: "p128", quantization: "BF16" },
+  download: {
+    url: hfUrl(`${FLASH_NEXT_DRAFT_REPO}/resolve/${FLASH_NEXT_DRAFT_REVISION}/model.safetensors`),
+    sha256: "d6723f2a359eaf33ec0c95f22ae8edda896774020c552296a85e1913b4d3186f",
+    approx_bytes: 1_206_140_008,
+    directory: "Qwen3.8-Flash-Next-DFlash2",
+    files: [
+      { path: "config.json", sha256: "2409575986f9ea24d455343eb469c0e6940def5edab1d1be503bb8eb4cc3b1b9", bytes: 1_236 },
+      { path: "model.safetensors", sha256: "d6723f2a359eaf33ec0c95f22ae8edda896774020c552296a85e1913b4d3186f", bytes: 1_206_140_008 },
+    ],
+  },
+};
+
+/** The optional chat models Splash runs from a pinned GGUF and a DFlash2 draft through `--model-dir` and `--draft-model` (Splash prepares its own model folder from them): the one list the install, the launch, the disk plan and the tiers read. `profiles` are the machines that are offered it, `ssdBytes` the weights Splash keeps on the SSD instead of in memory, `note` the file the install leaves beside Splash's data. */
+export const SPLASH_LOCAL_CHAT_MODELS: ReadonlyArray<{ pin: CatalogModelLike; draftPin: CatalogModelLike; profiles: readonly ("p16" | "p32" | "p64" | "p128")[]; ssdBytes: number; note: string; row: string }> = [
+  { pin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, draftPin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, profiles: ["p64", "p128"], ssdBytes: 0, note: "prepared-qwen36-35b.json", row: "chat-splash-qwen36-abliterated" },
+  { pin: STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, draftPin: STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, profiles: ["p128"], ssdBytes: 27_000_000_000, note: "prepared-qwen38-flash-next.json", row: "chat-splash-qwen38-flash-next" },
+];
+
 // The household's background worker pin, exposed as Stack's distinct
 // judge role on machines with a known p16-or-larger profile.
 export const STACK_JUDGE_MODEL: CatalogModelLike = {
@@ -1592,7 +1661,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS, ...STACK_TTS_VOXCPM2_MODELS, ...STACK_TTS_VOXCPM2_STT_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS, ...STACK_TTS_VOXCPM2_MODELS, ...STACK_TTS_VOXCPM2_STT_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

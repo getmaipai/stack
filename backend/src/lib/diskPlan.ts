@@ -11,7 +11,7 @@ import measured from "@/lib/diskPlanMeasured.json";
 import { partDef, partLabel } from "@/lib/partDefs";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
-  voxcpm2PackFor, VOXCPM2_ENGINE, VOXCPM2_REDUCED_ENGINE,
+  SPLASH_LOCAL_CHAT_MODELS, voxcpm2PackFor, VOXCPM2_ENGINE, VOXCPM2_REDUCED_ENGINE,
   CHATTERBOX_ENGINE, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
   STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_SFX_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_H3_MODELS, STACK_VIDEO_MASK_MODELS,
 } from "@/lib/modelCatalog";
@@ -171,9 +171,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (chat.length) {
     rows.push(modelRow({ id: "chat", label: `Chat AI (${chatName(bigChat!)})`, note: "The AI you talk to.", need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
   }
-  const optionalSplashChat = STACK_MODELS.find((pin) => pin.id === "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m");
-  const optionalSplashDraft = STACK_MODELS.find((pin) => pin.id === "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft");
-  if (optionalSplashChat && optionalSplashDraft && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64")) rows.push(modelRow({ id: "chat-splash-qwen36-abliterated", label: partLabel(optionalSplashChat.id), note: "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.", need: "optional", engines: [] }, [optionalSplashChat, optionalSplashDraft]));
+  for (const entry of SPLASH_LOCAL_CHAT_MODELS) if (entry.profiles.includes(tier.id)) rows.push(modelRow({ id: entry.row, label: partLabel(entry.pin.id), note: "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.", need: "optional", engines: [] }, [entry.pin, entry.draftPin]));
   const reads = plannedWhere((pin) => projectors.has(pin.id) && pin.role !== "vision");
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: partLabel("qwen3-vl-8b-instruct-q4-k-m"), note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));
   // The picture reader and its projector checks finished clips and pictures for safety when chat cannot read pictures (AIMODELS-VISION-01).

@@ -5,7 +5,7 @@
 import { PROFILE_MODEL_BINDINGS, sizeMachine, type ProfileTier } from "@/profiles";
 import { knownAppleChip, type HardwareInfo, type MemorySource } from "@/lib/hardware";
 import { splashDraftWanted } from "@/lib/splash";
-import { STACK_SFX_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS, STACK_DEREVERB_MODEL } from "@/lib/modelCatalog";
+import { SPLASH_LOCAL_CHAT_MODELS, STACK_SFX_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS, STACK_DEREVERB_MODEL } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
@@ -65,10 +65,10 @@ export function videoInstallModels(installedIds: Iterable<string> = []): PlanMod
   const installed = new Set(installedIds);
   return STACK_VIDEO_MODELS.flatMap((pin) => view(pin, installed, false) ?? []);
 }
-/** Optional Splash chat model and its required speculative draft, offered on p64 and p128 as an admin's choice (no tier binds it). */
-export function splashChatInstallModels(installedIds: Iterable<string> = []): PlanModel[] {
+/** The optional Splash chat models and their required speculative drafts, offered as an admin's choice (no Standard tier binds them) on the machines each one names: the 35B on p64 and p128, Flash Next (the Max chat model) on p128. No tier lists them all. */
+export function splashChatInstallModels(installedIds: Iterable<string> = [], tier?: ProfileTier["id"]): PlanModel[] {
   const installed = new Set(installedIds);
-  return STACK_MODELS.filter((pin) => pin.id === "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m" || pin.id === "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft").flatMap((pin) => view(pin, installed, false, true) ?? []);
+  return SPLASH_LOCAL_CHAT_MODELS.filter((entry) => !tier || entry.profiles.includes(tier)).flatMap((entry) => [entry.pin, entry.draftPin].flatMap((pin) => view(pin, installed, false, true) ?? []));
 }
 /** LTX25-ENGINE-01: the LTX-2.5 pack (one pin: weights, text encoder and VAEs together), in the shape of a pull. */
 export function videoLtx25InstallModels(installedIds: Iterable<string> = []): PlanModel[] {

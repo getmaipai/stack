@@ -56,7 +56,7 @@ installPlanRoutes.openapi(planRoute, async (c) => {
     ...(rows.has("pictures-clearer") ? restoreInstallModels(installedIds) : []),
     ...(rows.has("talking-pictures") ? talkingPicturesInstallModels(installedIds) : []),
     ...(rows.has("video") ? videoInstallModels(installedIds) : []),
-    ...(plan.tier === "p64" || plan.tier === "p128" ? splashChatInstallModels(installedIds) : []),
+    ...(plan.tier ? splashChatInstallModels(installedIds, plan.tier) : []),
   ];
   return c.json({ ...plan, disk, optional_models: optional }, 200);
 });

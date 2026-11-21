@@ -34,7 +34,7 @@ const SMALL_ROLE_BYTES: Partial<Record<RoleId, number>> = { embed: 0.7 * GB, rer
 const STT_BYTES = { small: 0.2 * GB, large: 0.9 * GB };
 
 /** Uncensored builds are never chosen automatically; a person picks one by hand in Custom. */
-export const PLANNER_EXCLUDED_CHAT: readonly string[] = ["qwen3-6-35b-a3b-huihui-abliterated-q4-k-m"];
+export const PLANNER_EXCLUDED_CHAT: readonly string[] = ["qwen3-6-35b-a3b-huihui-abliterated-q4-k-m", "qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs"];
 
 export interface PlanRole {
   role: RoleId;

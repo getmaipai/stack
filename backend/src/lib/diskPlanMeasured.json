@@ -181,6 +181,14 @@
       "download_bytes": 1052513456,
       "installed_bytes": 1052513456
     },
+    "qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs": {
+      "download_bytes": 93682584224,
+      "installed_bytes": 93682584224
+    },
+    "qwen3-8-flash-next-177b-dflash2-draft": {
+      "download_bytes": 1206140008,
+      "installed_bytes": 1206140008
+    },
     "qwen3-8-27b-huihui-abliterated-mmproj-bf16": {
       "download_bytes": 931145888,
       "installed_bytes": 931145888

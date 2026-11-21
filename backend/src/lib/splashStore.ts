@@ -24,7 +24,7 @@ import { dataDir } from "@/lib/paths";
 import { currentEngineBinary, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { ENGINE_READY_MARKER, installedEnginePin } from "@/lib/engineCatalog";
 import { getModel, type CatalogModelLike, type ModelRecord } from "@/lib/modelStore";
-import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT } from "@/lib/modelCatalog";
+import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS } from "@/lib/modelCatalog";
 
 export const splashRoot = (): string => join(dataDir, "splash");
 /** The hub cache Splash reads (HF_HUB_CACHE): the Stack's own layout of the pinned files, not the store's `models/hub`. */
@@ -134,9 +134,20 @@ function layOutRepo(repo: LayoutRepo, placed: SplashLayout["placed"]): void {
   for (const name of existsSync(blobs) ? readdirSync(blobs) : []) if (!keepBlobs.has(name)) rmSync(join(blobs, name), { force: true });
 }
 
+/** The optional chat model (and its draft) a pin id belongs to: either the model's id or its draft's. */
+export function splashLocalEntry(id: string): (typeof SPLASH_LOCAL_CHAT_MODELS)[number] | null {
+  return SPLASH_LOCAL_CHAT_MODELS.find((entry) => entry.pin.id === id || entry.draftPin.id === id) ?? null;
+}
+
+/** The weights Splash keeps in memory: the file's size less what Splash leaves on the SSD for this model (the 94 GB Flash Next keeps about 27 GB there). The memory estimate and the governor's figure start from this, never from the file size. */
+export function splashResidentWeightsBytes(modelId: string, sizeBytes: number): number {
+  return Math.max(0, sizeBytes - (splashLocalEntry(modelId)?.ssdBytes ?? 0));
+}
+
 /** The target and draft pins a Splash launch for this model id lays out. */
 export function splashPairFor(modelId: string): { pin: CatalogModelLike; draftPin: CatalogModelLike } {
-  if (modelId === STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.id) return { pin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, draftPin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT };
+  const local = splashLocalEntry(modelId);
+  if (local && local.pin.id === modelId) return { pin: local.pin, draftPin: local.draftPin };
   if (modelId === STACK_CHAT_QWEN38_UNCENSORED_MODEL.id) return { pin: STACK_CHAT_QWEN38_UNCENSORED_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
   return modelId === STACK_CODING_HEAVY_MODEL.id ? { pin: STACK_CODING_HEAVY_MODEL, draftPin: STACK_CODING_HEAVY_DRAFT_MODEL } : { pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
 }
@@ -155,8 +166,6 @@ export function layOutSplashCache(getModel: (id: string) => ModelRecord | null, 
   return { hubDir: splashHubDir(), homeDir: splashHomeDir(), tmpDir: splashTmpDir(), model: pin.download?.files ? target.repo : `${target.repo}:${variant}`, revision: target.revision, placed };
 }
 
-const MOE_ID = STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.id;
-
 /** The folders a Splash process needs without a hub layout: state, hub cache and temporary space (the temporary one emptied). */
 export function splashDirs(): { hubDir: string; homeDir: string; tmpDir: string } {
   mkdirSync(splashHubDir(), { recursive: true, mode: 0o700 });
@@ -168,30 +177,45 @@ export function splashDirs(): { hubDir: string; homeDir: string; tmpDir: string 
 
 /** Where Splash keeps prepared models for its HOME (`Path.home() / Library/Application Support/Splash/models`). */
 export const splashModelsDir = (): string => join(splashHomeDir(), "Library", "Application Support", "Splash", "models");
-/** The note the install leaves: the pins prepared and the folder Splash returned. */
-export const splashPreparedNotePath = (): string => join(splashRoot(), "prepared-qwen36-35b.json");
-
-/** What `--model-dir` and `--draft-model` name for the 35B: its verified GGUF file and its draft folder. Splash refuses a hand-built model folder (it derives the config and tokenizer from the GGUF), so the launch hands it these two paths and Splash prepares the folder itself, reading only file metadata once the install has prepared it. */
-export function splashLocalModelFor(modelId: string, lookup: (id: string) => ModelRecord | null = getModel): { modelDir: string; draftDir: string; model: string } | null {
-  if (modelId !== MOE_ID) return null;
-  const target = lookup(MOE_ID);
-  const draft = lookup(STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT.id);
-  if (!target?.modelPath || !existsSync(target.modelPath)) throw new SplashLayoutError("The chat model file is missing. Install it again from Settings.");
-  if (!draft?.modelPath || !existsSync(draft.modelPath)) throw new SplashLayoutError("The chat model's speed-up files are missing. Install them again from Settings.");
-  return { modelDir: target.modelPath, draftDir: draft.modelPath, model: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.repo! };
+/** The note the install leaves for a model: the pins prepared and the folder Splash returned. */
+export const splashPreparedNotePath = (modelId: string): string => join(splashRoot(), requireLocal(modelId).note);
+function requireLocal(modelId: string): (typeof SPLASH_LOCAL_CHAT_MODELS)[number] {
+  const entry = splashLocalEntry(modelId);
+  if (!entry) throw new SplashLayoutError(`${modelId} is not a chat model Splash prepares from local files.`);
+  return entry;
 }
 
-const pinsKey = (): { target: string; draft: string } => ({
-  target: `${STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.revision}:${STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL.download!.sha256}`,
-  draft: `${STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT.revision}:${STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT.download!.sha256}`,
-});
-function preparedNote(): { target?: string; draft?: string; prepared?: string } | null {
-  try { return JSON.parse(readFileSync(splashPreparedNotePath(), "utf8")); } catch { return null; }
+/** The file `--model-dir` names: the model's own file, or, for a model split in parts, its first part (Splash reads the others from the same folder). */
+function localModelFile(pin: CatalogModelLike, modelPath: string): string {
+  const files = pin.download?.files;
+  if (!files?.length) return modelPath;
+  const urlFile = pin.download ? urlFileName(pin.download.url) : "";
+  return join(modelPath, (files.find((file) => basename(file.path) === urlFile) ?? files[0]!).path);
+}
+
+/** What `--model-dir` and `--draft-model` name for an optional Splash chat model: its verified GGUF file (the first part of a split one) and its draft folder. Splash refuses a hand-built model folder (it derives the config and tokenizer from the GGUF), so the launch hands it these two paths and Splash prepares the folder itself, reading only file metadata once the install has prepared it. */
+export function splashLocalModelFor(modelId: string, lookup: (id: string) => ModelRecord | null = getModel): { modelDir: string; draftDir: string; model: string } | null {
+  const entry = splashLocalEntry(modelId);
+  if (!entry || entry.pin.id !== modelId) return null;
+  const target = lookup(entry.pin.id);
+  const draft = lookup(entry.draftPin.id);
+  const modelFile = target?.modelPath ? localModelFile(entry.pin, target.modelPath) : null;
+  if (!modelFile || !existsSync(modelFile)) throw new SplashLayoutError("The chat model file is missing. Install it again from Settings.");
+  if (!draft?.modelPath || !existsSync(draft.modelPath)) throw new SplashLayoutError("The chat model's speed-up files are missing. Install them again from Settings.");
+  return { modelDir: modelFile, draftDir: draft.modelPath, model: entry.pin.repo! };
+}
+
+const pinsKey = (modelId: string): { target: string; draft: string } => {
+  const { pin, draftPin } = requireLocal(modelId);
+  return { target: `${pin.revision}:${pin.download!.sha256}`, draft: `${draftPin.revision}:${draftPin.download!.sha256}` };
+};
+function preparedNote(modelId: string): { target?: string; draft?: string; prepared?: string } | null {
+  try { return JSON.parse(readFileSync(splashPreparedNotePath(modelId), "utf8")); } catch { return null; }
 }
 /** Whether the note says the folder for the current pins exists. */
-export function splashPreparedCurrent(): boolean {
-  const note = preparedNote();
-  const key = pinsKey();
+export function splashPreparedCurrent(modelId: string): boolean {
+  const note = preparedNote(modelId);
+  const key = pinsKey(modelId);
   return !!note && note.target === key.target && note.draft === key.draft && !!note.prepared && existsSync(note.prepared);
 }
 
@@ -203,10 +227,9 @@ const spawnRunner: PrepareRunner = async (command, options) => {
   return { code, out, err };
 };
 
-/** Install step after the target and draft verify: Splash's own installer prepares the model folder once (it hashes the 21 GB file once), with Splash's HOME, so the launch finds it. Runs again when a pin changes; does nothing when the folder for the current pins exists. Throws SplashLayoutError in plain words. */
-export async function prepareSplashModel(run: PrepareRunner = spawnRunner): Promise<boolean> {
-  const target = STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL;
-  const draftPin = STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT;
+/** Install step after the target and draft verify: Splash's own installer prepares the model folder once (it hashes the file once), with Splash's HOME, so the launch finds it. Runs again when a pin changes; does nothing when the folder for the current pins exists. Throws SplashLayoutError in plain words. */
+export async function prepareSplashModel(modelId: string, run: PrepareRunner = spawnRunner): Promise<boolean> {
+  const { pin: target, draftPin } = requireLocal(modelId);
   const targetRecord = getModel(target.id);
   const draftRecord = getModel(draftPin.id);
   if (!targetRecord?.modelPath || !targetRecord.verifiedAt || targetRecord.sha256?.toLowerCase() !== target.download!.sha256.toLowerCase() || targetRecord.revision !== target.revision || !existsSync(targetRecord.modelPath)) throw new SplashLayoutError("Splash needs the pinned, verified chat model before preparation.");
@@ -214,7 +237,7 @@ export async function prepareSplashModel(run: PrepareRunner = spawnRunner): Prom
   // The engine may arrive after the model: then the launch's own preparation (same Splash call) does it at the first start, and this step has nothing to do yet.
   const launcher = splashChatBinary();
   if (!launcher) return false;
-  if (splashPreparedCurrent()) return true;
+  if (splashPreparedCurrent(modelId)) return true;
   const root = dirname(dirname(launcher));
   const python = join(root, "python", "bin", "python3");
   const dirs = splashDirs();
@@ -222,10 +245,10 @@ export async function prepareSplashModel(run: PrepareRunner = spawnRunner): Prom
   mkdirSync(models, { recursive: true, mode: 0o700 });
   const script = "import sys; from install.local import prepare_local_model; print(prepare_local_model(sys.argv[1], draft=sys.argv[2], models_dir=sys.argv[3]))";
   const env: Record<string, string> = { HOME: dirs.homeDir, TMPDIR: dirs.tmpDir, HF_HOME: dirs.homeDir, HF_HUB_CACHE: dirs.hubDir, HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1", DO_NOT_TRACK: "1", PYTHONUNBUFFERED: "1", PYTHONPATH: root, PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
-  const result = await run([python, "-P", "-c", script, targetRecord.modelPath, draftRecord.modelPath, models], { cwd: root, env });
+  const result = await run([python, "-P", "-c", script, localModelFile(target, targetRecord.modelPath), draftRecord.modelPath, models], { cwd: root, env });
   const prepared = result.out.trim().split("\n").pop() ?? "";
   if (result.code !== 0 || !prepared.startsWith("/")) throw new SplashLayoutError(`Splash could not prepare the chat model: ${(result.err || result.out).trim().split("\n").slice(-3).join(" | ") || "no reason given"}. Install it again from Settings.`);
-  writeFileSync(splashPreparedNotePath(), JSON.stringify({ ...pinsKey(), prepared }), { mode: 0o600 });
+  writeFileSync(splashPreparedNotePath(modelId), JSON.stringify({ ...pinsKey(modelId), prepared }), { mode: 0o600 });
   return true;
 }
 
@@ -238,16 +261,17 @@ function splashChatBinary(): string | null {
   return pin && existsSync(join(engineDir(pin), ENGINE_READY_MARKER)) ? engineBinaryPath(pin) : null;
 }
 
-/** Removal cleanup for the 35B: the folder Splash prepared and the install's note. */
-export function removePreparedSplashModel(): void {
-  const note = preparedNote();
+/** Removal cleanup for an optional Splash chat model: the folder Splash prepared and the install's note. */
+export function removePreparedSplashModel(modelId: string): void {
+  const note = preparedNote(modelId);
   if (note?.prepared && note.prepared.startsWith(splashModelsDir())) rmSync(note.prepared, { recursive: true, force: true });
-  rmSync(splashPreparedNotePath(), { force: true });
+  rmSync(splashPreparedNotePath(modelId), { force: true });
 }
 
 /** The coding model and its draft are the only ids whose removal affects the layout. */
 export function releaseSplashLayoutFor(id: string): void {
-  if (id === MOE_ID || id === STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT.id) { removePreparedSplashModel(); return; }
+  const local = splashLocalEntry(id);
+  if (local) { removePreparedSplashModel(local.pin.id); return; }
   if (![STACK_CODING_MODEL.id, STACK_CODING_DRAFT_MODEL.id, STACK_CODING_HEAVY_MODEL.id, STACK_CODING_HEAVY_DRAFT_MODEL.id, STACK_CHAT_QWEN38_UNCENSORED_MODEL.id].includes(id)) return;
   try { rmSync(splashRoot(), { recursive: true, force: true }); } catch { /* a running engine's folder may refuse; the next layout repairs it */ }
 }
