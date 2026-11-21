@@ -2,7 +2,8 @@
 // sampling temperature and pitch offset; ranges are refused with a plain message; only an address on the household's own
 // network is taken; a zero offset is no shift; the Pocket engine ignores all of it.
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
 import { __resetHealthForTests } from "@/lib/health";
@@ -12,7 +13,7 @@ import { resetSupervisorForTests, scriptedProcess, scriptedSpeechLog, setMachine
 import { ENV_READY_MARKER } from "@/lib/uvEnvironment";
 import { mlxAudioRoot } from "@/speech/mlxAudio";
 import { pocketTtsRoot } from "@/speech/pocketTts";
-import { __setClonerForTests, PITCH_MESSAGE, TEMPERATURE_MESSAGE, voiceSettingsRefusal } from "@/speech/chatterboxClones";
+import { __resetClonerCheckForTests, __setClonerForTests, fileVerifiedOnce, PITCH_MESSAGE, TEMPERATURE_MESSAGE, voiceSettingsRefusal } from "@/speech/chatterboxClones";
 import { clearTtsEngineFailures } from "@/speech/ttsEngines";
 import { __resetSettingsForTests, applyPendingSettings, updateSettings } from "@/settings";
 
@@ -130,4 +131,28 @@ test("the Pocket engine ignores a temperature and a pitch", async () => {
   const sent = scriptedSpeechLog.at(-1)!;
   expect(sent.temperature).toBeUndefined();
   expect(sent.pitch_semitones).toBeUndefined();
+});
+
+test("the clip tokenizer is hashed once per file state: again after the file changes, never remembered on a mismatch, false when missing", async () => {
+  __resetClonerCheckForTests();
+  const dir = mkdtempSync(join(tmpdir(), "cloner-check-"));
+  const file = join(dir, "model.safetensors");
+  let hashes = 0;
+  const digestOf = async (): Promise<string> => { hashes += 1; return "good"; };
+  try {
+    expect(await fileVerifiedOnce(file, "good", digestOf)).toBe(false);
+    expect(hashes).toBe(0);
+    writeFileSync(file, "weights");
+    expect(await fileVerifiedOnce(file, "good", digestOf)).toBe(true);
+    expect(await fileVerifiedOnce(file, "good", digestOf)).toBe(true);
+    expect(hashes).toBe(1);
+    writeFileSync(file, "other weights");
+    utimesSync(file, new Date(), new Date(Date.now() + 5000));
+    expect(await fileVerifiedOnce(file, "good", digestOf)).toBe(true);
+    expect(hashes).toBe(2);
+    __resetClonerCheckForTests();
+    expect(await fileVerifiedOnce(file, "bad", digestOf)).toBe(false);
+    expect(await fileVerifiedOnce(file, "bad", digestOf)).toBe(false);
+    expect(hashes).toBe(4);
+  } finally { rmSync(dir, { recursive: true, force: true }); __resetClonerCheckForTests(); }
 });

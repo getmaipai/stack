@@ -3,12 +3,14 @@
 // sampling temperature and an optional pitch offset. Three things live here: the ranges both are checked against
 // (the same ones as the HouseholdVoice record), what becomes of a request's voice on this engine, and the one-time fetch
 // of the clip tokenizer.
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { downloadUrl } from "@/lib/download";
 import { STACK_TTS_CHATTERBOX_CLONER, CHATTERBOX_CLONER_REPO, CHATTERBOX_CLONER_REVISION } from "@/lib/modelCatalog";
 import { installCatalogModel } from "@/lib/modelStore";
 import { modelsDir } from "@/lib/paths";
-import { readHfFile } from "@/lib/store/hfCache";
+import { sha256OfPath } from "@/lib/store/blobs";
+import { hfSnapshotsRoot } from "@/lib/store/layout";
 import { privateHost, VoiceRefusedError } from "@/speech/voices";
 
 export const VOICE_TEMPERATURE_RANGE = { min: 0.1, max: 2.0 } as const;
@@ -30,8 +32,26 @@ export function clipVoiceAddress(voiceUrl: string | undefined): string | undefin
   return voiceUrl && /^https?:\/\//.test(voiceUrl) ? voiceUrl : undefined;
 }
 
+/** The file state (path, size, modified time) whose digest last matched. Hashing the 495 MB clip tokenizer on every
+ * spoken sentence added about 150 ms before the first audio of each cloned-voice request (measured 2026-11-21). */
+let clonerVerified: string | null = null;
+export function __resetClonerCheckForTests(): void { clonerVerified = null; }
+
+/** Whether the file at `path` has the expected digest. The digest is computed once per file state: a file that is
+ * replaced, resized or rewritten is hashed again, and a mismatch is never remembered. */
+export async function fileVerifiedOnce(path: string, expected: string, digestOf: (path: string) => Promise<string> = sha256OfPath): Promise<boolean> {
+  if (!existsSync(path)) return false;
+  const stat = statSync(path);
+  const state = `${path}:${stat.size}:${stat.mtimeMs}`;
+  if (clonerVerified === state) return true;
+  if ((await digestOf(path)) !== expected) return false;
+  clonerVerified = state;
+  return true;
+}
+
 export async function chatterboxClonerPresent(): Promise<boolean> {
-  return (await readHfFile(CHATTERBOX_CLONER_REPO, CHATTERBOX_CLONER_REVISION, STACK_TTS_CHATTERBOX_CLONER.download!.hub_file!))?.digest === STACK_TTS_CHATTERBOX_CLONER.download!.sha256;
+  const download = STACK_TTS_CHATTERBOX_CLONER.download!;
+  return fileVerifiedOnce(join(hfSnapshotsRoot(CHATTERBOX_CLONER_REPO), CHATTERBOX_CLONER_REVISION, download.hub_file!), download.sha256);
 }
 
 /** The suite's stand-in for the 495 MB fetch; null outside tests. */
