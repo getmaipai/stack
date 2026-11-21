@@ -305,6 +305,8 @@ to Home's own worktree and lane.
     Built 2026-11-21 (`admin-ui/src/Resources.tsx`, ADMIN-07). Gaps that need
     new route fields are listed in the ADMIN-07 backlog row.
 7. Features, Models and priority, Settings, Updates, Tools screens.
+   Built 2026-11-21 (`admin-ui/src/{Features,Models,SettingsScreen,Updates,Tools}.tsx`,
+   helpers in `manage.ts`, ADMIN-08). Route gaps are listed in the ADMIN-08 backlog row.
 8. Helper: model bench and pin, role, on-demand load and unload, tools and
    approvals, chat screen.
 9. Screenshots from seeded data, opened and judged on desktop and phone.
