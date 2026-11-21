@@ -5,59 +5,57 @@
   </picture>
 </p>
 
-MaiPai Stack is the engine foundation of MaiPai Home: the headless
-service that installs, sizes, runs, watches, updates and tests the
-engines and models behind Home, and gives Home one stable address by
-role. It has no interface and no users of its own; Home is its only
-caller.
+### Run local AI engines on your own computer, from one web page.
 
-a person installs the Stack only through Home's installer, on Home's computer or, with `--engine-computer`, on a second computer at home.
-It updates with Home's releases.
+[User docs](docs/user/index.md) · [Install](docs/user/install.md) · [Developer docs](docs/dev.md) · Releases (none published yet)
 
-Local AI is a pile of parts. One program runs the chat model, a
-different one turns speech into text, another turns text into speech, a
-small model listens for the wake word, and a fourth draws pictures. Each
-starts its own way, keeps its own files, needs its own slice of memory
-and breaks in its own way. Home should never have to know any of that.
-The Stack is the one interface between those raw parts and everything
-MaiPai builds on top: Home asks for "chat" or "say this" at one address
-and gets an answer, and the Stack decides which engine runs it, makes
-sure the right model file is there and untampered, keeps every engine
-fitting in memory at the same time, notices when one breaks and says how
-to fix it, and swaps a new build in, or back out, without Home changing
-a line. Swap an engine, add a role, move from the Mac to the robot's
-Linux box: Home does not change. Without the Stack, every product would
-carry its own copy of all that, and a kid asking for a picture could
-crash the family's chat.
+MaiPai Stack runs the engines behind private, local AI: chat, voice in, voice out, a wake word, and pictures, video and music when you want them. It installs the parts, checks them against pinned checksums, keeps them all inside your computer's memory, and tells you in plain words when one needs help. Everything runs on your computer. Nothing is sent anywhere unless you switch on an update check or download a model.
 
-This repo is the daemon: one Bun process serving the OpenAI-shaped role
-routes and the control routes on a loopback port, with the supervisor,
-the memory governor, the pinned engine and model store, health, updates
-and the event feed behind them. The design record is
-[docs/dev.md](docs/dev.md), the contract Home and Bot build against is
-[docs/integrations.md](docs/integrations.md), and what is built and
-what is missing is [docs/BACKLOG.md](docs/BACKLOG.md), and what the Stack
-pins today, engine by engine and model by model, is
-[docs/components.md](docs/components.md), generated from the code.
-Standards live
-in [getmaipai/.github](https://github.com/getmaipai/.github);
-`scripts/check.sh` is the gate and needs sibling checkouts of
-`getmaipai/.github` and `getmaipai/commons`.
+You manage it from one admin page. MaiPai Home, the family AI hub, uses the same Stack, and you can also run the Stack alone, with no Home.
 
-**Build**: `bash scripts/build-binary.sh` compiles the daemon into one
-binary at `dist/maipai-stack-<platform>-<arch>` (`bun build --compile`),
-plus `migrations/` and `backend-src/` (a real, dereferenced copy of this
-repo's own `backend/`) as sibling directories the binary needs at
-runtime - this is what Home's installer runs to place the Stack, never
-something a person runs by hand. Verified live on every run against a
-real scratch data directory: `/healthz`, and a real `stt` transcription
-end to end (a compiled binary can never load `sherpa-onnx-node`'s
-native binding directly - a Bun bundler issue tracked at
-[getmaipai/stack#8](https://github.com/getmaipai/stack/issues/8) - so
-the worker runs through a real `bun`, named by `STACK_BUN_BIN`, against
-the vendored `backend-src/` instead). `SKIP_VERIFY=1` skips all live
-checks; `SKIP_STT_VERIFY=1` keeps `/healthz` but skips the slower real
-download. See `docs/dev.md`'s HOME-STACK-01 entry for the full story.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/admin/overview-desktop-dark.webp">
+  <img src="docs/images/admin/overview-desktop-light.webp" alt="The admin page Overview: status, version, memory, and one card per feature showing which model answers." width="720">
+</picture>
+
+## What it does
+
+- **One address per job.** Ask for chat, speech, or a picture at one local address. The Stack picks the engine.
+- **Features you switch on or off.** Chat, voice in, voice out, wake word, vision, images, video, music, and more.
+- **Models you choose.** Pick from a pinned list, see the size, download or remove with one button.
+- **Memory that fits.** A setup for your computer (16, 32, 64 or 128 GB) and a priority order for when memory is tight.
+- **Honest health.** A short list of problems, each with one fix button.
+- **Updates you can undo.** Update an engine, go back if the new one misbehaves. The Stack itself rolls back too.
+- **A Helper.** A small built-in assistant that answers questions about the machine. It asks before it changes anything.
+
+## Getting started
+
+About 10 minutes on a Mac with Apple Silicon. You need [Bun](https://bun.sh) installed.
+
+No release has been published yet, so you build one first. From a checkout of this repo (the build needs sibling checkouts of `getmaipai/commons` and `getmaipai/.github`, see [docs/dev/installer.md](docs/dev/installer.md)):
+
+```
+bash scripts/release-stack.sh v0.1.0
+```
+
+That writes the release files to `release/`. The install steps, and how to install from a published release once there is one, are in [docs/user/install.md](docs/user/install.md). After install, open `http://127.0.0.1:8770/admin/` and enter the one-time setup code that the installer points you to.
+
+> The Stack listens on your own computer only. The admin page needs a password. Reaching it from another device is off unless you turn on the Tailscale option in Settings.
+
+## Status
+
+MaiPai Stack is pre-1.0. Home runs on it every day, so the engines work. The standalone install and the admin page are new: macOS on Apple Silicon is tested, Linux is not, Windows is not supported. Tell us what you find.
+
+## Documentation
+
+- [User docs](docs/user/index.md): install, sign in, choose features and models, update, fix a problem, privacy.
+- [Developer docs](docs/dev.md): the design record, plus the [admin API](docs/dev/admin-api.md), the [Helper](docs/dev/helper.md) and the [installer](docs/dev/installer.md).
+- [Integration contract](docs/integrations.md) for Home and Bot, and [what is pinned today](docs/components.md).
+- Found a bug? Open an issue on this repo.
+
+## Development
+
+This repo is one Bun daemon (`backend/`) and the admin page (`admin-ui/`). `scripts/check.sh` is the gate and needs sibling checkouts of `getmaipai/.github` and `getmaipai/commons`. `bash scripts/make-admin-screenshots.sh` regenerates the screenshots in `docs/images/admin/`. Standards live in [getmaipai/.github](https://github.com/getmaipai/.github).
 
 ---
 

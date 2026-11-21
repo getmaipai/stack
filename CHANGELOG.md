@@ -2,14 +2,16 @@
 
 All notable changes to MaiPai Stack are recorded here. The format is
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
-uses [Semantic Versioning](https://semver.org/). The Stack has no
-release of its own: it ships inside MaiPai Home's installer and updates
-with Home's releases, so this file tracks what a Home release picks up.
+uses [Semantic Versioning](https://semver.org/). Inside Home the Stack
+ships with Home's installer and updates with Home's releases. Standalone
+use has its own release flow (`scripts/release-stack.sh`), but no release
+is published yet. This file tracks what either picks up.
 
 ## [Unreleased]
 
 ### Added
 
+- Public README, user docs (`docs/user/`), developer docs for the admin API, the Helper and the installer (`docs/dev/`), and `scripts/make-admin-screenshots.sh`, which writes the admin page screenshots (every screen, desktop and 375 px, light and dark) from a scratch Stack to `docs/images/admin/` (ADMIN-11). The admin page now says "3 hours ago" instead of "3 h ago", and a Health card puts its fix button under the text on a phone.
 - Optional Max chat model on Splash: Huihui Qwen3.8 Flash Next 177B (UD-IQ4_XS, three-part GGUF, 93.7 GB) with its DFlash2 draft, on p128 only. A split model is one pinned directory model of verified parts; the Splash memory budget counts only the weights it keeps in memory. A Max chat candidate listed after Ornith, never recommended, runs alone. Files already on the disk at the pinned hashes are adopted without a download (`docs/dev/moe-chat-trial.md`).
 - The installed Huihui 35B (with its draft) now appears in the chat role's `models` list and loads through the model load route, like the dense 27B. It is still optional: no tier binds it and no recommendation changes. Before, Home's chooser got a 404 for it.
 - The Huihui Qwen3.6-35B-A3B chat model is now pickable at Standard on p64 and p128 in the tier chooser (Settings, AI and models). It sits after the other Standard candidates, so no recommendation changes. Home's "load this model" for it now picks Splash before the choice is stored.

@@ -387,7 +387,7 @@ Home takes, encrypts, schedules and restores the backup (org
 
 ## Install and service hand-off
 
-Home's installer installs the Stack; a person never installs the Stack by itself.
+Home's installer installs the Stack for Home. Since 2026-11-21 a person may also install it alone, with no Home, through `scripts/install.sh` (see [dev/installer.md](dev/installer.md)).
 
 What Home's installer does, in order: it places the `maipai-stack`
 binary for the platform; it creates the Stack's data directory

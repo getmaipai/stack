@@ -136,13 +136,13 @@ export function Health({ snap, refresh, notify }: { snap: Snapshot; refresh: () 
       {snap.health.map((item) => (
         <li key={item.code}>
           <Card>
-            <CardHeader>
+            <CardHeader className="max-sm:flex max-sm:flex-col max-sm:items-start max-sm:gap-2">
               <CardTitle className="flex flex-wrap items-center gap-2 text-base">
                 <Badge variant={SEVERITY[item.severity].variant}>{SEVERITY[item.severity].word}</Badge>{item.title}
               </CardTitle>
               <CardDescription>{item.text}</CardDescription>
               {item.fix && (
-                <CardAction>
+                <CardAction className="max-sm:order-last max-sm:self-start">
                   <Button size="sm" disabled={busy === item.code} onClick={() => { void fix(item); }}>{busy === item.code ? "Working" : item.fix.label}</Button>
                 </CardAction>
               )}

@@ -316,9 +316,14 @@ to Home's own worktree and lane.
    ask is fixed, not the model's; `stack.admin.*` and secret settings are refused to
    the Helper even with a click.
 9. Screenshots from seeded data, opened and judged on desktop and phone.
+   Built 2026-11-21 (`scripts/make-admin-screenshots.sh`, `scripts/admin-screenshots/`,
+   44 images in `docs/images/admin/`, ADMIN-11). A scratch Stack with demo data swapped in at
+   the browser; all images opened and judged; two UI defects fixed.
 10. Standalone installer and update path.
     Built 2026-11-21 (`scripts/release-stack.sh`, `scripts/install.sh`, ADMIN-10).
 11. README, user and dev docs, backlog rows, release.
+    Written 2026-11-21 (`README.md`, `docs/user/`, `docs/dev/{admin-api,helper,installer}.md`,
+    ADMIN-11). The release itself is not made: none is published, and the first tag is the owner's call.
 12. Update org `DECISIONS.md` in `getmaipai/.github` with the 2026-11-21
     entry (separate repo, separate commit).
 
