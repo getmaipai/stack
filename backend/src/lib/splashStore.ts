@@ -152,6 +152,11 @@ export function codingModeHeavy(lookup: (id: string) => ModelRecord | null = get
     : { pin: STACK_CODING_HEAVY_MODEL, draftPin: STACK_CODING_HEAVY_DRAFT_MODEL };
 }
 
+/** The measured whole-process peak of a model Splash runs from local files (see SPLASH_LOCAL_CHAT_MODELS), or null: the memory ledger and the coding-mode fit check use it in place of the formula and the Metal budget's headroom, which overstate it. */
+export function splashMeasuredPeakBytes(modelId: string): number | null {
+  return SPLASH_LOCAL_CHAT_MODELS.find((entry) => entry.pin.id === modelId)?.measuredPeakBytes ?? null;
+}
+
 /** The target and draft pins a Splash launch for this model id lays out. */
 export function splashPairFor(modelId: string): { pin: CatalogModelLike; draftPin: CatalogModelLike } {
   const local = splashLocalEntry(modelId);

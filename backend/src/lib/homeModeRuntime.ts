@@ -1,5 +1,5 @@
 import { settingValues, updateSettings } from "@/settings";
-import { codingModeHeavy, splashResidentWeightsBytes } from "@/lib/splashStore";
+import { codingModeHeavy, splashMeasuredPeakBytes, splashResidentWeightsBytes } from "@/lib/splashStore";
 import { isComponent, listModels } from "@/lib/modelStore";
 import { getGovernorStatus, setCodingModeActive } from "@/lib/governor";
 import { splashFootprintEstimateBytes } from "@/lib/splash";
@@ -33,8 +33,12 @@ function memoryPlan(): { memory: HomeModeMemory; fits: boolean } {
   const draft = models.find((item) => item.id === draftPin.id);
   // A pinned window (Flash Next's 32K) is the window the launch uses; otherwise the coding setting's.
   const contextTokens = pin.launch?.contextLength ?? Number(settingValues()["stack.engines.coding.context_length"] ?? 131_072);
-  const plan = splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(pin.id, heavy?.sizeBytes ?? pin.download!.approx_bytes), draftBytes: draft?.sizeBytes ?? draftPin.download!.approx_bytes, contextTokens });
-  const budget = Math.max(0, governor.capBytes - residentBytes - governor.marginBytes);
+  const measuredPeak = splashMeasuredPeakBytes(pin.id);
+  const plan = measuredPeak ?? splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(pin.id, heavy?.sizeBytes ?? pin.download!.approx_bytes), draftBytes: draft?.sizeBytes ?? draftPin.download!.approx_bytes, contextTokens });
+  // A model with a measured peak is checked by the rule the governor admits it by (the model budget less what stays, and the machine's total less what stays and the working margin: whichever is smaller), because the margin is a reserve against free memory, not a second deduction from the budget. A model without a measurement keeps the stricter formula check.
+  const budget = measuredPeak !== null
+    ? Math.max(0, Math.min(governor.capBytes - residentBytes, governor.totalMemoryBytes - residentBytes - governor.marginBytes))
+    : Math.max(0, governor.capBytes - residentBytes - governor.marginBytes);
   return { memory: { plan_bytes: plan, budget_bytes: budget }, fits: plan <= budget };
 }
 function checks(): { checks: HomeModeChecks; reason: string | null; memory: HomeModeMemory } {

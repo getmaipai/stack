@@ -222,10 +222,10 @@ export const STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT: CatalogModelLike = {
   },
 };
 
-/** The optional chat models Splash runs from a pinned GGUF and a DFlash2 draft through `--model-dir` and `--draft-model` (Splash prepares its own model folder from them): the one list the install, the launch, the disk plan and the tiers read. `profiles` are the machines that are offered it, `ssdBytes` the weights Splash keeps on the SSD instead of in memory, `note` the file the install leaves beside Splash's data. */
-export const SPLASH_LOCAL_CHAT_MODELS: ReadonlyArray<{ pin: CatalogModelLike; draftPin: CatalogModelLike; profiles: readonly ("p16" | "p32" | "p64" | "p128")[]; ssdBytes: number; note: string; row: string }> = [
-  { pin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, draftPin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, profiles: ["p64", "p128"], ssdBytes: 0, note: "prepared-qwen36-35b.json", row: "chat-splash-qwen36-abliterated" },
-  { pin: STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, draftPin: STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, profiles: ["p128"], ssdBytes: 27_000_000_000, note: "prepared-qwen38-flash-next.json", row: "chat-splash-qwen38-flash-next" },
+/** The optional chat models Splash runs from a pinned GGUF and a DFlash2 draft through `--model-dir` and `--draft-model` (Splash prepares its own model folder from them): the one list the install, the launch, the disk plan and the tiers read. `profiles` are the machines that are offered it, `ssdBytes` the weights Splash keeps on the SSD instead of in memory, `measuredPeakBytes` the whole-process peak measured after long replies at the pinned window (the memory ledger and the mode check count this instead of the formula plus the Metal headroom; null when none was measured), `note` the file the install leaves beside Splash's data. */
+export const SPLASH_LOCAL_CHAT_MODELS: ReadonlyArray<{ pin: CatalogModelLike; draftPin: CatalogModelLike; profiles: readonly ("p16" | "p32" | "p64" | "p128")[]; ssdBytes: number; measuredPeakBytes: number | null; note: string; row: string }> = [
+  { pin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, draftPin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, profiles: ["p64", "p128"], ssdBytes: 0, measuredPeakBytes: null, note: "prepared-qwen36-35b.json", row: "chat-splash-qwen36-abliterated" },
+  { pin: STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, draftPin: STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, profiles: ["p128"], ssdBytes: 27_000_000_000, measuredPeakBytes: 74_000_000_000, note: "prepared-qwen38-flash-next.json", row: "chat-splash-qwen38-flash-next" },
 ];
 
 // The household's background worker pin, exposed as Stack's distinct
