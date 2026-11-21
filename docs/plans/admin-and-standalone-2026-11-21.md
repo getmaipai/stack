@@ -311,6 +311,7 @@ to Home's own worktree and lane.
    approvals, chat screen.
 9. Screenshots from seeded data, opened and judged on desktop and phone.
 10. Standalone installer and update path.
+    Built 2026-11-21 (`scripts/release-stack.sh`, `scripts/install.sh`, ADMIN-10).
 11. README, user and dev docs, backlog rows, release.
 12. Update org `DECISIONS.md` in `getmaipai/.github` with the 2026-11-21
     entry (separate repo, separate commit).
