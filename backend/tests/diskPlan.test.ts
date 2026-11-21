@@ -34,7 +34,9 @@ test("every model the install plan installs belongs to exactly one row, in every
     const counts = new Map<string, number>();
     for (const row of plan.rows) for (const id of row.model_ids) counts.set(id, (counts.get(id) ?? 0) + 1);
     for (const { pin } of plannedPinsFor(tier)) expect([tier.id, pin.id, counts.get(pin.id)]).toEqual([tier.id, pin.id, 1]);
-    for (const [id, count] of counts) expect([tier.id, id, count]).toEqual([tier.id, id, 1]);
+    // The VoxCPM2 clip speech-to-text is the one shared companion: each size's optional row lists it (the rows are alternatives, each sized alone).
+    const voxcpm2Rows = plan.rows.filter((row) => row.id.startsWith("voice-voxcpm2")).length;
+    for (const [id, count] of counts) expect([tier.id, id, count]).toEqual([tier.id, id, id.startsWith("voxcpm2-clip-stt-") ? voxcpm2Rows : 1]);
   }
 });
 

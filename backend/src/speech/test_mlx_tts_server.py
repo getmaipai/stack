@@ -439,6 +439,15 @@ class VoxEngineTest(unittest.TestCase):
         self.assertEqual(len(self.prepared), 1)
         self.assertEqual(self.prepared[0][1], "heard words")
 
+    def test_missing_listening_helper_is_a_clear_error_and_never_a_download(self):
+        import mlx_tts_server
+        engine = mlx_tts_server.VoxCPM2()
+        engine.stt_installed = lambda: False
+        with self.assertRaises(mlx_tts_server.ClipError) as caught:
+            engine.transcribe("/nonexistent.wav")
+        self.assertIn("listening helper", str(caught.exception))
+        self.assertIn("not installed", str(caught.exception))
+
     def test_clip_cache_distinguishes_clips_and_words_and_keeps_eight(self):
         self.run_stream(voice_text="a")
         self.run_stream(voice_text="b")
