@@ -23612,6 +23612,835 @@
         }
       }
     },
+    "/stack/v1/profiles/recommend": {
+      "post": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Matched, Custom recommended and the templates for this computer (ADMIN-05)",
+        "description": "Send `{}` for the defaults. Pure of side effects: reads the hardware and the role switches, writes nothing. `custom_recommended` is computed by a deterministic planner: the measured memory budget (memory less the OS reserve), role priority, each pinned model's footprint (flagged `estimated` until measured), then the resident set, upgrades while they leave headroom, and the largest on-demand generator slot that still fits. Each role says `state`, `fit` (`fits`, `queues`, `refused`) and why. `replan` says when the saved Matched or Custom recommended choice was made on different memory.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "vram_gb": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 512
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "chat",
+                            "coding",
+                            "judge",
+                            "router",
+                            "embed",
+                            "rerank",
+                            "vision",
+                            "stt",
+                            "tts",
+                            "wakeword",
+                            "image",
+                            "video",
+                            "music"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "priority": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000
+                        }
+                      },
+                      "required": [
+                        "role"
+                      ]
+                    },
+                    "description": "Overrides the stored role switches for this question only (for the Features screen's live budget bar)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The recommendation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "memory": {
+                      "type": "object",
+                      "properties": {
+                        "gb": {
+                          "type": "number"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "unified",
+                            "graphics",
+                            "override",
+                            "unknown"
+                          ]
+                        },
+                        "bytes": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "gb",
+                        "source",
+                        "bytes"
+                      ]
+                    },
+                    "matched": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "p16",
+                            "p32",
+                            "p64",
+                            "p128"
+                          ]
+                        },
+                        "quality": {
+                          "type": "string",
+                          "enum": [
+                            "good"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "tier",
+                        "quality",
+                        "reason"
+                      ],
+                      "description": "A shipped tier within 25 percent above its floor (p16 up to 24 GB), else null."
+                    },
+                    "custom_recommended": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "plan": {
+                          "type": "object",
+                          "properties": {
+                            "tier": {
+                              "type": "string",
+                              "enum": [
+                                "p16",
+                                "p32",
+                                "p64",
+                                "p128"
+                              ]
+                            },
+                            "chat_model": {
+                              "type": "string"
+                            },
+                            "budget": {
+                              "type": "object",
+                              "properties": {
+                                "total_bytes": {
+                                  "type": "number"
+                                },
+                                "os_reserve_bytes": {
+                                  "type": "number"
+                                },
+                                "working_margin_bytes": {
+                                  "type": "number"
+                                },
+                                "resident_cap_bytes": {
+                                  "type": "number"
+                                },
+                                "resident_bytes": {
+                                  "type": "number"
+                                },
+                                "room_bytes": {
+                                  "type": "number"
+                                },
+                                "tight": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "total_bytes",
+                                "os_reserve_bytes",
+                                "working_margin_bytes",
+                                "resident_cap_bytes",
+                                "resident_bytes",
+                                "room_bytes",
+                                "tight"
+                              ]
+                            },
+                            "roles": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "role": {
+                                    "type": "string",
+                                    "enum": [
+                                      "chat",
+                                      "coding",
+                                      "judge",
+                                      "router",
+                                      "embed",
+                                      "rerank",
+                                      "vision",
+                                      "stt",
+                                      "tts",
+                                      "wakeword",
+                                      "image",
+                                      "video",
+                                      "music"
+                                    ]
+                                  },
+                                  "enabled": {
+                                    "type": "boolean"
+                                  },
+                                  "priority": {
+                                    "type": "integer"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "resident",
+                                      "on_demand",
+                                      "installed",
+                                      "shared",
+                                      "off",
+                                      "unavailable"
+                                    ]
+                                  },
+                                  "model": {
+                                    "type": "string",
+                                    "nullable": true
+                                  },
+                                  "peak_bytes": {
+                                    "type": "number",
+                                    "nullable": true
+                                  },
+                                  "basis": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "measured",
+                                      "estimated",
+                                      null
+                                    ]
+                                  },
+                                  "slot": {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      "standard",
+                                      "boost",
+                                      "max",
+                                      null
+                                    ]
+                                  },
+                                  "fit": {
+                                    "type": "string",
+                                    "enum": [
+                                      "fits",
+                                      "queues",
+                                      "refused",
+                                      "n/a"
+                                    ]
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "role",
+                                  "enabled",
+                                  "priority",
+                                  "state",
+                                  "model",
+                                  "peak_bytes",
+                                  "basis",
+                                  "slot",
+                                  "fit",
+                                  "reason"
+                                ]
+                              }
+                            },
+                            "notes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "tier",
+                            "chat_model",
+                            "budget",
+                            "roles",
+                            "notes"
+                          ]
+                        },
+                        "why": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "plan",
+                        "why"
+                      ],
+                      "description": "The plan computed for this exact memory; null when the memory clears no tier."
+                    },
+                    "templates": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tier": {
+                            "type": "string",
+                            "enum": [
+                              "p16",
+                              "p32",
+                              "p64",
+                              "p128"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "min_gb": {
+                            "type": "number"
+                          },
+                          "cleared": {
+                            "type": "boolean"
+                          },
+                          "match": {
+                            "type": "boolean"
+                          },
+                          "resident": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "chat",
+                                "coding",
+                                "judge",
+                                "router",
+                                "embed",
+                                "rerank",
+                                "vision",
+                                "stt",
+                                "tts",
+                                "wakeword",
+                                "image",
+                                "video",
+                                "music"
+                              ]
+                            }
+                          },
+                          "on_demand": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "chat",
+                                "coding",
+                                "judge",
+                                "router",
+                                "embed",
+                                "rerank",
+                                "vision",
+                                "stt",
+                                "tts",
+                                "wakeword",
+                                "image",
+                                "video",
+                                "music"
+                              ]
+                            }
+                          },
+                          "not_available": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "chat",
+                                "coding",
+                                "judge",
+                                "router",
+                                "embed",
+                                "rerank",
+                                "vision",
+                                "stt",
+                                "tts",
+                                "wakeword",
+                                "image",
+                                "video",
+                                "music"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "tier",
+                          "label",
+                          "min_gb",
+                          "cleared",
+                          "match",
+                          "resident",
+                          "on_demand",
+                          "not_available"
+                        ]
+                      }
+                    },
+                    "saved": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "matched",
+                            "custom_recommended",
+                            "custom"
+                          ]
+                        },
+                        "tier": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "memory_gb": {
+                          "type": "number"
+                        },
+                        "at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "tier",
+                        "memory_gb",
+                        "at"
+                      ]
+                    },
+                    "replan": {
+                      "type": "object",
+                      "properties": {
+                        "needed": {
+                          "type": "boolean"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "needed",
+                        "reason"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "memory",
+                    "matched",
+                    "custom_recommended",
+                    "templates",
+                    "saved",
+                    "replan"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/profiles/apply": {
+      "post": {
+        "tags": [
+          "Profiles"
+        ],
+        "summary": "Apply a profile: write role settings and start the missing installs (ADMIN-05)",
+        "description": "`matched` applies a shipped tier (default: the matched one), `custom_recommended` re-plans now and applies that, `custom` applies the roles the person chose and judges them with the same fit check. Role enable and priority go through the ADMIN-04 settings and are audited (`admin.action.profile.apply`); a role the computer cannot run is left as it was. The choice and its memory are saved so a later change of memory asks before re-planning. Models the plan needs that are not installed start as ordinary install jobs (`installs`); one that cannot (disk) is listed in `skipped` with the reason.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "matched",
+                      "custom_recommended",
+                      "custom"
+                    ]
+                  },
+                  "tier": {
+                    "type": "string",
+                    "enum": [
+                      "p16",
+                      "p32",
+                      "p64",
+                      "p128"
+                    ],
+                    "description": "Matched only: the template to apply; defaults to the matched tier."
+                  },
+                  "vram_gb": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 512
+                  },
+                  "plan": {
+                    "type": "object",
+                    "properties": {
+                      "roles": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "chat",
+                                "coding",
+                                "judge",
+                                "router",
+                                "embed",
+                                "rerank",
+                                "vision",
+                                "stt",
+                                "tts",
+                                "wakeword",
+                                "image",
+                                "video",
+                                "music"
+                              ]
+                            },
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "priority": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1000
+                            }
+                          },
+                          "required": [
+                            "role"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "roles"
+                    ],
+                    "description": "Custom only: the roles the person chose by hand."
+                  }
+                },
+                "required": [
+                  "mode"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Applied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "matched",
+                        "custom_recommended",
+                        "custom"
+                      ]
+                    },
+                    "tier": {
+                      "type": "string",
+                      "enum": [
+                        "p16",
+                        "p32",
+                        "p64",
+                        "p128"
+                      ]
+                    },
+                    "plan": {
+                      "type": "object",
+                      "properties": {
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "p16",
+                            "p32",
+                            "p64",
+                            "p128"
+                          ]
+                        },
+                        "chat_model": {
+                          "type": "string"
+                        },
+                        "budget": {
+                          "type": "object",
+                          "properties": {
+                            "total_bytes": {
+                              "type": "number"
+                            },
+                            "os_reserve_bytes": {
+                              "type": "number"
+                            },
+                            "working_margin_bytes": {
+                              "type": "number"
+                            },
+                            "resident_cap_bytes": {
+                              "type": "number"
+                            },
+                            "resident_bytes": {
+                              "type": "number"
+                            },
+                            "room_bytes": {
+                              "type": "number"
+                            },
+                            "tight": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "total_bytes",
+                            "os_reserve_bytes",
+                            "working_margin_bytes",
+                            "resident_cap_bytes",
+                            "resident_bytes",
+                            "room_bytes",
+                            "tight"
+                          ]
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "chat",
+                                  "coding",
+                                  "judge",
+                                  "router",
+                                  "embed",
+                                  "rerank",
+                                  "vision",
+                                  "stt",
+                                  "tts",
+                                  "wakeword",
+                                  "image",
+                                  "video",
+                                  "music"
+                                ]
+                              },
+                              "enabled": {
+                                "type": "boolean"
+                              },
+                              "priority": {
+                                "type": "integer"
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "resident",
+                                  "on_demand",
+                                  "installed",
+                                  "shared",
+                                  "off",
+                                  "unavailable"
+                                ]
+                              },
+                              "model": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "peak_bytes": {
+                                "type": "number",
+                                "nullable": true
+                              },
+                              "basis": {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  "measured",
+                                  "estimated",
+                                  null
+                                ]
+                              },
+                              "slot": {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  "standard",
+                                  "boost",
+                                  "max",
+                                  null
+                                ]
+                              },
+                              "fit": {
+                                "type": "string",
+                                "enum": [
+                                  "fits",
+                                  "queues",
+                                  "refused",
+                                  "n/a"
+                                ]
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "role",
+                              "enabled",
+                              "priority",
+                              "state",
+                              "model",
+                              "peak_bytes",
+                              "basis",
+                              "slot",
+                              "fit",
+                              "reason"
+                            ]
+                          }
+                        },
+                        "notes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "tier",
+                        "chat_model",
+                        "budget",
+                        "roles",
+                        "notes"
+                      ]
+                    },
+                    "settings": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "description": "Every setting written."
+                    },
+                    "installs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "model": {
+                            "type": "string"
+                          },
+                          "job": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "model",
+                          "job"
+                        ]
+                      }
+                    },
+                    "skipped": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "model": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "model",
+                          "reason"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "tier",
+                    "plan",
+                    "settings",
+                    "installs",
+                    "skipped"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A custom plan is missing, or a setting value is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This computer's memory clears no tier, or the asked tier is above this computer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/capabilities": {
       "get": {
         "tags": [

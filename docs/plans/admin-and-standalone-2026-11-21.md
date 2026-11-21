@@ -202,6 +202,41 @@ custom_recommended: {plan, why[]}, templates[] }`;
 check and installs what is missing as normal pull jobs.
 `GET /stack/v1/install-plan` keeps working unchanged for Home today.
 
+**Planner rules chosen where this plan was ambiguous (step 4b, built).**
+The planner is `backend/src/lib/profilePlanner.ts`; the routes are `POST`
+(not `GET`) `/stack/v1/profiles/recommend` and `/apply`, because the page
+sends its live role choices in the body (send `{}` for the defaults).
+
+- Matched ceiling: the plan's rule says 25 percent above the floor, and its
+  own example puts 24 GB on `p16` (25 percent would end at 20 GB). The
+  rule stands for `p32` (to 40), `p64` (to 80) and `p128` (to 160); `p16`
+  carries an explicit ceiling of 24 GB, so the example holds. Anything
+  above a ceiling matches nothing (41 to 63, 81 to 127, over 160).
+- Budget: memory less the governor's 8 GB OS reserve is the resident cap;
+  the room left for on-demand work is the governor's own, the smaller of
+  total minus reserve minus residents and total minus residents minus the
+  tier's working margin.
+- The tier template is the floor: its resident roles are kept even when the
+  pinned estimates read over the cap (16 GB does, flagged `tight`).
+- An upgrade (a larger chat model) is taken only if it leaves 4 GiB of room
+  and every generator slot the tier offers still resolves, and only when no
+  picture, video or music role is ranked above chat. The automatic chat
+  ladder holds pinned chat models on a standard or boost slot that are not
+  under vetting; the uncensored Huihui build is excluded by name and is
+  Custom only. Today that ladder is empty, so chat stays on the tier's 8B
+  model at every size; the planner's gain is the generator slots.
+- Generator slots look at the tier's candidates and the next tier up's, and
+  take the highest standard or boost slot that fits (a Max-only fit shows as
+  `queues`), so a 48 GB computer gets music and a boost picture slot that
+  the 32 GB template lacks. Coding and vision stay tier-defined.
+- Not built: measured peaks from this machine (the planner takes them as
+  input; the route passes none, so every unmeasured peak is `estimated`) and
+  a judge or router upgrade (their bindings are the tier's own).
+- Apply writes role `enabled` and `priority`, and `stack.engines.chat.model`
+  when the plan names a chat model other than the tier's; a role the
+  computer cannot run is left unchanged. Custom writes only what the person
+  sent and starts no installs.
+
 **Home today (read-only audit, 2026-11-21).** Home's wizard reads the plan
 from Home's own backend (`/api/setup/plan`, client `setupPlan` in
 `frontend/src/lib/api.ts`, screen `frontend/src/apps/setup/PlanStep.tsx`,
