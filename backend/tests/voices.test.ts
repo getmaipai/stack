@@ -5,6 +5,16 @@ import { POCKET_TTS_PRESET_VOICES } from "@/speech/voices";
  import { Voice } from "@/wire/voice";
  import { resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests } from "@/lib/supervisor";
 
+describe("VoxCPM2 voice list (VOICE-VOXCPM2-01)", () => {
+  test.each(["voxcpm2", "voxcpm2-reduced"] as const)("%s lists one built-in voice carrying its engine name, so Home offers clip voices", (engine) => {
+    const voices = listVoices(engine);
+    expect(voices.length).toBe(1);
+    expect(voices[0]!.engine).toBe(engine);
+    expect(voices[0]!.tts?.engine).toBe(engine);
+    expect(Voice.safeParse(voices[0]).success).toBe(true);
+  });
+});
+
 describe("GET /stack/v1/voices (STACK-101a)", () => {
   test("returns 200 with a Voice-shaped list", async () => {
     const response = await app.request("/stack/v1/voices");
