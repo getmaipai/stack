@@ -48,3 +48,7 @@ The launch passes `--model <repo> --model-dir <gguf> --draft-model <draft folder
 ## Not verified without a live install
 
 The pins, optional plan rows, selection by setting, launch arguments, prepare step (against a fake Splash and once against the real files in a scratch folder) and removal are tested. A real first start of the launcher with `--model-dir`, the first-token numbers on this build, and the fallback when macOS is older than Splash needs have not been run on a live Stack.
+
+### Coding mode and Max chat load Flash Next
+
+Home's Max chat is a lease on the coding mode, which loads the big model. `codingModeHeavy()` in `splashStore.ts` is the one place that picks it: Flash Next when it and its draft are installed and verified, otherwise Ornith as before. The mode's checks, memory plan, post-load check and launch all follow that pick; the unload-residents, post-load check and return-on-failure steps are unchanged. The coding launch keeps Flash Next's pinned 32K window instead of the coding setting's 131,072 (larger windows are unmeasured). Whether 32K is enough for long repository work is open: the 5-task repo check ran at 32K, and the window is shared by the coding slots.

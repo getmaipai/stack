@@ -24,7 +24,7 @@ import { dataDir } from "@/lib/paths";
 import { currentEngineBinary, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { ENGINE_READY_MARKER, installedEnginePin } from "@/lib/engineCatalog";
 import { getModel, type CatalogModelLike, type ModelRecord } from "@/lib/modelStore";
-import { STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS } from "@/lib/modelCatalog";
+import { STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS } from "@/lib/modelCatalog";
 
 export const splashRoot = (): string => join(dataDir, "splash");
 /** The hub cache Splash reads (HF_HUB_CACHE): the Stack's own layout of the pinned files, not the store's `models/hub`. */
@@ -142,6 +142,14 @@ export function splashLocalEntry(id: string): (typeof SPLASH_LOCAL_CHAT_MODELS)[
 /** The weights Splash keeps in memory: the file's size less what Splash leaves on the SSD for this model (the 94 GB Flash Next keeps about 27 GB there). The memory estimate and the governor's figure start from this, never from the file size. */
 export function splashResidentWeightsBytes(modelId: string, sizeBytes: number): number {
   return Math.max(0, sizeBytes - (splashLocalEntry(modelId)?.ssdBytes ?? 0));
+}
+
+/** The big model Home's coding mode (and so Max chat) loads: Flash Next when it and its draft are installed and verified, else the Ornith pair (today's behavior on a hub that has not installed Flash Next). The one place the mode picks its model. */
+export function codingModeHeavy(lookup: (id: string) => ModelRecord | null = getModel): { pin: CatalogModelLike; draftPin: CatalogModelLike } {
+  const ready = (id: string) => { const record = lookup(id); return !!record?.modelPath && !!record.verifiedAt; };
+  return ready(STACK_CHAT_QWEN38_FLASH_NEXT_MODEL.id) && ready(STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT.id)
+    ? { pin: STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, draftPin: STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT }
+    : { pin: STACK_CODING_HEAVY_MODEL, draftPin: STACK_CODING_HEAVY_DRAFT_MODEL };
 }
 
 /** The target and draft pins a Splash launch for this model id lays out. */
