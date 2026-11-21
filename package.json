@@ -13,6 +13,6 @@
     "dev": "bun --cwd backend dev",
     "test": "bun --cwd backend test",
     "check": "bash scripts/check.sh",
-    "build:admin": "bun --cwd admin-ui run build"
+    "build:admin": "cd admin-ui && bun run build"
   }
 }
