@@ -71,6 +71,8 @@ export interface CreateRequest {
   cpus?: number;
   memory_gb?: number;
   env?: Record<string, string>;
+  /** TCP ports on the gateway address this machine may reach, added to the configured ones (Home sends its own port, so no per-machine setting is needed). */
+  gatewayPorts?: number[];
   /** Internal: tests of the lock run the probe as root, behind the same lock. Never set by a route. */
   runAs?: string;
   /** Internal: replaces the default idle workload. Never set by a route. */
@@ -207,7 +209,7 @@ export class SandboxService {
       "--cpus", String(cpus), "--memory", `${memoryGb}g`,
       "--cap-add", "CAP_NET_ADMIN", // for the lock step only; the entry script drops it for good.
       "--mount", `type=bind,source=${workspace},target=${WORKSPACE_MOUNT}`,
-      "-e", `SANDBOX_ALLOW_ADDR=${gateway}`, "-e", `SANDBOX_ALLOW_PORTS=${this.config.allowedPorts.join(",")}`,
+      "-e", `SANDBOX_ALLOW_ADDR=${gateway}`, "-e", `SANDBOX_ALLOW_PORTS=${[...new Set([...this.config.allowedPorts, ...(request.gatewayPorts ?? [])])].join(",")}`,
       ...(request.runAs ? ["-e", `SANDBOX_USER=${request.runAs}`] : []),
       ...env,
       this.config.image, ...(request.workload ?? []),

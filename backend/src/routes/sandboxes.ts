@@ -12,6 +12,7 @@ const CreateBody = z.object({
   cpus: z.number().int().optional().describe("Defaults to 4, clamped to 1 to 8."),
   memory_gb: z.number().int().optional().describe("Defaults to 4, clamped to 1 to 16."),
   env: z.record(z.string(), z.string().max(2000)).optional().describe("Plain variables the agent can read; never a secret."),
+  gateway_ports: z.array(z.number().int().min(1).max(65535)).max(4).optional().describe("TCP ports on the host-only gateway address the machine may reach (Home's own port, for its coding gateway). Added to STACK_SANDBOX_ALLOWED_PORTS."),
   network: z.object({ policy: z.enum(["none", "hosts"]), hosts: z.array(z.string()).default([]) }).optional().describe("Only policy none exists today; hosts waits for the egress proxy (CODE-SANDBOX-02)."),
 });
 const createErrors = errorResponses({ 400: "A field is not allowed.", 409: "The id is taken.", 500: "The machine did not start, or its network lock did not load.", 503: "The container system is not running." });
@@ -36,7 +37,7 @@ const fail = (error: unknown): { error: string; status: 400 | 404 | 409 | 500 | 
 sandboxRoutes.openapi(createR, async (c) => {
   const body = c.req.valid("json");
   if (body.network && body.network.policy !== "none") return c.json({ error: "Allowing hosts is not available yet. Create the sandbox with network policy none." }, 400);
-  try { return c.json(await sandboxService(dataDir).create({ id: body.id, workspace: body.workspace, cpus: body.cpus, memory_gb: body.memory_gb, env: body.env }), 201); }
+  try { return c.json(await sandboxService(dataDir).create({ id: body.id, workspace: body.workspace, cpus: body.cpus, memory_gb: body.memory_gb, env: body.env, gatewayPorts: body.gateway_ports }), 201); }
   catch (error) {
     const f = fail(error);
     if (f.status === 400) return c.json({ error: f.error }, 400);

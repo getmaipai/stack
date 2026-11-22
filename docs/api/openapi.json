@@ -28302,6 +28302,16 @@
                     },
                     "description": "Plain variables the agent can read; never a secret."
                   },
+                  "gateway_ports": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 65535
+                    },
+                    "maxItems": 4,
+                    "description": "TCP ports on the host-only gateway address the machine may reach (Home's own port, for its coding gateway). Added to STACK_SANDBOX_ALLOWED_PORTS."
+                  },
                   "network": {
                     "type": "object",
                     "properties": {

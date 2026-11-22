@@ -38,6 +38,12 @@ beforeEach(() => {
 });
 afterEach(() => { rmSync(root, { recursive: true, force: true }); setSandboxServiceForTests(undefined); });
 
+test("a create request's gateway ports are added to the configured ones, once each, and nothing else changes", async () => {
+  await make().create({ id: "sess-port01", workspace: work, gatewayPorts: [3000, 8790] });
+  const run = calls.find((c) => c[0] === "run")!;
+  expect(run).toContain("SANDBOX_ALLOW_PORTS=8790,3000");
+});
+
 test("the machine is started with the exact arguments: host-only network, no resolver, only NET_ADMIN added, one mount", async () => {
   const info = await make().create({ id: "sess-abc123", workspace: work });
   const run = calls.find((c) => c[0] === "run")!;
