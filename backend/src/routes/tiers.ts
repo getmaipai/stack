@@ -8,8 +8,7 @@ import { detectHardware } from "@/lib/hardware";
 import { proposeProfile } from "@/profiles";
 import { reducedRoomBytes, tierRoomBytes } from "@/lib/governor";
 import { tierCandidateLists, TIER_CANDIDATES, type TierCategory } from "@/lib/tiers";
-import { updateSettings } from "@/settings";
-import { TTS_ENGINE_SETTING } from "@/speech/ttsEngines";
+import { applyVoiceEngine } from "@/lib/tierPick";
 import { controlReducedChat } from "@/lib/reducedChatLease";
 
 const Candidate = z.object({
@@ -72,6 +71,5 @@ tiersRoutes.openapi(choiceRoute, async (c) => {
   if (!candidate) return c.json({ error: `${model} is not a model this Stack offers for ${category}. Pick one from the list.`, code: "unknown_candidate" }, 404);
   // Only the Standard voice pick selects the speaking engine; Reduced is the memory fallback and Boost and Max do not exist for voice.
   if (category !== "voice" || tier !== "standard" || !candidate.engine) return c.json({ ok: true as const, applied: false, pending_restart: false }, 200);
-  const setting = updateSettings({ [TTS_ENGINE_SETTING]: candidate.engine }).find((item) => item.key === TTS_ENGINE_SETTING);
-  return c.json({ ok: true as const, applied: true, pending_restart: setting?.pending !== null && setting?.pending !== undefined }, 200);
+  return c.json({ ok: true as const, ...applyVoiceEngine(candidate.engine) }, 200);
 });

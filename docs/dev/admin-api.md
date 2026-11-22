@@ -30,7 +30,7 @@ There is no read that says whether an admin exists: the page tries to sign in an
 | Overview, Health, Engines | `GET /healthz`, `GET /stack/v1/status`, `/roles`, `/health`, `/engines`, `/logs?tail=`; `POST /health/{code}/fix`, `/engines/{name}/restart`; the SSE feed `GET /stack/v1/events` |
 | Resources | `GET /stack/v1/resources/summary`, `/resources/history?range=1h\|24h\|7d` |
 | Features | `PUT /stack/v1/settings` with `stack.roles.<role>.enabled` and `.priority` |
-| Models | `POST /stack/v1/profiles/recommend`, `/profiles/apply`; `GET /models/catalog`, `/models`; `POST /models`; `DELETE /models/{id}` |
+| Models | `GET /stack/v1/choices` and the writes under `/choices` ([choices](choices.md)); `POST /stack/v1/profiles/recommend`, `/profiles/apply`; `GET /models/catalog`, `/models`; `POST /models`; `DELETE /models/{id}` |
 | Settings | `GET /stack/v1/settings`, `PUT /settings`, `POST /settings/apply` |
 | Updates | `GET /stack/v1/updates`, `POST /updates/check`, `/updates/engines/{name}/apply`, `/updates/engines/{name}/rollback` |
 | Tools | `POST /stack/v1/check`, `GET /check/latest`, `POST /service/restart`, `POST /host/reboot` |

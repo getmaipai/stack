@@ -727,6 +727,1106 @@
           "update"
         ],
         "additionalProperties": false
+      },
+      "ChoicesView": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ChoiceProfile"
+          },
+          "memory_gb": {
+            "type": "number"
+          },
+          "room_bytes": {
+            "type": "number"
+          },
+          "free_disk_bytes": {
+            "type": "number"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChoiceCategory"
+            }
+          },
+          "unused": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "total_bytes": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "count",
+              "total_bytes"
+            ]
+          },
+          "migration": {
+            "type": "object",
+            "properties": {
+              "done": {
+                "type": "boolean"
+              },
+              "done_at": {
+                "type": "string",
+                "nullable": true
+              },
+              "accepted": {
+                "type": "integer"
+              },
+              "refused": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "done",
+              "done_at",
+              "accepted",
+              "refused"
+            ]
+          }
+        },
+        "required": [
+          "profile",
+          "memory_gb",
+          "room_bytes",
+          "free_disk_bytes",
+          "categories",
+          "unused",
+          "migration"
+        ]
+      },
+      "ChoiceProfile": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "p16",
+          "p32",
+          "p64",
+          "p128",
+          null
+        ],
+        "description": "This computer's profile; null when its memory is below 16 GB."
+      },
+      "ChoiceCategory": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "chat",
+              "coding",
+              "pictures",
+              "video",
+              "music",
+              "voice",
+              "stt",
+              "embeddings",
+              "vision",
+              "wakeword",
+              "stems"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "role_enabled": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "role_priority": {
+            "type": "integer",
+            "nullable": true
+          },
+          "role_plan": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "state": {
+                "type": "string"
+              },
+              "fit": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "fit",
+              "reason"
+            ],
+            "description": "What the profile planner says about this category's role on this computer (state, fit, reason)."
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "unavailable_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "tiered": {
+            "type": "boolean",
+            "description": "False for single-model categories, which have only the `standard` level."
+          },
+          "order": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every candidate id, tried first to last."
+          },
+          "disabled": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChoiceCandidate"
+            }
+          },
+          "tiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChoiceLevelRow"
+            }
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "profile": {
+                  "$ref": "#/components/schemas/ChoiceProfile"
+                },
+                "memory_gb": {
+                  "type": "number"
+                },
+                "current": {
+                  "type": "boolean",
+                  "description": "True for this computer's own profile."
+                },
+                "assignments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tier": {
+                        "$ref": "#/components/schemas/ChoiceLevel"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "customization": {
+                        "type": "object",
+                        "nullable": true,
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "tier",
+                      "model",
+                      "customization"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "profile",
+                "memory_gb",
+                "current",
+                "assignments"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "role",
+          "role_enabled",
+          "role_priority",
+          "role_plan",
+          "available",
+          "unavailable_reason",
+          "tiered",
+          "order",
+          "disabled",
+          "candidates",
+          "tiers",
+          "profiles"
+        ]
+      },
+      "ChoiceCandidate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The model's plain name."
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One plain sentence: what it is good for and its limits."
+          },
+          "family": {
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "type": "string",
+            "nullable": true,
+            "description": "The model version as people say it (for example 3.8); null when its name carries none."
+          },
+          "quantization": {
+            "type": "string",
+            "nullable": true,
+            "description": "The precision in plain words (for example `4-bit, compact`)."
+          },
+          "quantization_raw": {
+            "type": "string",
+            "nullable": true,
+            "description": "The catalog's own tag (for example `UD-IQ4_XS`)."
+          },
+          "license": {
+            "type": "string",
+            "nullable": true
+          },
+          "repo": {
+            "type": "string",
+            "nullable": true
+          },
+          "engine": {
+            "type": "string",
+            "nullable": true,
+            "description": "The engine that runs it."
+          },
+          "role": {
+            "type": "string",
+            "nullable": true,
+            "description": "The role it serves."
+          },
+          "min_profile": {
+            "type": "string",
+            "nullable": true,
+            "description": "The smallest computer it is offered on, in plain words."
+          },
+          "min_profile_id": {
+            "$ref": "#/components/schemas/ChoiceProfile"
+          },
+          "search_text": {
+            "type": "string",
+            "description": "Lowercase text for searching: label, id, repo, family, version, quantization (plain and raw), licence, summary, engine and role joined by spaces."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "shipped",
+              "added"
+            ],
+            "description": "`added` is a chat model an admin added by link."
+          },
+          "pickable": {
+            "type": "boolean",
+            "description": "False for a part that is ordered, switched off or removed here but never chosen for a level (still being checked)."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "installing",
+              "notInstalled",
+              "failed",
+              "unsupported"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "The plain sentence for the state, or null when it is installed and fine."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The model's size: on disk when installed, else what installing it downloads."
+          },
+          "download_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "What an install would still download; 0 when installed."
+          },
+          "peak_bytes": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "peak_verified": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "percent": {
+            "type": "number",
+            "nullable": true
+          },
+          "can_install": {
+            "type": "boolean"
+          },
+          "can_uninstall": {
+            "type": "boolean"
+          },
+          "licence_needed": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "False when it is on the category's off list."
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Position in the category's order (1 is tried first)."
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "summary",
+          "family",
+          "version",
+          "quantization",
+          "quantization_raw",
+          "license",
+          "repo",
+          "engine",
+          "role",
+          "min_profile",
+          "min_profile_id",
+          "search_text",
+          "kind",
+          "pickable",
+          "state",
+          "reason",
+          "size_bytes",
+          "download_bytes",
+          "peak_bytes",
+          "peak_verified",
+          "percent",
+          "can_install",
+          "can_uninstall",
+          "licence_needed",
+          "enabled",
+          "rank"
+        ]
+      },
+      "ChoiceLevelRow": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "$ref": "#/components/schemas/ChoiceLevel"
+          },
+          "cap_bytes": {
+            "type": "number",
+            "nullable": true,
+            "description": "What this level may use on this computer, in bytes; null where no cap applies (Reduced, single-model categories)."
+          },
+          "chosen": {
+            "type": "string",
+            "nullable": true,
+            "description": "The model this level uses: the household's pick, else the recommended one. Null when the level is off or nothing fits."
+          },
+          "chosen_by": {
+            "type": "string",
+            "enum": [
+              "household",
+              "recommended",
+              "off",
+              "none"
+            ]
+          },
+          "chosen_state": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "installed",
+              "installing",
+              "notInstalled",
+              "failed",
+              "unsupported",
+              null
+            ]
+          },
+          "customization": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "The options stored with the household's pick (for example `thinking`); null when none."
+          },
+          "problem": {
+            "type": "string",
+            "nullable": true,
+            "description": "A plain sentence when the saved pick is not offered here any more or no longer fits; the recommended model runs meanwhile."
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "fits": {
+                  "type": "boolean"
+                },
+                "refusal": {
+                  "type": "string",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "model",
+                "fits",
+                "refusal"
+              ]
+            },
+            "description": "Every model that may be offered at this level, with whether it fits and the plain reason when it does not."
+          },
+          "recommended": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "nullable": true
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "model",
+              "why"
+            ]
+          }
+        },
+        "required": [
+          "tier",
+          "cap_bytes",
+          "chosen",
+          "chosen_by",
+          "chosen_state",
+          "customization",
+          "problem",
+          "options",
+          "recommended"
+        ]
+      },
+      "ChoiceLevel": {
+        "type": "string",
+        "enum": [
+          "reduced",
+          "standard",
+          "boost",
+          "max"
+        ]
+      },
+      "ChoicesUnused": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "category": {
+                  "type": "string",
+                  "enum": [
+                    "chat",
+                    "coding",
+                    "pictures",
+                    "video",
+                    "music",
+                    "voice",
+                    "stt",
+                    "embeddings",
+                    "vision",
+                    "wakeword",
+                    "stems"
+                  ]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "shipped",
+                    "added"
+                  ]
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "category",
+                "kind",
+                "size_bytes",
+                "reason"
+              ]
+            }
+          },
+          "total_bytes": {
+            "type": "integer"
+          },
+          "tidy": {
+            "type": "object",
+            "properties": {
+              "reclaimable_bytes": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "superseded",
+                        "orphan_folder",
+                        "partial_download"
+                      ]
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "blocked": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "bytes",
+                    "reason",
+                    "blocked"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "reclaimable_bytes",
+              "items"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "total_bytes",
+          "tidy"
+        ]
+      },
+      "ChoicesRemoveResult": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "removed",
+                    "kept",
+                    "failed"
+                  ]
+                },
+                "freed_bytes": {
+                  "type": "integer"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "freed_bytes",
+                "message"
+              ]
+            }
+          },
+          "tidy_removed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "bytes"
+              ]
+            }
+          },
+          "freed_bytes": {
+            "type": "integer"
+          },
+          "kept": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "tidy_removed",
+          "freed_bytes",
+          "kept",
+          "failed"
+        ]
+      },
+      "ChoicesRecommendedResult": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean"
+          },
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": "string",
+                  "enum": [
+                    "chat",
+                    "coding",
+                    "pictures",
+                    "video",
+                    "music",
+                    "voice",
+                    "stt",
+                    "embeddings",
+                    "vision",
+                    "wakeword",
+                    "stems"
+                  ]
+                },
+                "tier": {
+                  "$ref": "#/components/schemas/ChoiceLevel"
+                },
+                "from": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "to": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "category",
+                "tier",
+                "from",
+                "to"
+              ]
+            }
+          },
+          "unchanged": {
+            "type": "integer"
+          },
+          "roles": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "The role settings written (empty on a dry run), as `profiles/apply` writes them."
+          },
+          "installs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "job": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "model",
+                "job"
+              ]
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "model",
+                "reason"
+              ]
+            }
+          },
+          "needs_licence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ]
+            }
+          }
+        },
+        "required": [
+          "dry_run",
+          "changed",
+          "unchanged",
+          "roles",
+          "installs",
+          "skipped",
+          "needs_licence"
+        ]
+      },
+      "ChoicesError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "code"
+        ]
+      },
+      "ChoicesAddModelResult": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "chat"
+            ]
+          },
+          "tier": {
+            "$ref": "#/components/schemas/ChoiceLevel"
+          },
+          "chosen": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "installing",
+              "notInstalled",
+              "failed",
+              "unsupported"
+            ]
+          },
+          "install_job": {
+            "type": "string",
+            "nullable": true
+          },
+          "size_bytes": {
+            "type": "integer"
+          },
+          "licence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "id",
+          "label",
+          "category",
+          "tier",
+          "chosen",
+          "state",
+          "install_job",
+          "size_bytes",
+          "licence"
+        ]
+      },
+      "ChoicesMigrateResult": {
+        "type": "object",
+        "properties": {
+          "dry_run": {
+            "type": "boolean"
+          },
+          "already_done": {
+            "type": "boolean",
+            "description": "True when the migration was done before: nothing was read or written."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "slot",
+                    "order",
+                    "feature",
+                    "added_model"
+                  ]
+                },
+                "key": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "accepted",
+                    "unchanged",
+                    "refused"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "kind",
+                "key",
+                "status",
+                "reason"
+              ]
+            }
+          },
+          "accepted": {
+            "type": "integer"
+          },
+          "refused": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "slot",
+                    "order",
+                    "feature",
+                    "added_model"
+                  ]
+                },
+                "key": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "accepted",
+                    "unchanged",
+                    "refused"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "kind",
+                "key",
+                "status",
+                "reason"
+              ]
+            },
+            "description": "The values the Stack refused; Home keeps them and shows the reason."
+          },
+          "done_at": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "dry_run",
+          "already_done",
+          "results",
+          "accepted",
+          "refused",
+          "done_at"
+        ]
+      },
+      "ChoicePickResult": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "chat",
+              "coding",
+              "pictures",
+              "video",
+              "music",
+              "voice",
+              "stt",
+              "embeddings",
+              "vision",
+              "wakeword",
+              "stems"
+            ]
+          },
+          "tier": {
+            "$ref": "#/components/schemas/ChoiceLevel"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ChoiceProfile"
+          },
+          "model": {
+            "type": "string",
+            "nullable": true
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "applied": {
+            "type": "boolean",
+            "description": "True when the Stack changed a setting so the pick takes effect (voice engine, chat model)."
+          },
+          "pending_restart": {
+            "type": "boolean"
+          },
+          "install_job": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "ok",
+          "category",
+          "tier",
+          "profile",
+          "model",
+          "changed",
+          "applied",
+          "pending_restart",
+          "install_job",
+          "note"
+        ]
       }
     },
     "parameters": {}
@@ -31811,6 +32911,770 @@
                     "error",
                     "code"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/choices": {
+      "get": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "Everything the AI and models page shows, in one read",
+        "description": "Per category (chat, coding, pictures, video, music, voice, speech to text, embeddings, vision, wake word, stem splitter): the role switch and priority, the candidates with their plain facts (`label`, `summary`, `family`, `version`, `quantization` and `quantization_raw`, `license`, `repo`, `engine`, `role`, `size_bytes`, `min_profile`, and `search_text`, the lowercase text of all of them for one search box), whether each is installed, installing, not installed or unsupported and why, the order and the off list, and per level (Reduced, Standard, Boost, Max where they exist) the model in use, who chose it (`household`, `recommended`, `off`), every option with whether it fits, and the recommended pick with its reason. `profiles` shows the picks saved per hardware profile. Categories without levels have one, `standard`. `unused` is what no choice or order uses. Starts no work.",
+        "responses": {
+          "200": {
+            "description": "The whole page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/choices/unused": {
+      "get": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "Installed models no choice, order or fallback uses, and what removing them frees",
+        "description": "A model is listed when it is installed, removable, chosen at no level, not in a category's order (unless that category switched it off), not required by another part and not what this computer's setup binds to a role. `tidy` is the Stack's own list of replaced and abandoned files (`/components/tidy`).",
+        "responses": {
+          "200": {
+            "description": "The list, largest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesUnused"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/choices/unused/remove": {
+      "post": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "Remove the chosen unused models; each id is checked again at removal time",
+        "description": "Each id is judged on fresh state: a model that became used since the list was read is `kept` with the plain reason, never removed. A removal the Stack's own guards refuse (in use, required) is `failed` with its sentence. One id never stops the rest. `tidy: true` also runs the Stack's tidy of replaced and abandoned files.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "maxItems": 20,
+                    "default": []
+                  },
+                  "tidy": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Also run the Stack's tidy of replaced and abandoned files."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One line per id, in the order sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesRemoveResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/choices/recommended": {
+      "post": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "Write the recommended pick for every level and the recommended role switches",
+        "description": "Stores the recommended model for every level this computer has one for, writes the role enable and priority settings as `profiles/apply` (custom_recommended) does, and starts the downloads of the Standard and Reduced picks that are missing. Safe to repeat; it never removes anything. `dry_run: true` answers what would change and writes nothing.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dry_run": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Answer what would change and write nothing."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "What changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesRecommendedResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/choices/add-model": {
+      "post": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "Add a chat model from a Hugging Face link and use it",
+        "description": "Reads the repository without downloading it (size, checksum, licence, architecture), refuses what it cannot size or license, stores the record, starts the checked download and, with `use: true`, selects the model for the category and level. The model then appears among the category's candidates with `kind: added`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
+                    "description": "A huggingface.co link or `owner/repo`."
+                  },
+                  "file": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "description": "The .gguf file when the repository has more than one."
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "chat"
+                    ],
+                    "default": "chat"
+                  },
+                  "tier": {
+                    "$ref": "#/components/schemas/ChoiceLevel"
+                  },
+                  "use": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Select the model for the category and level now."
+                  }
+                },
+                "required": [
+                  "source"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The model is stored and its download has started (or it was already installed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesAddModelResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/choices/migrate": {
+      "post": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "Import Home's old model values once",
+        "description": "Takes Home's per-level models, orders, feature switches and added-model records. Each value is accepted, unchanged or refused on its own with a plain reason; refused values are returned so Home keeps and shows them. Marks the migration done in the Stack (not on a dry run); a second call reads and writes nothing and answers `already_done`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dry_run": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "slots": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        "tier": {
+                          "$ref": "#/components/schemas/ChoiceLevel"
+                        },
+                        "model": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "options": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "tier",
+                        "model"
+                      ]
+                    },
+                    "maxItems": 80,
+                    "default": [],
+                    "description": "Home's `engines.<role>.tier.<tier>.model`. `role` is a Stack category id or role (`image`, `tts`, `videos` are accepted)."
+                  },
+                  "orders": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "category": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        "order": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "maxItems": 60
+                        }
+                      },
+                      "required": [
+                        "category",
+                        "order"
+                      ]
+                    },
+                    "maxItems": 20,
+                    "default": [],
+                    "description": "Home's `engines.<category>.order`."
+                  },
+                  "features": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "enabled"
+                      ]
+                    },
+                    "maxItems": 20,
+                    "default": [],
+                    "description": "Home's feature switches, already as on or off (Home inverts `chat.paused` itself)."
+                  },
+                  "added_models": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 120,
+                          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "repo": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "file": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 1000,
+                          "format": "uri"
+                        },
+                        "revision": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "size_bytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "exclusiveMinimum": true
+                        },
+                        "licence": {
+                          "type": "string",
+                          "nullable": true,
+                          "maxLength": 200,
+                          "default": null
+                        },
+                        "architecture": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "default": "unknown"
+                        },
+                        "verified": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "ram_bytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "label",
+                        "repo",
+                        "file",
+                        "url",
+                        "revision",
+                        "sha256",
+                        "size_bytes"
+                      ]
+                    },
+                    "maxItems": 40,
+                    "default": [],
+                    "description": "Home's added chat model records."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Per-value results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesMigrateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/choices/{category}/order": {
+      "put": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "Set a category's model order and off list",
+        "description": "The same stored value as `PUT /parts/choices`, limited to one category. Candidates left out keep their default place after the listed ones. An engine cannot be switched off, and a model another part needs cannot (409 `required_by`).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "example": "chat"
+            },
+            "required": true,
+            "name": "category",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "order": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "maxItems": 60,
+                    "description": "Candidate ids, tried first to last. Candidates left out keep their default place after these."
+                  },
+                  "off": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "maxItems": 60,
+                    "description": "The candidates switched off. Omitted leaves the off list as it is."
+                  }
+                },
+                "required": [
+                  "order"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The order after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "category": {
+                      "type": "string",
+                      "enum": [
+                        "chat",
+                        "coding",
+                        "pictures",
+                        "video",
+                        "music",
+                        "voice",
+                        "stt",
+                        "embeddings",
+                        "vision",
+                        "wakeword",
+                        "stems"
+                      ]
+                    },
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "disabled": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "category",
+                    "order",
+                    "disabled"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/choices/{category}/{tier}": {
+      "put": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "Choose the model for a category and level, for this computer or for a hardware profile",
+        "description": "Validates that the model is a candidate of the category, is offered for the level on the profile, fits it (this computer's own profile) and is installed or installable, then stores the pick in the Stack. A missing model starts downloading first (`install: false` skips that). `model: \"recommended\"` clears the pick; `model: \"off\"` switches a Reduced, Boost or Max level off. A Standard voice pick sets the voice engine, and a Standard chat pick sets the chat model once it is installed. With `profile` the pick is saved for that hardware profile (judged only on being offered there). Refusals carry a stable `code`: unknown_category, unknown_level, no_such_level, unknown_model, not_offered_here, does_not_fit, unsupported, unknown_option, standard_cannot_be_off, computer_too_small, or the install refusal (not_enough_space, licence_required, not_available).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "example": "chat"
+            },
+            "required": true,
+            "name": "category",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "example": "standard"
+            },
+            "required": true,
+            "name": "tier",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "A model id from the category's candidates, `recommended` (clear the pick), or `off` (switch the level off; not for Standard)."
+                  },
+                  "options": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
+                    },
+                    "description": "Customization stored with the pick, for example `{ \"thinking\": true }`. Keys must be options the model's builds declare."
+                  },
+                  "profile": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/ChoiceProfile"
+                      },
+                      {
+                        "description": "The hardware profile this assignment is for; omitted means this computer's own profile."
+                      }
+                    ]
+                  },
+                  "install": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Start the download when the model is not installed (this computer's profile only). False stores the pick without downloading."
+                  }
+                },
+                "required": [
+                  "model"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored (or already stored).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicePickResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A plain sentence and a stable code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChoicesError"
                 }
               }
             }

@@ -523,6 +523,28 @@ Both routes take identity from the path. A request body with any key is rejected
 
 The components, models, model catalog, tier candidates, capabilities and install-plan routes are deleted in the second landing with Home.
 
+## Model choices: one read and the writes behind it (CHOICES-API-01, 2026-11-21)
+
+The Stack stores every model choice: the model per category, level and hardware profile, the order, the off list and the role switches. Home and the Stack's admin page are two views over these routes; Home keeps no model preference of its own and only adds who may use a level. All routes are under `/stack/v1/choices`, additive, guarded like every other write (loopback checks, then Home's token or the admin session with its CSRF header). Design and stored keys: [dev/choices.md](dev/choices.md).
+
+| Call | Does |
+|---|---|
+| `GET /choices` | The whole page in one read: per category the role switch and priority, `candidates[]`, `order`, `disabled`, `tiers[]` and the picks saved per `profiles[]`; the top level adds `unused` (count and bytes) and `migration`. Starts no work |
+| `PUT /choices/{category}/{tier}` | Choose the model for a level. Body `{ model, options?, profile?, install? }`; `model` may be `recommended` (clear) or `off` (switch a level off, never Standard). Starts the download of a missing model first |
+| `PUT /choices/{category}/order` | Body `{ order, off? }`: the category's model order and off list, stored as `parts.choices` (the same value `PUT /parts/choices` writes) |
+| `POST /choices/recommended` | Body `{ dry_run? }`: writes the recommended pick for every level and the recommended role switches (as `profiles/apply` mode `custom_recommended`), starts the missing Standard and Reduced downloads, never removes anything |
+| `GET /choices/unused`, `POST /choices/unused/remove` | Installed models no level, order or setup binding uses, and their removal; each id is judged again at removal time |
+| `POST /choices/add-model` | Body `{ source, file?, tier?, use? }`: read a Hugging Face link, store the record, start the checked download and select it |
+| `POST /choices/migrate` | The one-time import of Home's old values |
+
+Categories: `chat`, `coding`, `pictures`, `video`, `music`, `voice`, `stt`, `embeddings`, `vision`, `wakeword`, `stems`. A category without levels has one, `standard`. Reduced exists for chat and voice; Boost and Max for chat, pictures, video and music. `role` accepts Home's words (`image`, `tts`, `videos`, `embed`) where a category is named in a body.
+
+Each candidate carries what a page prints and searches, so no page shows a raw catalog field: `label`, `summary` (one plain sentence), `family`, `version` (as people say it, for example 3.8), `quantization` (plain words) with `quantization_raw`, `license`, `repo`, `engine`, `role`, `size_bytes` (on disk when installed, else what installing downloads), `download_bytes`, `min_profile` (plain words) and `min_profile_id`, `peak_bytes`, `state` (`installed`, `installing`, `notInstalled`, `failed`, `unsupported`) with a plain `reason`, `enabled`, `rank`, and `search_text`: the lowercase text of label, id, repo, family, version, quantization (plain and raw), licence, summary, engine and role, for one search box. A level row says `chosen` (the model in use), `chosen_by` (`household`, `recommended`, `off`, `none`), `options[]` (every model with `fits` and the plain refusal), and `recommended` with its `why`. A saved pick that is no longer offered shows a `problem` sentence and the recommended model runs.
+
+Refusals are `{ error, code }` with a plain sentence: `unknown_category`, `unknown_level`, `no_such_level`, `unknown_model`, `not_offered_here`, `does_not_fit` (the fit decision's own sentence), `unsupported`, `unknown_option`, `standard_cannot_be_off`, `computer_too_small`, `duplicate_ids`, `required_by`, `engine_has_no_switch`, and the component install codes (`not_enough_space`, `licence_required`, `not_available`). A Standard voice pick sets `stack.voice.engine`; a Standard chat pick sets `stack.engines.chat.model` once the model is installed (`applied`, `pending_restart`, `note`).
+
+`POST /choices/migrate` takes `{ dry_run?, slots[], orders[], features[], added_models[] }` (Home's `engines.<role>.tier.<tier>.model`, `engines.<category>.order`, feature switches, added chat model records). Each value answers `accepted`, `unchanged` or `refused` with a reason; `refused[]` is returned so Home keeps and shows those values. The Stack marks the migration done (`migration.done` on the read); a later call answers `already_done` and reads and writes nothing.
+
 ## Image tools (IMAGETOOLS-01)
 
 `POST /v1/images/edits` (multipart: `image`, `operation` = `remove_background` | `erase` | `upscale` | `resize` | `depth`; depth returns a same-size grayscale PNG from Depth Anything V2 Small, near white and far black; `mask` for erase, white is
