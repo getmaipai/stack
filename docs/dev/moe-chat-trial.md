@@ -56,3 +56,7 @@ Home's Max chat is a lease on the coding mode, which loads the big model. `codin
 ### Admission of Flash Next (measured peak)
 
 Live finding, 2026-11-21, 128 GB Mac: the chat load asked the ledger for 81 GiB because Splash's Metal budget (estimate plus the 12 GiB headroom setting) was counted as the footprint, and the governor needs the machine's free memory to stay 20 GiB above the request. The coding-mode fit check also took the 20 GiB margin off the model budget a second time, which the governor never does. A model with a measured peak (`measuredPeakBytes` in `SPLASH_LOCAL_CHAT_MODELS`, 74 GB for Flash Next) is now admitted for that peak with no extra headroom and checked by the governor's own rule; models without one keep both stricter checks. A refused "load this model" puts the earlier choice back, clears the start back-off and starts it again, so chat is never left without an engine.
+
+### Max chat window setting
+
+Flash Next launches at its pinned, measured 32,768-token window. `stack.engines.coding.max_chat_context_length` (label "Max chat window", expert, default 32,768, restart to apply) lets an admin ask for a larger one; the launch and the mode's memory check use the larger of the pin and the setting (`pinnedCodingWindow` in `supervisor.ts`). A model with no pinned window still follows `stack.engines.coding.context_length`. Set it only after the larger window has been measured on the computer.
