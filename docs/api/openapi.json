@@ -74,6 +74,37 @@
           "last_active_at"
         ]
       },
+      "SandboxRuntime": {
+        "type": "object",
+        "properties": {
+          "container_system": {
+            "type": "string",
+            "enum": [
+              "running",
+              "stopped"
+            ]
+          },
+          "image": {
+            "type": "string"
+          },
+          "image_built": {
+            "type": "boolean"
+          },
+          "network": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "container_system",
+          "image",
+          "image_built",
+          "network",
+          "detail"
+        ]
+      },
       "MediaStatus": {
         "type": "object",
         "properties": {
@@ -28420,6 +28451,26 @@
                   "required": [
                     "sandboxes"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/sandboxes/runtime": {
+      "get": {
+        "tags": [
+          "Sandboxes"
+        ],
+        "summary": "Whether the container system, the sandbox image and the sandbox network are ready",
+        "responses": {
+          "200": {
+            "description": "Read-only facts for the Code ready check; nothing is started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SandboxRuntime"
                 }
               }
             }
