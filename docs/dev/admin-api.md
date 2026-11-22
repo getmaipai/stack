@@ -15,7 +15,7 @@ The listener is loopback only. When the setting `stack.admin.tailscale` is on (d
 
 | Route | What it does |
 |---|---|
-| `POST /stack/v1/admin/setup` | First run. Body `{ code, password }`. The code is the one in `<data>/admin-setup-code` (mode 0600, also in the log). Password at least 12 characters, stored as an argon2id hash. 5 tries per hour. Deletes the code file. |
+| `POST /stack/v1/admin/setup` | First run. Body `{ code, password }`. The code is the one in `<data>/admin-setup-code` (mode 0600, also in the log). Password at least 8 characters, stored as an argon2id hash. 5 tries per hour. Deletes the code file. |
 | `POST /stack/v1/admin/login` | Body `{ password }`. Sets `stack_admin` (HttpOnly, SameSite=Strict, Path=/). 5 wrong tries in 15 minutes answers 429 with `retry_after`. |
 | `POST /stack/v1/admin/logout` | Ends the session. |
 | `POST /stack/v1/admin/password` | Body `{ current, new }`. Ends every other session. |

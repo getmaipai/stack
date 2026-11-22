@@ -14,7 +14,7 @@ import { db } from "@/db";
 import { admin, adminSessions } from "@/db/schema";
 
 const SETUP_CODE_FILE = "admin-setup-code";
-const MIN_PASSWORD_LENGTH = 12;
+const MIN_PASSWORD_LENGTH = 8;
 const SETUP_MAX_ATTEMPTS = 5;
 const SETUP_WINDOW_MS = 60 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
@@ -133,7 +133,7 @@ export function verifySetupCode(code: string, dataDir: string, now: () => number
 }
 
 /** Sets the one admin password from a valid setup code. The password
- * must be at least 12 characters; it is stored as an argon2id hash and
+ * must be at least 8 characters; it is stored as an argon2id hash and
  * the code file is deleted. Throws AdminError if an admin already
  * exists, and "password_too_short" for a short password. */
 export async function setupAdmin(code: string, password: string, dataDir: string, now: () => number = Date.now): Promise<void> {
@@ -141,7 +141,7 @@ export async function setupAdmin(code: string, password: string, dataDir: string
     throw new AdminError("invalid_setup_code", "That setup code is not right. Enter the code the Stack printed at first run, or run the local reset command on this machine for a new one.");
   }
   if (password.length < MIN_PASSWORD_LENGTH) {
-    throw new AdminError("password_too_short", "The password needs at least 12 characters. Choose a longer one.");
+    throw new AdminError("password_too_short", "The password needs at least 8 characters. Choose a longer one.");
   }
   const existing = db.select().from(admin).get();
   if (existing) {
@@ -217,7 +217,7 @@ export async function logout(token: string, _now: () => number = Date.now): Prom
 }
 
 /** Changes the admin password. Needs a live session token, the current
- * password, and a new one of at least 12 characters. */
+ * password, and a new one of at least 8 characters. */
 export async function changePassword(token: string, current: string, next: string, now: () => number = Date.now): Promise<void> {
   const session = await validateSession(token, now);
   if (!session) {
@@ -232,7 +232,7 @@ export async function changePassword(token: string, current: string, next: strin
     throw new AdminError("wrong_password", "The current password is wrong. Check it and try again.");
   }
   if (next.length < MIN_PASSWORD_LENGTH) {
-    throw new AdminError("password_too_short", "The new password needs at least 12 characters. Choose a longer one.");
+    throw new AdminError("password_too_short", "The new password needs at least 8 characters. Choose a longer one.");
   }
   const passwordHash = await Bun.password.hash(next, ARGON2);
   db.update(admin).set({ passwordHash, updatedAt: iso(now()) }).where(eq(admin.id, 1)).run();

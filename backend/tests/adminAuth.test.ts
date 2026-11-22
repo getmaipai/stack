@@ -75,7 +75,7 @@ test("setup: a wrong code is rejected, and a second setup is refused once an adm
 
 test("setup: a short password is refused and stores nothing", async () => {
   const code = createSetupCode(dataDir, now);
-  await expect(setupAdmin(code, "elephant", dataDir, now)).rejects.toMatchObject({ code: "password_too_short" });
+  await expect(setupAdmin(code, "elephan", dataDir, now)).rejects.toMatchObject({ code: "password_too_short" });
   expect(db.select().from(admin).get()).toBeUndefined();
   expect(existsSync(codePath)).toBe(true);
 });

@@ -18,7 +18,7 @@ cat ~/.maipai-stack/data/admin-setup-code
 2. Open `http://127.0.0.1:8770/admin/` in your browser.
 3. Click **First time here? Set up the admin**.
 4. Paste the code into **Setup code**.
-5. Type a password in **New password**, and again in **Type it again**. It must be at least 12 characters.
+5. Type a password in **New password**, and again in **Type it again**. It must be at least 8 characters.
 6. Click **Set password and sign in**.
 
 You will know it worked when you see the Overview page with a card for each feature.
