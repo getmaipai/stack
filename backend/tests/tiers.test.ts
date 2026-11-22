@@ -181,3 +181,14 @@ describe("voice candidates name their engine (VOICE-VOXCPM2-01)", () => {
     }
   });
 });
+
+// PRESET-AUDIT-01: the uncensored 27B chat model is a part the Stack serves for chat, so a chooser must be able to offer it: an admin's Standard pick on p64 and p128, never the recommended one, and never planned automatically.
+test("the Huihui 27B chat model is a Standard candidate on p64 and p128 and is never the recommended pick", async () => {
+  const { TIER_CANDIDATES } = await import("@/lib/tiers");
+  const { PLANNER_EXCLUDED_CHAT } = await import("@/lib/profilePlanner");
+  const row = TIER_CANDIDATES.find((item) => item.id === "qwen3-8-27b-huihui-abliterated-iq4-xs");
+  expect(row).toMatchObject({ category: "chat", profiles: ["p64", "p128"], tiers: ["standard"] });
+  expect(PLANNER_EXCLUDED_CHAT).toContain("qwen3-8-27b-huihui-abliterated-iq4-xs");
+  const standard = TIER_CANDIDATES.filter((item) => item.category === "chat" && item.tiers.includes("standard") && item.profiles.includes("p128"));
+  expect(standard[0]!.id).not.toBe("qwen3-8-27b-huihui-abliterated-iq4-xs");
+});

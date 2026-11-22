@@ -10,6 +10,12 @@ is published yet. This file tracks what either picks up.
 ## [Unreleased]
 
 ### Added
+
+- Preset audit (PRESET-AUDIT-01, 2026-11-22): the uncensored 27B chat model (a part the Stack already serves for chat) is now an offered Standard pick on 64 and 128 GB computers, never the recommended one. The coding model's description says its Max level uses the Max chat model.
+
+### Changed
+
+- The recommended Standard picture model on a 64 GB computer or bigger is FLUX 3 (the 2026-11-17 owner decision); MiniMax H3-Image stays the Boost pick and is one choice away.
 - Home's installer now builds the admin page with the UI package's own shared spec (Home `e5fb717`), so `/admin/` is served again after a Home ship. This entry also gives the Stack a new commit, which makes Home's installer rebuild the Stack once and pick the page up.
 
 - STACK-MODELS-PAGE-02: the admin page's Features and Models screens are one "AI and models" screen, the shared `StackModelsPage` from `@maipai/ui` (pinned at `ui-v0.5.728`, which carries `spec-v0.1.478`), the same page Home renders. A new `admin-ui/src/stackClient.ts` adapts it to `/stack/v1/*` with the session cookie and CSRF header already in `api.ts`. The old `#/features` address still opens it. The setup-for-this-computer table stays as an extra section. The top-bar search finds models by name, version, precision, licence and description with the page's own search, and the Helper's `get_models` now reads `GET /stack/v1/choices`, so it names the same models as the page. `Features.tsx`, `Models.tsx`, the priority helpers and their tests are removed. `scripts/check.sh` now runs the admin page's own tests.

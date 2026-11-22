@@ -470,18 +470,19 @@ test("(d) the disk plan lists pictures-h3 at 49.3 GB: recommended on 64 and 128 
 
 // ---- (e) the tier catalog ----
 
-test("(e) the tier candidates include the family, and recommended resolves to it for Standard and Boost on p128", () => {
+test("(e) the tier candidates include the family: FLUX 3 is the recommended Standard on p128 (owner decision 2026-11-17), H3 stays the Boost pick and the Standard pick where FLUX 3 does not fit", () => {
   const room = 72 * GB;
   const levels = tierCandidateLists("pictures", "p128", room);
   const by = (tier: string) => levels.find((level) => level.tier === tier)!;
-  expect(by("standard").recommended).toBe("minimax-h3-image");
+  expect(by("standard").recommended).toBe("flux3-image-klein");
   expect(by("boost").recommended).toBe("minimax-h3-image");
   expect(by("max").recommended).toBe("qwen-image-2512-q8");
   const row = by("standard").candidates.find((candidate) => candidate.id === "minimax-h3-image")!;
   expect(row).toMatchObject({ label: partDef("minimax-h3-image")!.label, family: "minimax-h3", peakBytes: 22 * GB, verified: true, fits: true, refusal: null });
   // ERNIE, Z-Image, Klein and Qwen-Image stay candidates.
   expect(by("standard").candidates.map((candidate) => candidate.id)).toEqual(expect.arrayContaining(["ernie-image-turbo", "flux2-klein-4b", "z-image-turbo", "qwen-image-2512-q8", "minimax-h3-image"]));
-  expect(resolveTier({ category: "pictures", tier: "standard", profile: "p128", roomBytes: room })).toMatchObject({ model: "minimax-h3-image", peakBytes: 22 * GB, verified: true });
+  expect(resolveTier({ category: "pictures", tier: "standard", profile: "p128", roomBytes: room })).toMatchObject({ model: "flux3-image-klein" });
+  expect(resolveTier({ category: "pictures", tier: "boost", profile: "p128", roomBytes: room })).toMatchObject({ model: "minimax-h3-image", peakBytes: 22 * GB, verified: true });
   expect(resolveTier({ category: "pictures", tier: "boost", profile: "p128", roomBytes: room })).toMatchObject({ model: "minimax-h3-image", peakBytes: 22 * GB });
   expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: room })?.model).toBe("qwen-image-2512-q8");
   expect(resolveTier({ category: "pictures", tier: "standard", profile: "p64", roomBytes: 40 * GB })?.model).toBe("minimax-h3-image");
@@ -489,7 +490,7 @@ test("(e) the tier candidates include the family, and recommended resolves to it
   expect(resolveTier({ category: "pictures", tier: "standard", profile: "p64", roomBytes: 24 * GB })?.model).toBe("flux2-klein-4b");
   // The streaming Standard candidate on the small profiles.
   for (const profile of ["p16", "p32"] as const) expect(resolveTier({ category: "pictures", tier: "standard", profile, roomBytes: 12 * GB })).toMatchObject({ model: "minimax-h3-image", peakBytes: 2.5 * GB, verified: true, options: { ditMode: "stream" } });
-  expect(resolveLadder("pictures", "p128", room).map((rung) => rung.resolved?.model)).toEqual(["minimax-h3-image", "minimax-h3-image", "qwen-image-2512-q8"]);
+  expect(resolveLadder("pictures", "p128", room).map((rung) => rung.resolved?.model)).toEqual(["flux3-image-klein", "minimax-h3-image", "qwen-image-2512-q8"]);
   const h3 = TIER_CANDIDATES.filter((candidate) => candidate.id === "minimax-h3-image");
   expect(h3.flatMap((candidate) => candidate.peaks.map((peak) => peak.note))).toEqual([expect.stringContaining("Studio bakeoff 2026-11-15"), expect.stringContaining("Studio bakeoff 2026-11-15")]);
   expect(h3.every((candidate) => candidate.id === STACK_IMAGE_H3_ID)).toBe(true);

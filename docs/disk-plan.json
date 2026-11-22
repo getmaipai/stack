@@ -1168,7 +1168,7 @@
         {
           "id": "coding",
           "label": "Qwen3.8 27B",
-          "note": "The model that writes code for the coding tools you connect.",
+          "note": "The model that writes code for the coding tools you connect. Its Max level uses the Max chat model, chosen under Chat.",
           "kind": "model",
           "need": "recommended",
           "selectable": true,
@@ -2170,7 +2170,7 @@
         {
           "id": "coding",
           "label": "Qwen3.8 27B",
-          "note": "The model that writes code for the coding tools you connect.",
+          "note": "The model that writes code for the coding tools you connect. Its Max level uses the Max chat model, chosen under Chat.",
           "kind": "model",
           "need": "recommended",
           "selectable": true,
