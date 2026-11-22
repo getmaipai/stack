@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api";
 import type { Engine, HealthItem, Healthz, Role, Status } from "./api";
 
+/** The names the Stack's event feed sends; any of them is a reason to look again (shared with the models page's client, so both read one list). */
+export const FEED_EVENTS = ["role.state", "engine.state", "pressure", "job.progress", "job.done", "model.installed", "update.available", "update.applied", "update.failed", "health.changed", "window"] as const;
+
 export interface Snapshot {
   status: Status | null; roles: Role[] | null; health: HealthItem[] | null; engines: Engine[] | null; healthz: Healthz | null;
   error: string | null; loaded: boolean; live: boolean;
@@ -44,7 +47,7 @@ export function useLive(onSignedOut: () => void): { snap: Snapshot; refresh: () 
       source.onerror = () => setSnap((s) => ({ ...s, live: false }));
       source.onmessage = refresh;
       // The feed names its events; any of them is a reason to look again.
-      for (const name of ["role.state", "engine.state", "pressure", "job.progress", "job.done", "model.installed", "update.available", "update.applied", "update.failed", "health.changed", "window"]) source.addEventListener(name, refresh);
+      for (const name of FEED_EVENTS) source.addEventListener(name, refresh);
     } catch { /* the poll still keeps the page fresh */ }
     return () => { clearInterval(poll); if (timer.current) clearTimeout(timer.current); source?.close(); };
   }, [load, refresh]);

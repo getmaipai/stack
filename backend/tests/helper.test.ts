@@ -36,6 +36,7 @@ function fakeRoute(over: Record<string, { status: number; json: unknown }> = {})
     if (path === "/stack/v1/roles") return { status: 200, json: { roles: ROLE_VIEWS } };
     if (path === "/stack/v1/engines") return { status: 200, json: { engines: [{ name: "llama-server", running: true }, { name: "pocket-tts", running: false }, { name: "splash", running: false }] } };
     if (path === "/stack/v1/models") return { status: 200, json: { models: [] } };
+    if (path === "/stack/v1/choices") return { status: 200, json: { categories: [{ id: "coding", label: "Coding", role: "coding", tiered: false, candidates: [{ id: "qwen3.8-27b-ud-q4-k-m", label: "Qwen3.8 27B", summary: "Writes code.", version: "3.8", quantization: "4-bit, compact", license: "Apache-2.0", engine: "llama-server", size_bytes: 17_000_000_000, state: "installed", percent: null, enabled: true }], tiers: [{ tier: "standard", cap_bytes: null, chosen: "qwen3.8-27b-ud-q4-k-m", chosen_by: "recommended", options: [], problem: null }] }] } };
     if (path === "/stack/v1/updates") return { status: 200, json: { checksEnabled: true, engines: [{ name: "llama-server", installed: "b1", available: "b2", lastChecked: null }] } };
     if (path === "/stack/v1/memory") return { status: 200, json: { memory: { total_bytes: 137_438_953_472, available_bytes: 87_000_000_000, pressure: "normal" }, ledger: { budget_bytes: 96_000_000_000, warm_bytes: 0, reserved_bytes: 0, items: [] }, stack: { processes: [] }, top_consumers: [{ pid: 7, name: "splash", bytes: 25_062_267_288, stack: true }] } };
     if (path === "/stack/v1/profiles/recommend") return { status: 200, json: { matched: null, custom_recommended: { plan: { budget: { total_bytes: 137_438_953_472 }, roles: [{ role: "music", enabled: true, priority: 100 }, { role: "video", enabled: true, priority: 50 }] } } } };
@@ -244,7 +245,7 @@ test("reboot, removing a model and passwords are not offered and the reply point
   setHelperModelForTests(NO_MODEL);
   const admin = await adminHeaders();
   expect((await askJson("reboot the computer", admin)).reply).toContain("Tools screen");
-  expect((await askJson("delete the coding model", admin)).reply).toContain("Models screen");
+  expect((await askJson("delete the coding model", admin)).reply).toContain("AI and models screen");
   expect((await askJson("what is my admin password", admin)).reply).toContain("cannot");
   expect(routeCalls).toHaveLength(0);
 });

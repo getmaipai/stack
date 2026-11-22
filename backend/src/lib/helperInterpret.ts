@@ -54,7 +54,7 @@ export function interpret(message: string, previous: Topic | null): Plan {
 
   // Not offered at all.
   if (REBOOT.test(t) || /^(reboot|shut ?down)\b/.test(t)) return { reads, say: "I cannot restart or shut down the computer. Use the Tools screen for that." };
-  if (REMOVE.test(t)) return { reads, say: "I do not remove models or engines. Use the Models screen to remove a model." };
+  if (REMOVE.test(t)) return { reads, say: "I do not remove models or engines. Use the AI and models screen to remove a model." };
   if (SECRET.test(t) && /\b(what|show|print|tell|read|give|reveal|change|reset|set)\b/.test(t)) return { reads, say: "I cannot read or change passwords or tokens. Use the sign-in settings on this computer." };
 
   // Changes. One typed action when the words are clear; a question when they fit two features.

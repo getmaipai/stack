@@ -22,8 +22,8 @@ const PASSWORD = "demo-admin-password-1";
 const THEME_KEY = "maipai.stack.admin.theme";
 
 const SCREENS = [
-  { id: "sign-in", hash: "", wait: 600 }, { id: "overview", hash: "overview", wait: 1200 }, { id: "features", hash: "features", wait: 1200 },
-  { id: "models", hash: "models", wait: 1800 }, { id: "resources", hash: "resources", wait: 2600 }, { id: "engines", hash: "engines", wait: 1400 },
+  { id: "sign-in", hash: "", wait: 600 }, { id: "overview", hash: "overview", wait: 1200 }, { id: "models", hash: "models", wait: 2200 },
+  { id: "resources", hash: "resources", wait: 2600 }, { id: "engines", hash: "engines", wait: 1400 },
   { id: "health", hash: "health", wait: 1200 }, { id: "settings", hash: "settings", wait: 1500 }, { id: "updates", hash: "updates", wait: 1200 },
   { id: "tools", hash: "tools", wait: 1400 }, { id: "helper", hash: "helper", wait: 1500 },
   // The Helper slide-over, opened from the top bar on the Overview.

@@ -71,8 +71,8 @@ test("words that fit two features become a question, never a guess", () => {
 test("what is not offered gets a fixed answer that points to the right screen", () => {
   expect(interpret("reboot the computer", null).say).toContain("Tools screen");
   expect(interpret("shut down the pc", null).say).toContain("Tools screen");
-  expect(interpret("delete the coding model", null).say).toContain("Models screen");
-  expect(interpret("uninstall the 27b model", null).say).toContain("Models screen");
+  expect(interpret("delete the coding model", null).say).toContain("AI and models screen");
+  expect(interpret("uninstall the 27b model", null).say).toContain("AI and models screen");
   expect(interpret("what is my admin password", null).say).toContain("cannot");
   // restart llama-server is an engine, not the computer.
   expect(interpret("restart llama-server", null).say).toBeUndefined();

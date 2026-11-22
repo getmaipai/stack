@@ -46,15 +46,6 @@ export interface Setting {
 }
 export interface SettingsDoc { sections: { id: string; label: string }[]; settings: Setting[] }
 
-export interface CatalogModel {
-  id: string; role: string; repo?: string; license?: string; revision?: string; engine?: string;
-  sizing?: { profile?: string; quantization?: string };
-  download?: { url?: string; sha256?: string; approx_bytes?: number; files?: unknown };
-}
-export interface InstalledModel {
-  id: string; roles: string[]; state: "notInstalled" | "installed"; runtimeState?: "loaded" | "ready" | null; pinned?: boolean;
-  sizeBytes?: number | null; fileMissing?: boolean; estimated?: boolean;
-}
 export type Tier = "p16" | "p32" | "p64" | "p128";
 export type Mode = "matched" | "custom_recommended" | "custom";
 export interface PlanRole {
@@ -96,7 +87,7 @@ export interface CheckResult {
 
 import type { History, Range, Summary } from "./resourceData";
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const write = method !== "GET";
   const response = await fetch(path, {
     method,
@@ -132,13 +123,6 @@ export const api = {
   settings: () => call<SettingsDoc>("GET", "/stack/v1/settings"),
   putSettings: (values: Record<string, SettingValue>) => call<SettingsDoc>("PUT", "/stack/v1/settings", values),
   applySettings: () => call<SettingsDoc>("POST", "/stack/v1/settings/apply", {}),
-  catalog: () => call<{ models: CatalogModel[] }>("GET", "/stack/v1/models/catalog"),
-  models: () => call<{ models: InstalledModel[] }>("GET", "/stack/v1/models"),
-  installModel: (m: CatalogModel) => call<unknown>("POST", "/stack/v1/models", {
-    id: m.id, role: m.role, repo: m.repo, url: m.download?.url, sha256: m.download?.sha256, approx_bytes: m.download?.approx_bytes,
-    licence: m.license, revision: m.revision, engine: m.engine,
-  }),
-  removeModel: (id: string) => call<unknown>("DELETE", `/stack/v1/models/${encodeURIComponent(id)}`),
   recommend: () => call<Recommendation>("POST", "/stack/v1/profiles/recommend", {}),
   applyProfile: (body: { mode: Mode; tier?: Tier; plan?: { roles: { role: string; enabled: boolean; priority: number }[] } }) => call<Applied>("POST", "/stack/v1/profiles/apply", body),
   updates: () => call<Updates>("GET", "/stack/v1/updates"),

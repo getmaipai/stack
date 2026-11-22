@@ -28,13 +28,13 @@ test("reduced motion shortens every animation and transition, not just the ones 
   expect(block).toMatch(/transition-duration: 1ms !important/);
 });
 
-test("the sidebar groups every screen once and the palette searches screens, features and actions", () => {
+test("the sidebar groups every screen once and the palette searches screens, features, models and actions", () => {
   const app = read("App.tsx");
   const order = [...app.matchAll(/order: \[([^\]]*)\]/g)].flatMap((m) => [...m[1]!.matchAll(/"(\w+)"/g)].map((x) => x[1]!));
   const ids = [...app.matchAll(/\{ id: "(\w+)", label: "[^"]+", question:/g)].map((m) => m[1]!);
-  expect(ids.length).toBe(10);
+  expect(ids.length).toBe(9);
   expect([...order].sort()).toEqual([...ids].sort());
   expect(new Set(order).size).toBe(order.length);
   const palette = read("Palette.tsx");
-  for (const heading of ["Screens", "Features", "Actions"]) expect(palette).toContain(`heading="${heading}"`);
+  for (const heading of ["Screens", "Models", "Features", "Actions"]) expect(palette).toContain(`heading="${heading}"`);
 });

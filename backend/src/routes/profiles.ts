@@ -38,7 +38,7 @@ const RecommendationSchema = z.object({
   saved: SavedSchema.nullable(),
   replan: z.object({ needed: z.boolean(), reason: z.string().nullable() }),
 });
-const RecommendBody = z.object({ vram_gb: z.number().int().min(1).max(512).optional(), roles: z.array(RoleChoice).optional().describe("Overrides the stored role switches for this question only (for the Features screen's live budget bar).") });
+const RecommendBody = z.object({ vram_gb: z.number().int().min(1).max(512).optional(), roles: z.array(RoleChoice).optional().describe("Overrides the stored role switches for this question only (for a live budget preview before a switch is saved).") });
 const ApplyBody = z.object({
   mode: Mode, tier: TierId.optional().describe("Matched only: the template to apply; defaults to the matched tier."),
   vram_gb: z.number().int().min(1).max(512).optional(),

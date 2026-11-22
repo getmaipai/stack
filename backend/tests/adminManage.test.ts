@@ -1,26 +1,11 @@
-// The Features, Models, Settings, Updates and Tools screens' pure helpers (admin-ui/src/manage.ts):
-// priority order and moves, the reboot switch, model grouping, plain-words wording and setting input checks.
+// The plan wording, Settings, Updates and Tools screens' pure helpers (admin-ui/src/manage.ts):
+// the reboot switch, plain-words wording and setting input checks. Model choices and priority are the shared page's (@maipai/ui).
 import { expect, test } from "bun:test";
-import { byPriority, catalogForRole, coerce, fitWord, installedState, movePriority, pendingKeys, planStateWord, rebootAllowed, settingValue, settingsForScreen } from "../../admin-ui/src/manage";
+import { coerce, fitWord, pendingKeys, planStateWord, rebootAllowed, settingValue, settingsForScreen } from "../../admin-ui/src/manage";
 import type { Setting, SettingsDoc } from "../../admin-ui/src/api";
 
 const setting = (over: Partial<Setting>): Setting => ({
   key: "stack.x", selector: "number", label: "X", help: "", range: { min: 1, max: 100 }, default: 1, section: { id: "a", order: 1 }, level: "basic", needs_restart: false, in_effect: 1, pending: null, ...over,
-});
-
-test("priority orders lowest first and keeps arrival order for ties", () => {
-  const roles = [{ id: "chat", priority: 100 }, { id: "stt", priority: 10 }, { id: "tts", priority: 100 }];
-  expect(byPriority(roles).map((r) => r.id)).toEqual(["stt", "chat", "tts"]);
-});
-
-test("moving a role renumbers ties into a real order and writes only the changed keys", () => {
-  const equal = [{ id: "chat", priority: 100 }, { id: "judge", priority: 100 }, { id: "tts", priority: 100 }];
-  expect(movePriority(equal, "judge", -1)).toEqual({ "stack.roles.judge.priority": 10, "stack.roles.chat.priority": 20, "stack.roles.tts.priority": 30 });
-  const ordered = [{ id: "chat", priority: 10 }, { id: "judge", priority: 20 }, { id: "tts", priority: 30 }];
-  expect(movePriority(ordered, "judge", 1)).toEqual({ "stack.roles.tts.priority": 20, "stack.roles.judge.priority": 30 });
-  expect(movePriority(ordered, "chat", -1)).toEqual({});
-  expect(movePriority(ordered, "tts", 1)).toEqual({});
-  expect(movePriority(ordered, "nope", 1)).toEqual({});
 });
 
 test("reboot is offered only when the declared setting is on", () => {
@@ -28,15 +13,6 @@ test("reboot is offered only when the declared setting is on", () => {
   expect(rebootAllowed(doc(true))).toBe(true);
   expect(rebootAllowed(doc(false))).toBe(false);
   expect(rebootAllowed(null)).toBe(false);
-});
-
-test("models are grouped by role, installable ones only, and install state reads the stored list", () => {
-  const cat = [{ id: "b", role: "chat", download: { url: "u" } }, { id: "a", role: "chat", download: { url: "u" } }, { id: "noUrl", role: "chat" }, { id: "t", role: "tts", download: { url: "u" } }];
-  expect(catalogForRole(cat, "chat").map((m) => m.id)).toEqual(["a", "b"]);
-  const have = [{ id: "a", roles: ["chat"], state: "installed" as const, runtimeState: "loaded" as const }, { id: "b", roles: ["chat"], state: "installed" as const, fileMissing: true }];
-  expect(installedState("a", have)).toBe("loaded");
-  expect(installedState("b", have)).toBe("missing");
-  expect(installedState("zzz", have)).toBe("missing");
 });
 
 test("fit decisions are said in plain words", () => {

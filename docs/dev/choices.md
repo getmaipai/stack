@@ -61,6 +61,6 @@ A pick whose model is not installed (or does not fit) is saved, never loaded sil
 
 Both views come from `lib/choiceRuntime.ts` (`runningFor`): every level row has `running { active, model, answering, reason }`, and every role in `GET /stack/v1/roles` has `choice { category, level, chosen, chosen_by, model, answering, reason }` for the level in use (chat is Standard, Reduced while swapped down, Max in coding mode). `tests/choiceResolver.test.ts` asserts the two agree for every category.
 
-## Not built yet
+## Views
 
-The admin page and Home views, the shared page component and the spec shapes follow (plan: `docs/plans/shared-ai-models-page-2026-11-21.md`).
+The admin page renders `StackModelsPage` from `@maipai/ui` (STACK-MODELS-PAGE-02). `admin-ui/src/stackClient.ts` is its `StackClient`: one call per method over same-origin `/stack/v1/*` through `api.ts` (cookie, CSRF header), with the Stack's own sentence and code on a refusal. The Helper's `get_models` and the top-bar search read the same `GET /choices`. Home's view (its `/api/ai/*` forwarder) and the spec-shape generation check are still to come (plan: `docs/plans/shared-ai-models-page-2026-11-21.md`).

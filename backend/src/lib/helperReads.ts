@@ -2,7 +2,7 @@
 // as the page shows them, tiers spelled out, and "installed" kept apart from "chosen". Each reader asks
 // the same /stack/v1 routes the page uses, through the route door, and returns text. A failed route is
 // an ok:false outcome the chat loop turns into a plain "could not read".
-import { STACK_MODELS } from "@/lib/modelCatalog";
+import type { Candidate, Category } from "@/lib/choicesSchema";
 import { GLOSSARY, gb, lookupTerm, modelLabel, plainJson, resolveRole, roleExplain, roleLabel, TIER_NAMES, tierCategoryOf, type TierName } from "@/lib/helperKnowledge";
 import type { RouteCall, ToolOutcome } from "@/lib/helperTools";
 import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
@@ -53,10 +53,21 @@ export async function readRoles(route: RouteCall, args: { focus?: unknown } = {}
     ...(args.focus === "onoff" ? { lead: `Turned on: ${on.map((r) => r.label).join(", ") || "nothing"}. Turned off: ${off.map((r) => r.label).join(", ") || "nothing"}.`, must: off.map((r) => r.label) } : {}) };
 }
 
-/** Pinned catalog models whose declared role is this one, for the "available but not installed" part. */
-function catalogFor(role: RoleId): Array<{ id: string; engine: string; bytes: number | null; profile?: string }> {
-  return STACK_MODELS.filter((m) => m.role === role && !m.component).map((m) => ({ id: m.id, engine: String(m.engine ?? "llama-server"), bytes: m.download?.approx_bytes ?? null, profile: (m.sizing as { profile?: string } | undefined)?.profile }));
+const CANDIDATE_STATE_WORDS: Record<Candidate["state"], string> = { installed: "INSTALLED", installing: "downloading", notInstalled: "not installed", failed: "install failed", unsupported: "not available on this Stack yet" };
+const stateOf = (c: Candidate): string => (c.state === "installing" && c.percent !== null ? `downloading, ${Math.round(c.percent)} percent` : CANDIDATE_STATE_WORDS[c.state]);
+
+/** The page's own read (`GET /stack/v1/choices`), so the Helper and the AI and models page name the same models in the same words. */
+async function loadChoices(route: RouteCall): Promise<Category[] | null> {
+  const r = await getJson(route, "/stack/v1/choices");
+  return r.ok && Array.isArray(r.json.categories) ? (r.json.categories as Category[]) : null;
 }
+
+/** The choices category a feature belongs to: its own, or (judge and router) the chat category they share. */
+function categoryOf(categories: Category[], role: RoleId): Category | null {
+  return categories.find((c) => c.role === role) ?? categories.find((c) => c.id === tierCategoryOf(role)) ?? null;
+}
+
+const levelWord = (tier: string): string => `${tier[0]!.toUpperCase()}${tier.slice(1)}`;
 
 export async function readModels(route: RouteCall, args: { role?: unknown; tier?: unknown }): Promise<ToolOutcome> {
   const resolved = resolveRole(args.role ?? "chat");
@@ -65,44 +76,46 @@ export async function readModels(route: RouteCall, args: { role?: unknown; tier?
   const roles = await loadRoles(route);
   if (!roles) return fail("Could not read the features.");
   const view = roles.find((r) => r.id === role)!;
-  const lines: string[] = [];
-  const installed = await getJson(route, "/stack/v1/models");
-  const installedIds = new Set<string>(installed.ok && Array.isArray(installed.json.models) ? (installed.json.models as Array<{ id: string; modelPath?: string | null; roles?: string[] }>).filter((m) => m.roles?.includes(role) || m.id === view.model?.id).map((m) => m.id) : []);
-  if (view.model) installedIds.add(view.model.id);
+  const choices = await loadChoices(route);
+  if (!choices) return fail("Could not read the models.");
+  const category = categoryOf(choices, role);
   const wantTier = TIER_NAMES.includes(String(args.tier ?? "").toLowerCase() as TierName) ? (String(args.tier).toLowerCase() as TierName) : null;
+  const lines: string[] = [];
 
   lines.push(`${view.label} (${role}) is ${stateWord(view)}. It is a ${ROLES[role].residency === "resident" ? "always-loaded" : "load-when-asked"} feature (${roleExplain(role)}).`);
-  lines.push(view.model ? `Chosen model right now: ${modelLabel(view.model.id)} (${view.model.id}).` : "Chosen model right now: none, because none is installed for it.");
+  lines.push(view.model ? `Running right now: ${modelLabel(view.model.id)} (${view.model.id}).` : "Running right now: none, because none is installed for it.");
   if (role === "coding" && view.coding) lines.push(`Coding engine: ${view.coding.engine}${view.coding.engine_reason ? ` (${view.coding.engine_reason})` : ""}.`);
   if (role === "tts" && view.tts) lines.push(`Voice engine in use: ${view.tts.engine}.`);
-
-  const catalog = catalogFor(role);
-  if (catalog.length > 0) {
-    lines.push(`Models this Stack offers for ${view.label}:`);
-    for (const m of catalog) lines.push(`- ${modelLabel(m.id)} (${m.id}): engine ${m.engine}${m.bytes ? `, about ${gb(m.bytes)} on disk` : ""}${m.profile ? `, meant for ${m.profile.toUpperCase().replace("P", "")} GB computers and up` : ""}; ${installedIds.has(m.id) ? "INSTALLED" : "not installed"}${view.model?.id === m.id ? "; CHOSEN" : ""}.`);
+  if (!category) {
+    lines.push(`The Stack lists no models for ${view.label}.`);
+    return okText(lines.join("\n"));
   }
-  const extraInstalled = [...installedIds].filter((id) => !catalog.some((m) => m.id === id));
-  if (extraInstalled.length > 0) lines.push(`Also installed for it: ${extraInstalled.map((id) => `${modelLabel(id)} (${id})`).join(", ")}.`);
 
-  const category = tierCategoryOf(role);
-  if (category) {
-    const tiers = await getJson(route, `/stack/v1/tiers/candidates?category=${category}`);
-    if (tiers.ok && Array.isArray(tiers.json.levels)) {
-      lines.push(`Tiers for ${category === "chat" ? "chat" : category} on this computer (a tier is how big a model it may use):`);
-      lines.push(`- Reduced: ${TIER_MEANING.reduced}.`);
-      for (const level of tiers.json.levels as Array<{ tier: TierName; cap_bytes: number; recommended: string | null; candidates: Array<{ id: string; label: string; peak_bytes: number; fits: boolean }> }>) {
-        if (wantTier && wantTier !== "reduced" && level.tier !== wantTier) continue;
-        const fitting = level.candidates.filter((c) => c.fits);
-        const rec = level.recommended ? modelLabel(level.recommended) : "none";
-        lines.push(`- ${level.tier[0]!.toUpperCase()}${level.tier.slice(1)} (${TIER_MEANING[level.tier]}; up to ${gb(level.cap_bytes)}): recommended ${rec}${level.recommended && installedIds.has(level.recommended) ? " (installed)" : ""}. Fits: ${fitting.length > 0 ? fitting.map((c) => `${c.label} ${gb(c.peak_bytes)}${installedIds.has(c.id) ? " (installed)" : ""}`).join(", ") : "nothing"}.`);
-      }
+  const rows = [...category.tiers].sort((a, b) => TIER_NAMES.indexOf(a.tier as TierName) - TIER_NAMES.indexOf(b.tier as TierName));
+  const labelById = new Map(category.candidates.map((c) => [c.id, c.label]));
+  const chosenAt = (id: string): string[] => rows.filter((row) => row.chosen === id).map((row) => levelWord(row.tier));
+  lines.push(`Models this Stack offers for ${view.label}, as the AI and models page shows them:`);
+  for (const c of category.candidates) {
+    const at = chosenAt(c.id);
+    lines.push(`- ${c.label} (${c.id}): ${[c.version ? `version ${c.version}` : null, c.quantization, c.license, `engine ${c.engine ?? "unknown"}`].filter(Boolean).join(", ")}; about ${gb(c.size_bytes)} on disk; ${stateOf(c)}${at.length > 0 ? `; CHOSEN for ${at.join(" and ")}` : ""}${c.enabled ? "" : "; switched off in the order"}. ${c.summary}`);
+  }
+
+  if (category.tiered) {
+    lines.push(`Levels for ${category.label} on this computer (a level is how big a model it may use):`);
+    if (!wantTier || wantTier === "reduced") lines.push(`- Reduced: ${TIER_MEANING.reduced}.`);
+    for (const row of rows) {
+      if (wantTier && row.tier !== wantTier) continue;
+      const fitting = row.options.filter((o) => o.fits).map((o) => `${labelById.get(o.model) ?? o.model}`);
+      const chosen = row.chosen ? `${labelById.get(row.chosen) ?? row.chosen}${row.chosen_by === "household" ? " (chosen by the household)" : row.chosen_by === "recommended" ? " (the recommended one)" : ""}` : row.chosen_by === "off" ? "switched off" : "none fits";
+      const meaning = TIER_MEANING[row.tier as TierName];
+      lines.push(`- ${levelWord(row.tier)} (${meaning ? `${meaning}; ` : ""}${row.cap_bytes ? `up to ${gb(row.cap_bytes)}` : "no memory cap"}): uses ${chosen}. Fits: ${fitting.length > 0 ? fitting.join(", ") : "nothing"}.${row.problem ? ` Problem: ${row.problem}` : ""}`);
     }
   } else if (wantTier) {
-    lines.push(`Note: ${view.label} has no Reduced, Standard, Boost or Max ladder. Tiers exist for chat, pictures, video, music and voice. The models above are all it has.`);
-    const names = catalog.map((m) => `${modelLabel(m.id)} (${installedIds.has(m.id) ? "installed" : "not installed"}${view.model?.id === m.id ? ", chosen" : ""})`).join(" and ");
-    return { ok: true, text: lines.join("\n"), lead: `${view.label} has no ${wantTier[0]!.toUpperCase()}${wantTier.slice(1)} tier, because tiers exist only for chat, pictures, video, music and voice. Its models are ${names || "none yet"}.`, must: [/\bno\b|does not|doesn.t|isn.t|not have/i] };
+    const names = category.candidates.map((c) => `${c.label} (${c.state === "installed" ? "installed" : "not installed"}${chosenAt(c.id).length > 0 ? ", chosen" : ""})`).join(" and ");
+    lines.push(`Note: ${view.label} has no Reduced, Standard, Boost or Max ladder. The models above are all it has.`);
+    return { ok: true, text: lines.join("\n"), lead: `${view.label} has no ${levelWord(wantTier)} tier, because tiers exist only for chat, pictures, video, music and voice. Its models are ${names || "none yet"}.`, must: [/\bno\b|does not|doesn.t|isn.t|not have/i] };
   } else {
-    lines.push(`Note: ${view.label} has no tier ladder; the models above are all it has.`);
+    lines.push(`Note: ${view.label} has no level ladder; the models above are all it has.`);
   }
   return okText(lines.join("\n"));
 }

@@ -89,8 +89,8 @@ if [ "$MODE" != docs ]; then
   # installs and typechecks on its own, here, where the ui tag is placed beside the repo.
   UI_DEP="$(sed -n 's#.*"@maipai/ui"[[:space:]]*:[[:space:]]*"file:\([^"]*\)".*#\1#p' admin-ui/package.json)"
   if [ -f "admin-ui/$UI_DEP/package.json" ]; then
-    echo "== admin-ui: install, typecheck"
-    (cd admin-ui && bun install --silent && bunx tsc --noEmit)
+    echo "== admin-ui: install, typecheck, tests"
+    (cd admin-ui && bun install --silent && bunx tsc --noEmit && bun test)
   else
     echo "== admin-ui: skipped (@maipai/ui not at admin-ui/$UI_DEP)"
   fi

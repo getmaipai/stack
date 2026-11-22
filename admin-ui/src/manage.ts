@@ -1,39 +1,9 @@
-// Pure helpers for the Features, Models, Settings, Updates and Tools screens.
+// Pure helpers for the plan wording, Settings, Updates and Tools screens (model choices and priority live in the shared AI and models page).
 // No React and no network, so tests/adminManage.test.ts can pin the wording and the maths.
-import type { CatalogModel, InstalledModel, PlanRole, Setting, SettingValue, SettingsDoc } from "./api";
-
-/** Lower number is served first when work waits for memory (ADMIN-04). */
-export function byPriority<T extends { id: string; priority?: number }>(roles: T[]): T[] {
-  return roles.map((r, i) => ({ r, i })).sort((a, b) => (a.r.priority ?? 100) - (b.r.priority ?? 100) || a.i - b.i).map((x) => x.r);
-}
-
-/** The settings to write so `id` moves one place up or down. Everything is renumbered 10, 20, 30 so ties (the default 100 for all) become a real order. Only changed keys are returned. */
-export function movePriority(roles: { id: string; priority?: number }[], id: string, dir: -1 | 1): Record<string, number> {
-  const order = byPriority(roles).map((r) => r.id);
-  const from = order.indexOf(id);
-  const to = from + dir;
-  if (from < 0 || to < 0 || to >= order.length) return {};
-  [order[from], order[to]] = [order[to]!, order[from]!];
-  const changes: Record<string, number> = {};
-  for (const [i, role] of order.entries()) {
-    const next = (i + 1) * 10;
-    if (roles.find((r) => r.id === role)?.priority !== next) changes[`stack.roles.${role}.priority`] = next;
-  }
-  return changes;
-}
+import type { PlanRole, Setting, SettingValue, SettingsDoc } from "./api";
 
 export function rebootAllowed(doc: SettingsDoc | null): boolean {
   return doc?.settings.find((s) => s.key === "stack.admin.allow_reboot")?.in_effect === true;
-}
-
-export function catalogForRole(catalog: CatalogModel[], role: string): CatalogModel[] {
-  return catalog.filter((m) => m.role === role && !!m.download?.url).sort((a, b) => (a.sizing?.profile ?? "").localeCompare(b.sizing?.profile ?? "") || a.id.localeCompare(b.id));
-}
-
-export function installedState(id: string, installed: InstalledModel[]): "missing" | "installed" | "loaded" {
-  const m = installed.find((x) => x.id === id);
-  if (!m || m.state !== "installed" || m.fileMissing) return "missing";
-  return m.runtimeState === "loaded" ? "loaded" : "installed";
 }
 
 const FIT_WORDS: Record<PlanRole["fit"], string> = {

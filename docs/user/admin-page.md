@@ -1,6 +1,6 @@
 # A tour of the admin page
 
-The admin page has ten screens. Pick one from the list on the left, or on a phone from the bar at the bottom. Press `Command` and `K` to jump to any screen by name.
+The admin page has nine screens. Pick one from the list on the left, or on a phone from the bar at the bottom. Press `Command` and `K` to jump to any screen by name.
 
 The bar at the top shows the Stack's state in a few words ("Everything is running" or "Needs attention") and whether the page is getting live updates. The moon and sun button switches light and dark.
 
@@ -22,23 +22,14 @@ One password, set the first time you open the page. See [Sign in for the first t
 
 The big picture: status, version, how long the Stack has been up, how much memory is in use, and one card per feature. Each card says which model is answering.
 
-## Features
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../images/admin/features-desktop-dark.webp">
-  <img src="../images/admin/features-desktop-light.webp" alt="Features screen with an on and off switch on each feature card." width="720">
-</picture>
-
-A switch for each feature. Off means the Stack stops it, frees its memory, and says why it refuses that work. See [Choose features and models](features-and-models.md).
-
-## Models
+## AI and models
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/admin/models-desktop-dark.webp">
-  <img src="../images/admin/models-desktop-light.webp" alt="Models screen with a setup for this computer and a plan for each feature." width="720">
+  <img src="../images/admin/models-desktop-light.webp" alt="AI and models screen with a card for each feature, a search box and a Recommended setup button." width="720">
 </picture>
 
-The setup for your computer, the order features win memory, and the models you can download or remove.
+One card for each feature with an on and off switch, the model it uses and its status. Search finds a model by name, version or description. This is the same page Home shows. See [Choose features and models](features-and-models.md).
 
 ## Resources
 

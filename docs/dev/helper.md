@@ -33,7 +33,7 @@ The model never changes anything. `propose_action` takes one `action` from a fix
 
 On Confirm the page sends `{ action, params }` back. The Stack checks the id was proposed in this chat, is still waiting, has not expired, and that the action and parameters are exactly the stored ones, then runs the stored copy through the same in-process routes the page uses (`PUT /stack/v1/settings` and `POST /stack/v1/settings/apply`, `POST /stack/v1/profiles/apply`, `POST /stack/v1/engines/{name}/restart`, `POST /stack/v1/service/restart`, the update routes). So the page does not call those routes itself; the confirm route does, which is what lets the Stack refuse an edited or unknown proposal. Audit lines in the Stack log: `admin.action.helper.proposed`, `.approved` (carries `approvedBy: admin`), `.denied`, `.rejected` (an edited confirm) and `.expired`, all with `source: helper`.
 
-Rebooting, removing a model and anything not on the list are not offered; a request for one gets the Tools or Models screen.
+Rebooting, removing a model and anything not on the list are not offered; a request for one gets the Tools or AI and models screen.
 
 A failed read tool is never shown to the admin: the model gets a plain "could not read" note, and the reply is cleaned of tool names, raw errors, byte counts and any typed "Looked at" line. The page adds its own "Looked at" footer from the tools that succeeded.
 

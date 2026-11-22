@@ -25052,7 +25052,7 @@
                         "role"
                       ]
                     },
-                    "description": "Overrides the stored role switches for this question only (for the Features screen's live budget bar)."
+                    "description": "Overrides the stored role switches for this question only (for a live budget preview before a switch is saved)."
                   }
                 }
               }

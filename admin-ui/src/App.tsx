@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, ToggleRight, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis, Layers } from "lucide-react";
+import type { StackChoiceCategory } from "@maipai/ui/src/stack/StackClient";
+import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis, Layers } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@maipai/ui/src/ui/sheet";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Status, StatusIndicator } from "@maipai/ui/src/ui/status";
@@ -12,8 +13,7 @@ import { Login } from "./Login";
 import { Palette } from "./Palette";
 import type { PaletteItem } from "./Palette";
 import { Resources } from "./Resources";
-import { Features } from "./Features";
-import { Models } from "./Models";
+import { ModelsScreen, useStackClient } from "./ModelsScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { Updates } from "./Updates";
 import { Tools } from "./Tools";
@@ -26,13 +26,12 @@ import { IconChip, Pill } from "./kit";
 import { roleIcon } from "./roleIcons";
 import { Overview } from "./Overview";
 
-type Screen = "overview" | "features" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper";
+type Screen = "overview" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper";
 type Group = "monitor" | "setup" | "maintain" | "assist";
 interface NavItem { id: Screen; label: string; question: string; Icon: typeof LayoutDashboard; group: Group; more?: boolean }
 const NAV: NavItem[] = [
   { id: "overview", label: "Overview", question: "Is everything working?", Icon: LayoutDashboard, group: "monitor" },
-  { id: "features", label: "Features", question: "What should this computer be able to do?", Icon: ToggleRight, group: "setup" },
-  { id: "models", label: "Models", question: "Which AI model does each feature use?", Icon: Boxes, group: "setup" },
+  { id: "models", label: "AI and models", question: "Which features are on, and which model does each one use?", Icon: Boxes, group: "setup" },
   { id: "health", label: "Health", question: "Does anything need fixing?", Icon: HeartPulse, group: "monitor" },
   { id: "helper", label: "Helper", question: "Ask in plain words. Nothing changes until you approve.", Icon: Sparkles, group: "assist" },
   { id: "resources", label: "Resources", question: "Is there enough memory?", Icon: Gauge, group: "monitor", more: true },
@@ -44,7 +43,7 @@ const NAV: NavItem[] = [
 /** The sidebar's categories, in the order a person works through them: look, set up, keep tidy, ask. */
 const GROUPS: { id: Group; label: string; order: Screen[] }[] = [
   { id: "monitor", label: "Monitor", order: ["overview", "health", "resources"] },
-  { id: "setup", label: "Set up", order: ["features", "models", "engines"] },
+  { id: "setup", label: "Set up", order: ["models", "engines"] },
   { id: "maintain", label: "Maintain", order: ["updates", "settings", "tools"] },
   { id: "assist", label: "Assist", order: ["helper"] },
 ];
@@ -52,8 +51,13 @@ const groupLabel = (g: Group) => GROUPS.find((x) => x.id === g)!.label;
 const PRIMARY = NAV.filter((n) => !n.more);
 const MORE = NAV.filter((n) => n.more);
 
+/** The Features and Models screens became one (AI and models); their old addresses still open it. */
+const RENAMED: Record<string, Screen> = { features: "models" };
+
 function screenFromHash(): Screen {
   const id = window.location.hash.replace(/^#\/?/, "");
+  const renamed = RENAMED[id];
+  if (renamed) { window.history.replaceState(null, "", `#/${renamed}`); return renamed; }
   return NAV.some((n) => n.id === id) ? (id as Screen) : "overview";
 }
 
@@ -74,6 +78,15 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
   const [palette, setPalette] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [helperOpen, setHelperOpen] = useState(false);
+  const stackClient = useStackClient(refresh);
+  // The palette finds models with the same `GET /stack/v1/choices` read the AI and models screen uses; it asks again each time it opens.
+  const [modelIndex, setModelIndex] = useState<readonly StackChoiceCategory[]>([]);
+  useEffect(() => {
+    if (!palette) return;
+    let live = true;
+    stackClient.readChoices().then((view) => { if (live) setModelIndex(view.categories); }).catch(() => { /* the palette still finds screens, features and actions */ });
+    return () => { live = false; };
+  }, [palette, stackClient]);
   const isMac = typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
   useEffect(() => {
     const onHash = () => setScreen(screenFromHash());
@@ -89,7 +102,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
   }, [notify]);
 
   const screens: PaletteItem[] = useMemo(() => GROUPS.flatMap((g) => g.order.map((id) => NAV.find((n) => n.id === id)!)).map((n) => ({ id: n.id, label: n.label, hint: n.question, Icon: n.Icon, keywords: [groupLabel(n.group)], run: () => go(n.id) })), [go]);
-  const features: PaletteItem[] = useMemo(() => (snap.roles ?? []).map((r) => ({ id: `role-${r.id}`, label: r.label, hint: roleWord(r), Icon: roleIcon(r.id), tone: r.enabled === false ? "muted" as const : "primary" as const, keywords: ["feature", "role"], run: () => go("features") })), [snap.roles, go]);
+  const features: PaletteItem[] = useMemo(() => (snap.roles ?? []).map((r) => ({ id: `role-${r.id}`, label: r.label, hint: roleWord(r), Icon: roleIcon(r.id), tone: r.enabled === false ? "muted" as const : "primary" as const, keywords: ["feature", "role"], run: () => go("models") })), [snap.roles, go]);
   const actions: PaletteItem[] = useMemo(() => [
     { id: "helper", label: "Ask the Helper", hint: "Plain words. Nothing changes until you approve.", Icon: Sparkles, run: () => setHelperOpen(true) },
     { id: "refresh", label: "Refresh now", hint: "Read the latest numbers.", Icon: RotateCw, run: refresh },
@@ -141,18 +154,20 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
           <Button variant="ghost" size="icon-sm" onClick={() => { void signOut(); }} aria-label="Sign out"><LogOut aria-hidden="true" /></Button>
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 md:px-8 md:py-10">
-          <div className="mb-8 flex flex-col gap-2">
-            <p className="eyebrow">{groupLabel(current.group)}</p>
-            <h2 className="page-title">{current.label}</h2>
-            <p className="text-muted-foreground">{current.question}</p>
-          </div>
+          {/* The AI and models page (@maipai/ui) writes its own title, so the shell does not repeat it. */}
+          {screen !== "models" && (
+            <div className="mb-8 flex flex-col gap-2">
+              <p className="eyebrow">{groupLabel(current.group)}</p>
+              <h2 className="page-title">{current.label}</h2>
+              <p className="text-muted-foreground">{current.question}</p>
+            </div>
+          )}
           <div key={screen} className="animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none">
             {screen === "overview" && <Overview snap={snap} go={(id) => go(id as Screen)} />}
             {screen === "resources" && <Resources changed={snap.status} />}
             {screen === "health" && <Health snap={snap} refresh={refresh} notify={notify} />}
             {screen === "engines" && <Engines snap={snap} refresh={refresh} notify={notify} />}
-            {screen === "features" && <Features snap={snap} refresh={refresh} notify={notify} />}
-            {screen === "models" && <Models snap={snap} refresh={refresh} notify={notify} />}
+            {screen === "models" && <ModelsScreen client={stackClient} snap={snap} refresh={refresh} notify={notify} go={go} />}
             {screen === "updates" && <Updates refresh={refresh} notify={notify} />}
             {screen === "settings" && <SettingsScreen refresh={refresh} notify={notify} />}
             {screen === "helper" && <Helper />}
@@ -182,7 +197,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
           </div>
         </SheetContent>
       </Sheet>
-      <Palette open={palette} onOpenChange={setPalette} screens={screens} features={features} actions={actions} />
+      <Palette open={palette} onOpenChange={setPalette} screens={screens} features={features} models={modelIndex} onModel={() => go("models")} actions={actions} />
       <HelperPanel open={helperOpen} onOpenChange={setHelperOpen} />
       <Toaster />
     </div>

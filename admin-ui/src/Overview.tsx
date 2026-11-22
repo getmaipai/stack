@@ -100,8 +100,7 @@ function RoleSheet({ role, onClose, go }: { role: Role | null; onClose: () => vo
               {why && <div><dt className="text-muted-foreground">Why</dt><dd>{why}</dd></div>}
             </dl>
             <SheetFooter>
-              <Button onClick={() => { onClose(); go("models"); }}>Choose a model</Button>
-              <Button variant="outline" onClick={() => { onClose(); go("features"); }}>Turn on or off</Button>
+              <Button onClick={() => { onClose(); go("models"); }}>Choose a model or turn it off</Button>
             </SheetFooter>
           </>
         )}
@@ -163,7 +162,7 @@ export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) =>
         {active.length > 0 ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{active.map((r) => <RoleTile key={r.id} role={r} budget={status.memory.budget_bytes} onOpen={() => setOpen(r)} />)}</div>
         ) : (
-          <EmptyState Icon={Activity} tone="muted" title="Nothing is running yet" text="Turn a feature on and the Stack sets it up for you." action={<Button size="sm" onClick={() => go("features")}>Choose features</Button>} />
+          <EmptyState Icon={Activity} tone="muted" title="Nothing is running yet" text="Turn a feature on and the Stack sets it up for you." action={<Button size="sm" onClick={() => go("models")}>Choose features</Button>} />
         )}
         {grouped.off.length > 0 && (
           <Collapsible open={showOff} onOpenChange={setShowOff} className="flex flex-col gap-3">

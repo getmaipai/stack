@@ -72,12 +72,12 @@ function engineForRole(role: RoleId, views: Array<Record<string, any>>): string 
 
 /** Reads the state, checks every parameter and says exactly what would change. Never changes anything. */
 export async function buildProposal(route: RouteCall, action: string, raw: Record<string, unknown>): Promise<ProposeOutcome> {
-  if (!(ACTION_NAMES as readonly string[]).includes(action)) return bad("refused", `"${action}" is not something the Helper offers. Rebooting the computer and removing models are done on the Tools or Models screen.`);
+  if (!(ACTION_NAMES as readonly string[]).includes(action)) return bad("refused", `"${action}" is not something the Helper offers. Rebooting the computer and removing models are done on the Tools or AI and models screen.`);
   switch (action as ActionName) {
     case "set_role_enabled": {
       const role = resolveRole(raw.role);
       if (!role.ok) return bad("ambiguous", role.reason);
-      if (role.role === "helper") return bad("refused", "The Helper cannot switch itself off. Use the Features screen.");
+      if (role.role === "helper") return bad("refused", "The Helper cannot switch itself off. Use the AI and models screen.");
       const enabled = boolOf(raw.enabled);
       if (enabled === null) return bad("invalid", "Say whether to turn it on or off.");
       const views = await roleViews(route);

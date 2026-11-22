@@ -1,5 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Boxes } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { searchModels } from "@maipai/ui/src/stack/stackSearch";
+import type { StackChoiceCategory } from "@maipai/ui/src/stack/StackClient";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@maipai/ui/src/ui/command";
 import { IconChip } from "./kit";
 import type { Tone } from "./kit";
@@ -21,8 +24,14 @@ function Group({ heading, items, pick }: { heading: string; items: PaletteItem[]
   );
 }
 
-/** ⌘K (or Ctrl+K) to jump to a screen or a feature, or to run an action. */
-export function Palette({ open, onOpenChange, screens, features = [], actions }: { open: boolean; onOpenChange: (open: boolean) => void; screens: PaletteItem[]; features?: PaletteItem[]; actions: PaletteItem[] }) {
+/** How many models the palette lists at most; the AI and models screen has the full search. */
+const MODEL_LIMIT = 8;
+
+/** ⌘K (or Ctrl+K) to jump to a screen, a feature or a model, or to run an action. Models are matched by the page's own search (name, version, precision, licence, description), so both find the same ones. */
+export function Palette({ open, onOpenChange, screens, features = [], models = [], onModel, actions }: { open: boolean; onOpenChange: (open: boolean) => void; screens: PaletteItem[]; features?: PaletteItem[]; models?: readonly StackChoiceCategory[]; onModel?: (category: StackChoiceCategory["id"], model: string) => void; actions: PaletteItem[] }) {
+  const [query, setQuery] = useState("");
+  useEffect(() => { if (!open) setQuery(""); }, [open]);
+  const hits = useMemo(() => searchModels(models, query).slice(0, MODEL_LIMIT), [models, query]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); onOpenChange(!open); }
@@ -33,9 +42,22 @@ export function Palette({ open, onOpenChange, screens, features = [], actions }:
   const pick = (item: PaletteItem) => { onOpenChange(false); item.run(); };
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} title="Command palette" description="Jump to a screen or a feature, or run an action">
-      <CommandInput placeholder="Search screens, features and actions" />
+      <CommandInput placeholder="Search screens, features, models and actions" value={query} onValueChange={setQuery} />
       <CommandList className="max-h-[min(26rem,60dvh)]">
-        <CommandEmpty>Nothing matches. Try a screen name such as Health, or a feature such as Chat.</CommandEmpty>
+        {hits.length === 0 && <CommandEmpty>Nothing matches. Try a screen name such as Health, a feature such as Chat, or a model name or version such as 3.8.</CommandEmpty>}
+        {hits.length > 0 && (
+          <CommandGroup heading="Models" forceMount>
+            {hits.map(({ category, candidate }) => (
+              <CommandItem key={`${category.id}:${candidate.id}`} value={`model ${category.id} ${candidate.id}`} forceMount onSelect={() => { onOpenChange(false); onModel?.(category.id, candidate.id); }} className="gap-3 rounded-xl">
+                <IconChip Icon={Boxes} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{candidate.label}{candidate.version ? ` (version ${candidate.version})` : ""}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{category.label}, {candidate.summary}</span>
+                </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
         <Group heading="Screens" items={screens} pick={pick} />
         {features.length > 0 && <CommandSeparator />}
         <Group heading="Features" items={features} pick={pick} />

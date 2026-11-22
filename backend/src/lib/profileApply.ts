@@ -93,7 +93,7 @@ export async function applyProfile(body: ApplyInput, deps: ApplyDeps, source: Ac
   try { await updateSettingsAudited(values, source, remote, "profile.settings"); }
   catch (error) { return { ok: false, status: 400, error: error instanceof Error ? error.message : "Invalid setting" }; }
 
-  // Installs: the tier's first-run models and a bound chat upgrade, only when the person did not hand-pick (Custom picks models on the Models screen).
+  // Installs: the tier's first-run models and a bound chat upgrade, only when the person did not hand-pick (Custom picks models on the AI and models screen).
   const installs: Array<{ model: string; job: string }> = [];
   const skipped: Array<{ model: string; reason: string }> = [];
   if (body.mode !== "custom") {
