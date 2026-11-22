@@ -14,6 +14,9 @@ import type { Voice } from "@/wire/voice";
 
 export const CHATTERBOX_DEFAULT_VOICE_ID = "chatterbox-turbo-voice-default";
 
+/** A voice the engine speaks with no preset file to pin: Chatterbox's and VoxCPM2's one built-in voice. Only Pocket presets are named, pinned files (VOICE-VOXCPM2-01: previewing the VoxCPM2 default was refused as an unknown Pocket preset). */
+export const isBuiltInVoice = (voice: Pick<Voice, "engine">): boolean => voice.engine !== TTS_ENGINES.pocket.catalogEngine;
+
 function presetName(name: string): string {
   return name.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
