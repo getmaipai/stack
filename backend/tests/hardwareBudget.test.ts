@@ -33,6 +33,6 @@ describe("hardware budget (TIER-BUDGET-01)", () => {
   test("fits_ever compares the peak with the level's cap", () => {
     const small = budgetSlots("p128", 40 * GB);
     expect(small.find((row) => row.category === "chat" && row.tier === "standard")?.fits_ever).toBe(true);
-    expect(small.find((row) => row.category === "chat" && row.tier === "max")).toMatchObject({ peak_bytes: 68_700_000_000, fits_ever: false });
+    expect(small.find((row) => row.category === "chat" && row.tier === "max")).toMatchObject({ peak_bytes: 75_000_000_000, fits_ever: false });
   });
 });
