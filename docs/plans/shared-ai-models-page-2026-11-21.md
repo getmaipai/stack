@@ -78,3 +78,43 @@ reads; this plan is the UI half of that one.
 How the Stack lets Home ask "who may change this" without learning who is asking
 (the host gates, the Stack trusts its one caller). Kept as is: Home gates, the
 Stack stays unaware of people.
+
+## Inventory and build order (2026-11-21)
+
+What Home's page does today and where it ends. Home composes everything itself
+(`frontend/src/apps/settings/AiGlance.tsx`, `AiSlotDialog`, `FeatureModelChooser`,
+`AddChatModel`, `FreeUpSpaceDialog`; backend `routes/aiChoices.ts`, `lib/tiers.ts`).
+The Stack admin page (`admin-ui/src/Features.tsx`, `Models.tsx`) already writes role
+on/off and priority (`PUT /stack/v1/settings`), applies profiles
+(`POST /profiles/recommend`, `/profiles/apply`) and installs and removes models.
+
+| Action | Stack today | Gap |
+|---|---|---|
+| Feature on or off | `stack.roles.<id>.enabled` | Home uses its own keys (`chat.paused` is inverted); map them away |
+| Model per role and tier | none | missing: `GET /choices`, `PUT /choices/<category>/<tier>` |
+| Model order, disabled models | `PUT /parts/choices` | Home stores first; two priority ideas (part order, role priority) to merge in the view |
+| Install, remove | `/components`, `/parts`, `/models` | exists |
+| Free up space | `/components/tidy` (superseded only) | missing: unused-by-choice list and bulk remove |
+| Add chat model | `/models/inspect`, `/models/import` | missing: add and use in one route; Home keeps a record today |
+| Recommended picks | `/profiles/apply` (roles only) | missing: write tier picks |
+| Overview read | several routes | one read for the page |
+
+Home-only state that moves to the Stack: `engines.<role>.tier.<tier>.model`,
+`engines.<category>.order`, the five feature switches, added-model records, and the
+catalog copies (`modelCatalog.ts`, `engineCatalog.ts`, `voiceCatalog.ts`). Stays in
+Home: who may use each level, adult and kid gates, chat lease, audit line.
+`ModelsSection` and `ModelsAndStorageSection` are not mounted by AiGlance: confirm
+and delete. `aiSaveSlot` calls a route that does not exist.
+
+Order (this plan is the UI half of Home `docs/plans/stack-owns-model-choices-2026-11-21.md`,
+whose choices API is not built yet):
+
+1. Stack: the choices routes above, additive, Zod-typed, tests (owned by the
+   stack-owned-choices work; this plan adds the unused list, add-and-use and
+   recommended-picks apply to its list).
+2. Spec: shapes for roles, models, profiles, tiers and choices.
+3. Commons: `StackModelsPage`, `useStackChoices`, a fake client; tag `ui` and `spec`.
+4. Admin page: replace `Models.tsx` and `Features.tsx` with it.
+5. Home: `/api/ai/*` becomes a forwarder; replace AiGlance and its dialogs; run the
+   one-time migration of Home's `engines.*` values; delete the old code and tests.
+6. Screenshots of both hosts; owner approves each live ship.
