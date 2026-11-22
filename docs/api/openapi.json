@@ -1244,6 +1244,36 @@
               "model",
               "why"
             ]
+          },
+          "running": {
+            "type": "object",
+            "properties": {
+              "active": {
+                "type": "boolean",
+                "description": "True when this level is the one in use now: chat is Standard unless Reduced or coding mode (Max) is on; a picture, video or music level is always live."
+              },
+              "model": {
+                "type": "string",
+                "nullable": true,
+                "description": "The model answering this level, or the one the next request starts; null when this level is not in use or nothing is installed."
+              },
+              "answering": {
+                "type": "boolean",
+                "description": "True when `chosen` is the model answering. False while a chosen model waits to be installed, does not fit, or starts at the next restart; `reason` says which."
+              },
+              "reason": {
+                "type": "string",
+                "nullable": true,
+                "description": "The plain sentence for why the chosen model is not answering yet, or null."
+              }
+            },
+            "required": [
+              "active",
+              "model",
+              "answering",
+              "reason"
+            ],
+            "description": "What answers for this level, from the same code the role view uses, so the two never disagree."
           }
         },
         "required": [
@@ -1255,7 +1285,8 @@
           "customization",
           "problem",
           "options",
-          "recommended"
+          "recommended",
+          "running"
         ]
       },
       "ChoiceLevel": {
@@ -15434,6 +15465,64 @@
                               "tags",
                               "fallback_reason"
                             ]
+                          },
+                          "choice": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "category": {
+                                "type": "string",
+                                "description": "The model-choices category this role answers for (chat, coding, pictures, video, music, voice, stt, embeddings, vision, wakeword)."
+                              },
+                              "level": {
+                                "type": "string",
+                                "enum": [
+                                  "reduced",
+                                  "standard",
+                                  "boost",
+                                  "max"
+                                ],
+                                "description": "The level in use now: Standard, or Reduced while chat is swapped down, or Max while coding mode is on."
+                              },
+                              "chosen": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "The model the Stack's choices name for this level (the household's pick, else the order, else the recommended model)."
+                              },
+                              "chosen_by": {
+                                "type": "string",
+                                "enum": [
+                                  "household",
+                                  "recommended",
+                                  "off",
+                                  "none"
+                                ],
+                                "description": "Where the choice came from: the household (a pick, the order, or a setting Home wrote) or the Stack's recommended model. The same word `GET /stack/v1/choices` uses."
+                              },
+                              "model": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "The model answering this role now, or the one its next request starts."
+                              },
+                              "answering": {
+                                "type": "boolean",
+                                "description": "True when the chosen model is the one answering. When false, `reason` says why in plain words (not installed yet, does not fit, starts at the next restart) and the earlier model keeps answering."
+                              },
+                              "reason": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "category",
+                              "level",
+                              "chosen",
+                              "chosen_by",
+                              "model",
+                              "answering",
+                              "reason"
+                            ],
+                            "description": "What the household chose for this role and whether it is the model answering; the same facts as `GET /stack/v1/choices`, from the same code."
                           }
                         },
                         "required": [

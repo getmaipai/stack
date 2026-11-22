@@ -19,6 +19,7 @@
 // If the data directory cannot hold a hardlink (two volumes) a symlink is used, which
 // works but makes Splash hash the file once when it assembles.
 import { existsSync, linkSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { chosenToRun } from "@/lib/choiceResolver";
 import { basename, dirname, join, relative } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { currentEngineBinary, engineBinaryPath, engineDir } from "@/lib/engineInstall";
@@ -154,9 +155,14 @@ export function splashResidentWeightsBytes(modelId: string, sizeBytes: number): 
 /** The big model Home's coding mode (and so Max chat) loads: Flash Next when it and its draft are installed and verified, else the everyday coding pair (Qwen3.8 27B and its draft; Ornith was retired 2026-11-21). The one place the mode picks its model. */
 export function codingModeHeavy(lookup: (id: string) => ModelRecord | null = getModel): { pin: CatalogModelLike; draftPin: CatalogModelLike } {
   const ready = (id: string) => { const record = lookup(id); return !!record?.modelPath && !!record.verifiedAt; };
-  return ready(STACK_CHAT_QWEN38_FLASH_NEXT_MODEL.id) && ready(STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT.id)
-    ? { pin: STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, draftPin: STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT }
-    : { pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
+  const flash = { pin: STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, draftPin: STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT };
+  const everyday = { pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
+  const flashReady = ready(flash.pin.id) && ready(flash.draftPin.id);
+  // The household's Max chat pick (docs/dev/choices.md, "What runs"): the two models that have a draft and run on Splash are the ones coding mode can start. Max is judged on the Max room, so the fit is not asked here (Home's mode check refuses what cannot load). A pick of one that is not ready, or of any other model, leaves the rule below.
+  const picked = chosenToRun("chat", "max", { ignoreFit: true })?.model;
+  if (picked === everyday.pin.id && ready(everyday.pin.id) && ready(everyday.draftPin.id)) return everyday;
+  if (picked === flash.pin.id && flashReady) return flash;
+  return flashReady ? flash : everyday;
 }
 
 /** The measured whole-process peak of a model Splash runs from local files (see SPLASH_LOCAL_CHAT_MODELS), or null: the memory ledger and the coding-mode fit check use it in place of the formula and the Metal budget's headroom, which overstate it. */

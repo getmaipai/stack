@@ -19,6 +19,7 @@ import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { adultInput, fullViewAllowed, isAdultJobId } from "@/lib/adultView";
 import { cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { unnamedJobModel } from "@/lib/choiceRuntime";
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { LoraError, type LoraRequest } from "@/lib/media/loraLibrary";
@@ -175,7 +176,7 @@ function statusOf(job: Job) {
 function imageNotes(job: Job): string[] | null { const notes = (job.input as { notes?: unknown } | null)?.notes; return Array.isArray(notes) && notes.length > 0 ? notes.filter((note): note is string => typeof note === "string") : null; }
 
 /** Picks the base model: the one named, else the one the LoRAs were made for, else the default, else whatever is installed. */
-function chooseFamily(model: string | undefined, loraRequests: LoraRequest[]): { family: ImageFamilyId } | { error: { status: number; code: string; message: string } } {
+function chooseFamily(model: string | undefined, loraRequests: LoraRequest[], tier: "standard" | "boost" | "max" = "standard"): { family: ImageFamilyId } | { error: { status: number; code: string; message: string } } {
   const installed = installedFamilies();
   if (installed.length === 0) return { error: { status: 503, code: "not_installed", message: "No picture model is installed yet. Install FLUX.2 Klein 4B from Home's Engines page, then try again." } };
   if (model && model !== "image") {
@@ -194,6 +195,10 @@ function chooseFamily(model: string | undefined, loraRequests: LoraRequest[]): {
     if (!familyInstalled(base)) return { error: { status: 503, code: "not_installed", message: `This LoRA needs ${IMAGE_FAMILIES[base].label}, which is not installed yet. Install it from Home's Engines page, then try again.` } };
     return { family: base };
   }
+  // No model named and no LoRA base: the level's choice (docs/dev/choices.md, "What runs"), when installed; else the old default.
+  const unnamed = unnamedJobModel("pictures", tier);
+  if (unnamed.levelOff) return { error: { status: 409, code: "level_off", message: unnamed.levelOff } };
+  if (unnamed.model && isFamilyId(unnamed.model) && familyInstalled(unnamed.model)) return { family: unnamed.model };
   return { family: familyInstalled(DEFAULT_FAMILY) ? DEFAULT_FAMILY : installed[0]! };
 }
 
@@ -237,7 +242,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   if (typeof size === "string") return fail(c, 422, "bad_size", size);
   const count = body.n ?? 1;
   const requests = loraRequests(body.loras);
-  const chosen = chooseFamily(body.model, requests);
+  const chosen = chooseFamily(body.model, requests, body.tier ?? "standard");
   if ("error" in chosen) return fail(c, chosen.error.status, chosen.error.code, chosen.error.message);
   const family = chosen.family;
   const info = IMAGE_FAMILIES[family];

@@ -22,6 +22,7 @@ import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { MAX_DRAIN_STATUS, MAX_WAIT_STATUS, cancelJob, getJob, hasJobRunner, isJobPaused, listJobs, submitJob, waitForJob, type Job } from "@/lib/jobs";
+import { unnamedJobModel } from "@/lib/choiceRuntime";
 import { TierFieldSchema, TierStatusSchema, governorDecides, tierInput, tierOf } from "@/routes/tierField";
 import { PAUSED_LABEL } from "@/lib/genProgress";
 import { getLora, listLoras, loraPath, LoraError, matchLtxLoraToPack, resolveLoras, type LoraBase } from "@/video/loras";
@@ -264,7 +265,10 @@ videoV1Routes.openapi(postRoute, async (c) => {
   const availability = tierAvailability();
   if (!availability.available) return fail(c, 503, availability.code ?? "unsupported", availability.reason ?? "Video is not available on this computer.");
   if (!hasJobRunner(VIDEO_JOB_KIND)) return fail(c, 503, "unsupported", "Video is not available on this machine.");
-  const quality = qualityOfModelName(body.model);
+  // No model named: the level's choice (docs/dev/choices.md, "What runs"), when installed; else Quick, the model that ran before a choice existed.
+  const unnamed = body.model === undefined || body.model === "" || body.model === "video" ? unnamedJobModel("video", body.tier ?? "standard") : null;
+  if (unnamed?.levelOff) return fail(c, 409, "level_off", unnamed.levelOff);
+  const quality = qualityOfModelName(unnamed?.model ?? body.model);
   if (body.model === "detailed" || body.model === "ltx-2-3-distilled-mlx") return fail(c, 422, "retired_model", "The Detailed video model was retired. Use ltx25-q8 or ltx25-max.");
   if (!quality) return fail(c, 422, "unknown_model", "That video model is not one this computer has. Use quick, ltx25-q8 or ltx25-max.");
   const spec = VIDEO_SPECS[quality];

@@ -241,6 +241,14 @@ export function readSettings(options: { reveal?: boolean } = {}): StackSetting[]
   });
 }
 
+/** One setting's value as the person last set it: the pending value when a restart is waiting for it, else the value in effect. Cheap (two rows), for code that must follow a choice before the restart that applies it. */
+export function settingIntent(key: string): SettingValue | undefined {
+  const declaration = byKey.get(key);
+  if (!declaration) return undefined;
+  const pending = read(metaKey(key, "pending"));
+  return decode(pending ?? read(metaKey(key, "in_effect")), declaration);
+}
+
 export function settingValues(): Record<string, SettingValue> {
   return Object.fromEntries(readSettings({ reveal: true }).map((setting) => [setting.key, setting.in_effect as SettingValue]));
 }
@@ -268,6 +276,10 @@ function refuseUnservable(key: string, value: SettingValue): void {
   const servable = value === "omlx" ? process.platform === "darwin" && process.arch === "arm64" : value === "splash" ? ENGINE_BINARIES.some((pin) => pin.name === "splash-chat" && pin.platform === process.platform && pin.arch === process.arch) : ENGINE_BINARIES.some((pin) => pin.name === value && pin.platform === process.platform && pin.arch === process.arch);
   if (!servable) throw new Error(`${value} has no pinned build for ${process.platform} ${process.arch}; the chat engine stays as it is.`);
 }
+type SettingWriteListener = (key: string, value: SettingValue) => void;
+const writeListeners: SettingWriteListener[] = [];
+/** A module that keeps a second copy of a setting's meaning (the model choices mirror the chat, coding and voice settings) hears each write here, once it is stored. */
+export function onSettingWritten(listener: SettingWriteListener): void { writeListeners.push(listener); }
 export function updateSettings(values: Record<string, unknown>): StackSetting[] {
   for (const key of Object.keys(values)) if (!byKey.has(key)) throw new Error(`Unknown Stack setting: ${key}`);
   // Every value is validated before any is written, so a bad second key
@@ -288,6 +300,7 @@ export function updateSettings(values: Record<string, unknown>): StackSetting[] 
   }
   if (changed.length > 0) bumpStackGeneration(`settings changed: ${changed.join(", ")}`);
   applySettingsToRuntime();
+  for (const { key, value } of validated) for (const listener of writeListeners) listener(key, value);
   return readSettings();
 }
 
@@ -333,5 +346,7 @@ export function applySettingsToRuntime(): void {
 
 export function __resetSettingsForTests(): void {
   db.delete(meta).where(like(meta.key, "settings.%")).run();
+  // The model choices mirror the chat and voice settings into the Standard pick (choiceResolver.ts); a reset setting must not leave its copy behind.
+  db.delete(meta).where(eq(meta.key, "choices.picks")).run();
   applySettingsToRuntime();
 }

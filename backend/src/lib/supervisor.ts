@@ -44,6 +44,9 @@ import { comfyuiCommand, comfyuiEnv, comfyuiInstalled, COMFYUI_VERSION, linkChec
 import { basename } from "node:path";
 import { admissionRoomBytes, getRunState, refreshMeasuredPeak, release, setGovernorPid, setIdleTtlSeconds, startGovernor, touch as touchGovernor, withdraw as withdrawAdmission, type GovernorHandle, type GovernorTier } from "@/lib/governor";
 import { PROFILE_MODEL_BINDINGS, proposeProfile } from "@/profiles";
+import { chosenToRun, disabledIn, onChoicesChanged, setProfileProvider } from "@/lib/choiceResolver";
+import { TIER_CANDIDATES } from "@/lib/tiers";
+import { categoryOfRole } from "@/lib/choiceCategories";
 import { AdmissionRefusedError, governorPeak, waitForAdmission, waitingReason } from "@/lib/admission";
 import { emit } from "@/lib/events";
 import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
@@ -183,6 +186,17 @@ export function processRoleFor(role: RoleId): RoleId {
   return definition.sharesModelWith ?? role;
 }
 
+
+/** The smaller model Reduced chat swaps in: the household's Reduced pick for chat when it is installed and a model the swap can start, else the profile's own light model (the judge's). A pick that is not installed never leaves chat without a model. */
+function reducedLightModel(): ModelRecord | null {
+  const startable = (id: string | undefined | null): ModelRecord | null => {
+    const record = id ? getModel(id) : null;
+    return record && isModelSelectable(record) && !!record.modelPath && ["llama-server", "mlx-serve"].includes(String(record.engineRequirements.engine ?? "llama-server")) ? record : null;
+  };
+  const picked = chosenToRun("chat", "reduced")?.model;
+  return startable(picked) ?? startable((machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.judge : undefined) ?? PROFILE_MODEL_BINDINGS.p32?.judge);
+}
+
 /** The existing role.state feed is also Home's mode transition signal. */
 export function emitHomeModeTransition(): void {
   for (const role of ["chat", "judge", "router"] as const) emitRoleState(role, "loaded", undefined, "mode_change");
@@ -206,9 +220,8 @@ export function enterReducedChat(): Promise<{ ok: true; swapMs: number } | { ok:
 async function enterReducedChatInner(): Promise<{ ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string }> {
   if (currentHomeMode() === "coding") return { ok: false, reason: "Reduced chat is unavailable while coding mode is active." };
   if (getReducedChatState() !== "off") return { ok: false, reason: "A Reduced chat change is already in progress." };
-  const lightId = (machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.judge : undefined) ?? PROFILE_MODEL_BINDINGS.p32?.judge;
-  const light = lightId ? getModel(lightId) : null;
-  if (!light || !isModelSelectable(light) || !light.modelPath || !["llama-server", "mlx-serve"].includes(String(light.engineRequirements.engine ?? "llama-server"))) return { ok: false, reason: "The smaller chat model is not installed and selectable." };
+  const light = reducedLightModel();
+  if (!light) return { ok: false, reason: "The smaller chat model is not installed and selectable." };
   const roles = [...new Set(["chat", "judge", "router"].map((role) => processRoleFor(role as RoleId)))];
   if (roles.some((role) => (runtime(role).process?.activeRequests ?? 0) > 0)) return { ok: false, waiting: true };
   if (reducedSwapRunning) return { ok: false, reason: "A Reduced chat change is already in progress." };
@@ -761,7 +774,10 @@ function mlxTtsRepoFor(engine: string): string | null {
 /** Which voice engine answers: the setting (`auto` is the tier's
  * default), then what is installed and what failed to start this run. */
 export function activeTtsChoice(): TtsEngineChoice {
-  return resolveTtsEngine({ setting: settingValues()[TTS_ENGINE_SETTING], tier: machineTier, installed: ttsEngineInstalled });
+  // The household's voice choice (the stored Standard pick, or the order) names the engine; the setting is the legacy way to say the same and the fallback.
+  const chosen = chosenToRun("voice", "standard");
+  const engine = chosen ? TIER_CANDIDATES.find((row) => row.category === "voice" && row.id === chosen.model)?.engine : undefined;
+  return resolveTtsEngine({ setting: engine ?? settingValues()[TTS_ENGINE_SETTING], tier: machineTier, installed: ttsEngineInstalled });
 }
 
 /** The engine a request is served by right now: the running process's
@@ -836,6 +852,10 @@ function urlBindingFor(role: RoleId): { kind: EngineKind; url: string } | null {
 }
 
 const preferredModels = new Map<RoleId, string>();
+// A stored choice (a pick, the order, a legacy setting Home wrote) replaces the session's "load this": the preference named the same model when Home wrote it, and a later change to the choice must not be shadowed by it.
+onChoicesChanged(() => { preferredModels.delete("chat"); preferredModels.delete("coding"); });
+/** Requests in flight on the process that serves the role (0 when nothing runs). */
+export function activeRequestsOf(requested: RoleId): number { return runtime(processRoleFor(requested)).process?.activeRequests ?? 0; }
 export function __setPreferredModelForTests(role: RoleId, modelId: string | null): void { if (modelId) preferredModels.set(role, modelId); else preferredModels.delete(role); }
 
 /** Home's "load this model": the next start of the role uses it if it
@@ -952,9 +972,7 @@ export function selectedModel(role: RoleId): ModelRecord | null {
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
   }
   if (reducedChatForcesLight() && ["chat", "judge", "router"].includes(role)) {
-    const lightId = (machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.judge : undefined) ?? PROFILE_MODEL_BINDINGS.p32?.judge;
-    const light = lightId ? getModel(lightId) : null;
-    return light && isModelSelectable(light) && !!light.modelPath && ["llama-server", "mlx-serve"].includes(String(light.engineRequirements.engine ?? "llama-server")) ? light : null;
+    return reducedLightModel();
   }
   if (role === "judge" && (!machineTier || !PROFILE_MODEL_BINDINGS[machineTier]?.judge)) return selectedModel("chat");
   // A record names the engine it is for; the chat wire's chosen engine
@@ -964,10 +982,16 @@ export function selectedModel(role: RoleId): ModelRecord | null {
   const selectable = listModels().filter((model) => servesRole(model, role, engine));
   // The session's "load this" first, then the choice Home stored in the setting (it survives a restart).
   const stored = role === "chat" ? String(settingValues()["stack.engines.chat.model"] ?? "") : role === "coding" ? String(settingValues()["stack.engines.coding.model"] ?? "") : "";
-  const preferred = preferredModels.get(role) ?? (stored || undefined);
-  const candidates = selectable;
+  // docs/dev/choices.md, "What runs": the session's "load this", then the household's stored choice for the level (the pick, the order), then the
+  // legacy setting, then the profile's binding. A choice that is not installed is not in `selectable`, so the model that was answering keeps answering.
+  const category = categoryOfRole(role);
+  const chosen = category ? chosenToRun(category.id, "standard")?.model : undefined;
+  const off = category ? disabledIn(category.partCategory) : [];
+  const allowed = selectable.filter((model) => !off.includes(model.id));
+  const candidates = allowed.length > 0 ? allowed : selectable;
   const profileModel = machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.[role] : undefined;
-  return candidates.find((model) => model.id === preferred) ?? candidates.find((model) => model.id === profileModel) ?? candidates[0] ?? null;
+  const session = preferredModels.get(role);
+  return candidates.find((model) => model.id === session) ?? candidates.find((model) => model.id === chosen) ?? candidates.find((model) => model.id === (stored || undefined)) ?? candidates.find((model) => model.id === profileModel) ?? candidates[0] ?? null;
 }
 
 /** Models an installed chat process can actually start for a request.
@@ -2118,6 +2142,12 @@ export function getRoleStatus(requested: RoleId): RoleStatus {
   return { ...current.status, contextLength: current.process?.contextLength ?? current.status.contextLength ?? null, slots: current.process?.slots ?? current.status.slots ?? null, contextScope: current.process?.contextScope ?? current.status.contextScope ?? null };
 }
 
+/** The model the role's running process loaded, or null when nothing runs (or a url binding, which names no model). */
+export function loadedModelId(requested: RoleId): string | null {
+  const current = runtime(processRoleFor(requested)).process;
+  return current && !current.retired ? current.modelId ?? null : null;
+}
+
 /** The engine whose process serves a role right now, or null when
  * nothing runs; a chat engine chosen by setting but not yet started
  * is not it. */
@@ -2178,6 +2208,7 @@ export function identityCheck(requested: RoleId): { ok: boolean; expected: strin
 let machineTier: GovernorTier | undefined;
 let machineMemoryGb = 0;
 export function setMachineTier(tier: GovernorTier | null | undefined): void { machineTier = tier ?? undefined; if (tier == null) machineMemoryGb = 0; }
+setProfileProvider(() => machineTier);
 function currentHardwareMemoryGb(): number { return machineMemoryGb; }
 export function currentMachineTier(): GovernorTier | undefined { return machineTier; }
 /** Reads the hardware, sets the tier from the proposed profile, and

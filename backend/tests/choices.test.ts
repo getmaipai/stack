@@ -265,7 +265,8 @@ test("a model in a category's order is not unused", async () => {
   expect(((await (await call("GET", "/unused")).json()) as { items: unknown[] }).items).toHaveLength(0);
   const out = await (await call("POST", "/unused/remove", { ids: ["qwen3-vl-8b-instruct-q4-k-m"] })).json() as { results: Array<{ status: string; message: string }> };
   expect(out.results[0]).toMatchObject({ status: "kept" });
-  expect(out.results[0]!.message).toContain("order");
+  // The order now drives the default (docs/dev/choices.md, "What runs"), so the first model in it is the one Vision Standard uses.
+  expect(out.results[0]!.message).toContain("Vision Standard uses it");
   expect(removed).toEqual([]);
 });
 

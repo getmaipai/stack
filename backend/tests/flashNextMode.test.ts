@@ -14,6 +14,7 @@ import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/
 import { __setAppleChipForTests, __resetAppleChipForTests } from "@/lib/hardware";
 import { __resetHealthForTests } from "@/lib/health";
 import { __resetSettingsForTests } from "@/settings";
+import { __resetChoicesForTests, withPick, writePicks } from "@/lib/choicesStore";
 import { launchPlan, resetSupervisorForTests, scriptedProcess, selectedModel, selectableModels, setCodingMachineFacts, setMachineTier, setSupervisorFactoryForTests } from "@/lib/supervisor";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
@@ -43,6 +44,7 @@ beforeEach(() => {
   installSplashEngine();
 });
 afterEach(() => {
+  __resetChoicesForTests();
   setSupervisorFactoryForTests(null); setMachineTier(null); setCodingMachineFacts(null); __resetAppleChipForTests(); initializeHomeMode("normal"); wipe();
   rmSync(join(engineDir(SPLASH_PIN), ".."), { recursive: true, force: true });
   rmSync(splashRoot(), { recursive: true, force: true });
@@ -147,4 +149,37 @@ test("a persisted coding mode that cannot be restored still falls back to Normal
   await homeModeRestore();
   expect(currentHomeMode()).toBe("normal");
   expect(homeModeView().state).toBe("failed");
+});
+
+// docs/dev/choices.md, "What runs": the household's Max chat pick is the model coding mode starts.
+test("the Max chat pick chooses the mode's big model: the 27B pair beats an installed Flash Next, and a pick that is not ready leaves the old rule", () => {
+  installPin(FLASH); installPin(DRAFT);
+  expect(codingModeHeavy().pin.id).toBe(FLASH.id);
+  writePicks(withPick({}, "p128", "chat", "max", { model: CODING.id }));
+  // The pair is not installed yet: a pick of it cannot start, so Flash Next keeps answering.
+  expect(codingModeHeavy().pin.id).toBe(FLASH.id);
+  installPin(CODING); installPin(CODING_DRAFT);
+  expect(codingModeHeavy()).toEqual({ pin: CODING, draftPin: CODING_DRAFT });
+  writePicks(withPick({}, "p128", "chat", "max", { model: FLASH.id }));
+  expect(codingModeHeavy().pin.id).toBe(FLASH.id);
+});
+
+// STACK-START-01 with picks stored: the resolver reads two small rows and probes nothing, so the Stack still listens first.
+test("with picks stored, a persisted coding mode still restores in the background and the Stack answers while it loads", async () => {
+  installPin(FLASH); installPin(DRAFT);
+  writePicks(withPick(withPick({}, "p128", "chat", "max", { model: FLASH.id }), "p128", "chat", "standard", { model: "qwen3-8b-instruct-q4-k-m" }));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  setSupervisorFactoryForTests(async (role, modelId) => {
+    if (role === "coding") await gate;
+    return scriptedProcess(role, { modelId: modelId ?? role, client: okClient });
+  });
+  const started = performance.now();
+  const returned = await Promise.race([setupHomeModeRuntime("coding").then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_000))]);
+  expect(returned).toBe(true);
+  expect(performance.now() - started).toBeLessThan(1_000);
+  expect((await app.request("/healthz")).status).toBe(200);
+  release();
+  await homeModeRestore();
+  expect(currentHomeMode()).toBe("coding");
 });

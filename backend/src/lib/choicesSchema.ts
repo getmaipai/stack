@@ -38,6 +38,12 @@ export const TierRowSchema = z.object({
   problem: z.string().nullable().describe("A plain sentence when the saved pick is not offered here any more or no longer fits; the recommended model runs meanwhile."),
   options: z.array(LevelOptionSchema).describe("Every model that may be offered at this level, with whether it fits and the plain reason when it does not."),
   recommended: z.object({ model: z.string().nullable(), why: z.string() }),
+  running: z.object({
+    active: z.boolean().describe("True when this level is the one in use now: chat is Standard unless Reduced or coding mode (Max) is on; a picture, video or music level is always live."),
+    model: z.string().nullable().describe("The model answering this level, or the one the next request starts; null when this level is not in use or nothing is installed."),
+    answering: z.boolean().describe("True when `chosen` is the model answering. False while a chosen model waits to be installed, does not fit, or starts at the next restart; `reason` says which."),
+    reason: z.string().nullable().describe("The plain sentence for why the chosen model is not answering yet, or null."),
+  }).describe("What answers for this level, from the same code the role view uses, so the two never disagree."),
 }).openapi("ChoiceLevelRow");
 export type TierRow = z.infer<typeof TierRowSchema>;
 

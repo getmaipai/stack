@@ -22,11 +22,12 @@ import { getModel, removeModel } from "@/lib/modelStore";
 import { listJobs } from "@/lib/jobs";
 import { modelView } from "@/routes/models";
 import { InspectRefusal, inspectModel } from "@/lib/modelInspect";
-import { STACK_MODELS } from "@/lib/modelCatalog";
+import { STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, STACK_CODING_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
 import { DiskRefusalError } from "@/lib/diskState";
 import { planTidy, runTidy } from "@/lib/tidy";
 import { applyProfile, type ApplyOutcome } from "@/lib/profileApply";
 import { applyVoiceEngine } from "@/lib/tierPick";
+import { TTS_ENGINE_SETTING } from "@/speech/ttsEngines";
 import { auditAction, type ActionSource } from "@/lib/adminActions";
 import {
   CHOICE_PROFILES, CHOICE_TIERS, dropPicksFor, pickFor, readAddedModels, readMigration, readPicks, withPick, writeAddedModels, writeMigration, writePicks,
@@ -34,11 +35,13 @@ import {
 } from "@/lib/choicesStore";
 import type { Candidate, Category, CategoryId, ChoicesView, TierRow, UnusedItem } from "@/lib/choicesSchema";
 import { CATEGORY_IDS } from "@/lib/choicesSchema";
+import { addedFits, decide, liveSettings, notifyChoicesChanged, type ResolverEnv } from "@/lib/choiceResolver";
+import { runningFor } from "@/lib/choiceRuntime";
+import { CATEGORY_DEFS, defOf, levelName, resolveCategoryId, type CategoryDef } from "@/lib/choiceCategories";
+export { CATEGORY_DEFS, levelName, resolveCategoryId };
 
 const GB = 1_000_000_000;
 const gb = (bytes: number): string => { const value = bytes / GB; return `${value >= 10 ? Math.round(value) : Math.round(value * 10) / 10} GB`; };
-export const levelName = (tier: ChoiceTier): string => tier[0]!.toUpperCase() + tier.slice(1);
-const STANDARD_ONLY: readonly ChoiceTier[] = ["standard"];
 
 /** Seams a test replaces: the hardware probe, the part install, the pinned install of an added model and the link reader. */
 export interface ChoicesDeps {
@@ -66,31 +69,6 @@ export function __setChoicesDepsForTests(next: Partial<ChoicesDeps> | null): voi
   choicesDeps.uninstallPart = next?.uninstallPart ?? uninstallComponent;
 }
 
-interface CategoryDef {
-  id: CategoryId; label: string; role: RoleId | null; partCategory: string; tierCategory?: TierCategory; partIds?: readonly string[]; levels: readonly ChoiceTier[];
-}
-/** The categories of the page. A tiered category takes its candidates from the tier table; the others name their parts and have one level. */
-export const CATEGORY_DEFS: readonly CategoryDef[] = [
-  { id: "chat", label: "Chat", role: "chat", partCategory: "chat", tierCategory: "chat", levels: ["reduced", "standard", "boost", "max"] },
-  { id: "coding", label: "Coding", role: "coding", partCategory: "coding", partIds: ["qwen3.8-27b-ud-q4-k-m"], levels: STANDARD_ONLY },
-  { id: "pictures", label: "Pictures", role: "image", partCategory: "pictures", tierCategory: "pictures", levels: ["standard", "boost", "max"] },
-  { id: "video", label: "Video", role: "video", partCategory: "video", tierCategory: "video", levels: ["standard", "boost", "max"] },
-  { id: "music", label: "Music", role: "music", partCategory: "music", tierCategory: "music", levels: ["standard", "boost", "max"] },
-  { id: "voice", label: "Voice", role: "tts", partCategory: "voice", tierCategory: "voice", levels: ["reduced", "standard"] },
-  { id: "stt", label: "Speech to text", role: "stt", partCategory: "voice", partIds: ["moonshine-tiny-en-int8", "parakeet-tdt-0.6b-v2-int8"], levels: STANDARD_ONLY },
-  { id: "embeddings", label: "Embeddings", role: "embed", partCategory: "search", partIds: ["nomic-embed-text-v1-5-q4-k-m"], levels: STANDARD_ONLY },
-  { id: "vision", label: "Vision", role: "vision", partCategory: "vision", partIds: ["qwen3-vl-4b-instruct-q4-k-m", "qwen3-vl-8b-instruct-q4-k-m"], levels: STANDARD_ONLY },
-  { id: "wakeword", label: "Wake word", role: "wakeword", partCategory: "voice", partIds: ["wakeword"], levels: STANDARD_ONLY },
-  { id: "stems", label: "Stem splitter", role: null, partCategory: "stems", tierCategory: "stems", levels: STANDARD_ONLY },
-];
-const defOf = (id: string): CategoryDef | undefined => CATEGORY_DEFS.find((def) => def.id === id);
-/** Home's words and role ids for a category, so a caller may send either. */
-const CATEGORY_ALIASES: Record<string, CategoryId> = { image: "pictures", videos: "video", tts: "voice", embed: "embeddings" };
-export function resolveCategoryId(name: string): CategoryId | null {
-  const id = CATEGORY_ALIASES[name] ?? name;
-  return (CATEGORY_IDS as readonly string[]).includes(id) ? id as CategoryId : null;
-}
-
 interface PoolEntry { id: string; kind: "shipped" | "added"; family: string | null; vetting: string | null; row: TierCandidate | null; added: AddedModel | null }
 interface State {
   hardware: HardwareInfo; profile: ProfileTier | null; memoryGb: number; room: number; reducedFreed: number;
@@ -110,6 +88,11 @@ export async function loadState(): Promise<State> {
   const lists = new Map<TierCategory, ReturnType<typeof tierCandidateLists>>();
   if (profile) for (const def of CATEGORY_DEFS) if (def.tierCategory) lists.set(def.tierCategory, tierCandidateLists(def.tierCategory, profile.id, room, reducedFreed));
   return { hardware, profile, memoryGb: sized.memoryGb, room, reducedFreed, parts, pins, picks: readPicks(), partChoices: readPartChoices(), added: readAddedModels(), lists };
+}
+
+/** The resolver's inputs from a read's own state, so the page and the role view decide from the same stores. */
+function resolverEnv(state: State): ResolverEnv {
+  return { profile: state.profile!.id, room: state.room, reducedFreed: state.reducedFreed, picks: state.picks, partChoices: state.partChoices, added: state.added, settings: liveSettings() };
 }
 
 function poolOf(state: State, def: CategoryDef): PoolEntry[] {
@@ -202,11 +185,7 @@ function candidateViews(state: State, def: CategoryDef, pool: PoolEntry[], picka
 
 interface LevelOptions { options: TierRow["options"]; capBytes: number | null; recommended: string | null; peaks: Map<string, number> }
 
-function addedFit(added: AddedModel, tier: ChoiceTier, state: State): { fits: boolean; refusal: string | null } {
-  const cap = tier === "reduced" ? state.room + state.reducedFreed : tierCapBytes(tier, state.room, state.reducedFreed);
-  if (added.ram_bytes <= 0 || added.ram_bytes <= cap) return { fits: true, refusal: null };
-  return { fits: false, refusal: `${added.label} needs about ${gb(added.ram_bytes)} and ${levelName(tier)} allows ${gb(cap)} on this computer. Choose a higher level, or a smaller file.` };
-}
+const addedFit = (added: AddedModel, tier: ChoiceTier, state: State): { fits: boolean; refusal: string | null } => addedFits(added, tier, state);
 
 function levelOptions(state: State, def: CategoryDef, pool: PoolEntry[], tier: ChoiceTier): LevelOptions {
   const profile = state.profile!;
@@ -271,19 +250,16 @@ function tierRows(state: State, def: CategoryDef, pool: PoolEntry[], candidates:
     const level = levelOptions(state, def, pool, tier);
     if (level.options.length === 0 && level.recommended === null && tier !== "standard") continue;
     const stored = pickFor(state.picks, profile.id, def.id, tier);
-    const offered = stored && stored.model !== "off" ? level.options.find((option) => option.model === stored.model) : undefined;
-    let chosen: string | null = null;
-    let chosenBy: TierRow["chosen_by"] = "none";
-    let problem: string | null = null;
-    if (stored?.model === "off") chosenBy = "off";
-    else if (stored && offered) { chosen = stored.model; chosenBy = "household"; if (!offered.fits) problem = offered.refusal; }
-    else {
-      if (stored) problem = `Your saved choice, ${labelOf(state, stored.model)}, is not offered for ${levelName(tier)} any more, so the recommended model runs.`;
-      if (level.recommended) { chosen = level.recommended; chosenBy = "recommended"; }
-    }
+    // One definition of what a level uses (choiceResolver.ts); the role view asks the same function.
+    const env = resolverEnv(state);
+    const intended = decide(env, def.id, tier);
+    const chosen = intended.model;
+    const chosenBy: TierRow["chosen_by"] = intended.by === "off" ? "off" : intended.by === "none" ? "none" : intended.by === "recommended" ? "recommended" : "household";
+    const problem = intended.problem ?? (chosenBy === "household" && !intended.fits ? intended.refusal : null);
+    const running = runningFor(env, def, tier, intended);
     rows.push({
       tier, cap_bytes: level.capBytes, chosen, chosen_by: chosenBy, chosen_state: chosen ? byId.get(chosen)?.state ?? null : null,
-      customization: chosenBy === "household" && stored?.options ? stored.options : null, problem, options: level.options,
+      customization: chosenBy === "household" && stored?.options ? stored.options : null, problem, options: level.options, running,
       recommended: { model: level.recommended, why: whyRecommended(state, def, tier, level) },
     });
   }
@@ -418,6 +394,11 @@ function judgePick(state: State, input: PickInput, system: boolean): Judged {
   const candidateRow = entry.row;
   const offeredElsewhere = entry.kind === "added" || (candidateRow ? candidateRow.profiles.includes(profile) && (tier === "reduced" ? candidateRow.tiers.includes("reduced") : candidateRow.tiers.some((item) => item !== "reduced")) : def.role === null || !profileTier.notAvailable.includes(def.role));
   if (!offeredElsewhere) return refuse(409, "not_offered_here", `${labelOf(state, entry.id)} is not offered for ${levelName(tier)} on a ${profileTier.minUnifiedGb} GB computer.`);
+  // Boost and Max chat run through the coding role (Max through coding mode, which starts Qwen3.8 27B or Flash Next): a model the Stack cannot start there is refused, never saved as a choice that changes nothing.
+  if (def.id === "chat" && (tier === "boost" || tier === "max")) {
+    const runnable = tier === "max" ? [STACK_CODING_MODEL.id, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL.id] : [STACK_CODING_MODEL.id];
+    if (!runnable.includes(entry.id)) return refuse(409, "not_runnable_at_level", `${levelName(tier)} chat runs through ${tier === "max" ? "coding mode, which starts Qwen3.8 27B or Qwen3.8 Flash Next" : "the coding model, Qwen3.8 27B"}. ${labelOf(state, entry.id)} cannot run there. Choose ${tier === "max" ? "one of those" : "that model"} for ${levelName(tier)}, or use Standard for this one.`);
+  }
   if (input.options) {
     const known = new Set(candidateRow?.peaks.flatMap((peak) => Object.keys(peak.options)) ?? []);
     const bad = Object.keys(input.options).find((key) => !known.has(key));
@@ -432,17 +413,52 @@ function judgePick(state: State, input: PickInput, system: boolean): Judged {
   return { ok: true, def, tier, profile, state, pool, entry, own };
 }
 
-/** Applies what a stored pick means to the Stack itself: a Standard voice pick sets the voice engine; a Standard chat pick sets the chat model once it is installed. */
-function applyPick(def: CategoryDef, tier: ChoiceTier, entry: PoolEntry, installed: boolean): { applied: boolean; pending_restart: boolean; note: string | null } {
-  if (tier !== "standard") return { applied: false, pending_restart: false, note: null };
-  if (def.id === "voice" && entry.row?.engine) return { ...applyVoiceEngine(entry.row.engine), note: null };
-  if (def.id === "chat") {
-    if (!installed) return { applied: false, pending_restart: false, note: "The choice is saved. Chat switches to it once it is installed." };
-    const setting = updateSettings({ "stack.engines.chat.model": entry.id }).find((item) => item.key === "stack.engines.chat.model");
-    return { applied: true, pending_restart: setting?.pending !== null && setting?.pending !== undefined, note: null };
+type Effect = { applied: boolean; pending_restart: boolean; note: string | null };
+const SAVED_FOR_LATER: Record<string, string> = { reduced: "Reduced chat or voice starts", boost: "Boost chat runs through the coding model, which starts", max: "Max chat runs through coding mode, which starts" };
+
+/**
+ * Makes a stored pick the model that answers (docs/dev/choices.md, "What runs"). The pick is already stored, so every start picks it. This
+ * swaps a role that is already running: chat, coding, speech to text, embeddings and vision through the existing model load (it keeps the
+ * earlier model when the new one will not start), voice through the engine restart (a voice that fails to start falls back to the
+ * standard voice and says so). A model that is not installed is saved and waits: the model that answers keeps answering until it is
+ * installed and verified. A reply or a request in flight is never cut: the swap waits and the note says so.
+ */
+async function applyPick(def: CategoryDef, tier: ChoiceTier, entry: PoolEntry, installed: boolean): Promise<Effect> {
+  if (tier !== "standard") return { applied: false, pending_restart: false, note: `Saved. It takes effect the next time ${SAVED_FOR_LATER[tier] ?? "that level starts"}.` };
+  if (def.id === "voice" && entry.row?.engine) {
+    const written = applyVoiceEngine(entry.row.engine);
+    const { restartRole, ttsEngineInEffect, activeRequestsOf, activeTtsChoice } = await import("@/lib/supervisor");
+    const wanted = entry.row.engine;
+    // The running Stack has not learned this computer's profile (or the engine is not offered): the setting is saved and the voice starts with it at the next restart.
+    if (activeTtsChoice().requested !== wanted) return { ...written, note: null };
+    if (ttsEngineInEffect() === wanted) return { applied: true, pending_restart: false, note: null };
+    if (activeRequestsOf("tts") > 0) return { applied: false, pending_restart: true, note: "The voice is speaking now. The new voice starts the next time the voice engine restarts." };
+    await restartRole("tts", "model-load");
+    return { applied: true, pending_restart: false, note: null };
   }
-  return { applied: false, pending_restart: false, note: null };
+  if (!installed) return { applied: false, pending_restart: false, note: `The choice is saved. ${def.label} switches to it once it is installed and checked; ${def.id === "chat" ? "chat" : "the model that answers now"} keeps answering until then.` };
+  if (def.id === "chat" || def.role === "stt" || def.role === "embed" || def.role === "vision" || def.id === "coding") {
+    const role = def.role!;
+    if (def.id === "chat") updateSettings({ "stack.engines.chat.model": entry.id });
+    const supervisor = await import("@/lib/supervisor");
+    const loaded = supervisor.loadedModelId(role);
+    if (loaded === null || loaded === entry.id) return { applied: true, pending_restart: false, note: null };
+    if (supervisor.activeRequestsOf(role) > 0) return { applied: false, pending_restart: true, note: `${def.label} is answering a request now. The new model starts the next time ${def.label.toLowerCase()} restarts.` };
+    if (role === "chat" && (await import("@/lib/reducedChat")).reducedChatForcesLight()) return { applied: false, pending_restart: true, note: "Chat is in Reduced now. The new model starts when Reduced ends." };
+    if (role === "chat" && (await import("@/lib/homeMode")).currentHomeMode() === "coding") return { applied: false, pending_restart: true, note: "Coding mode is on. The new chat model starts when coding mode ends." };
+    // The pick holds the choice from here on: the load's session preference is dropped so a later change to the pick or the order is not shadowed by it.
+    try { await supervisor.loadModelForRole(role, entry.id); supervisor.preferModel(role, null); return { applied: true, pending_restart: false, note: null }; }
+    catch (error) {
+      // The load put the earlier choice back, but the stored pick would start the new model again on this restart: hold the model that was answering until the pick is made again.
+      supervisor.preferModel(role, loaded);
+      await supervisor.restartRole(role, "model-load").then(() => supervisor.getProcess(role)).catch(() => undefined);
+      return { applied: false, pending_restart: false, note: `${labelOfEntry(entry)} could not start, so ${labelOfLoaded(loaded)} keeps answering. Choose it again to try again. ${error instanceof Error ? error.message : ""}`.trim() };
+    }
+  }
+  return { applied: true, pending_restart: false, note: null };
 }
+const labelOfEntry = (entry: PoolEntry): string => entry.added?.label ?? partDef(entry.id)?.label ?? entry.id;
+const labelOfLoaded = (id: string): string => partDef(id)?.label ?? id;
 
 export async function setPick(input: PickInput, source: ActionSource, remote: string): Promise<PickDone | Refusal> {
   const state = await loadState();
@@ -470,8 +486,11 @@ export async function setPick(input: PickInput, source: ActionSource, remote: st
     }
   }
   const changed = JSON.stringify(before) !== JSON.stringify(next);
+  // The legacy setting and the pick are one value (choiceResolver.ts): clearing the pick back to "recommended" clears the setting too, or the setting would keep the old model running.
+  if (next === null && tier === "standard" && own && (def.id === "chat" || def.id === "voice")) updateSettings({ [def.id === "chat" ? "stack.engines.chat.model" : TTS_ENGINE_SETTING]: def.id === "voice" ? "auto" : "" });
   if (changed) writePicks(withPick(state.picks, profile, def.id, tier, next));
-  const effect = next && next.model !== "off" && own && entry ? applyPick(def, tier, entry, installed) : { applied: false, pending_restart: false, note: null };
+  notifyChoicesChanged();
+  const effect: Effect = next && next.model !== "off" && own && entry ? await applyPick(def, tier, entry, installed) : { applied: false, pending_restart: false, note: null };
   if (changed) auditAction("choices.pick", source, remote, { category: def.id, level: tier, profile, model: next?.model ?? "recommended" });
   return { ok: true, category: def.id, tier, profile, model: next?.model ?? null, changed, applied: effect.applied, pending_restart: effect.pending_restart, install_job: job, note: effect.note };
 }
@@ -491,6 +510,7 @@ export async function setOrder(categoryName: string, body: { order: string[]; of
   const refusal = choicesRefusal(merged);
   if (refusal) return refuse(refusal.status, refusal.code, refusal.error);
   writePartChoices(merged);
+  notifyChoicesChanged();
   auditAction("choices.order", source, remote, { category: def.id, order: body.order.join(","), ...(body.off ? { off: body.off.join(",") } : {}) });
   const after = buildCategories(await loadState()).find((item) => item.id === def.id)!;
   return { ok: true, category: def.id, order: after.order, disabled: after.disabled };
@@ -532,6 +552,7 @@ export async function applyRecommended(dryRun: boolean, source: ActionSource, re
   }
   if (dryRun) return { dry_run: true, changed, unchanged, roles, installs, skipped, needs_licence: needsLicence };
   writePicks(picks);
+  notifyChoicesChanged();
   for (const id of toInstall) {
     const part = judged.parts.get(id);
     if (!part || statePlain(part).state !== "notInstalled" || installs.some((item) => item.model === id)) continue;
@@ -545,7 +566,7 @@ export async function applyRecommended(dryRun: boolean, source: ActionSource, re
   for (const change of changed) {
     const def = defOf(change.category)!;
     const entry = poolOf(judged, def).find((item) => item.id === change.to);
-    if (entry && change.tier === "standard") applyPick(def, change.tier, entry, statePlain(judged.parts.get(entry.id) ?? ({ state: "missing", download_bytes: 0, percent: null, fits: { reason: null }, install_block: null } as unknown as StackPartView)).state === "installed");
+    if (entry && change.tier === "standard") await applyPick(def, change.tier, entry, statePlain(judged.parts.get(entry.id) ?? ({ state: "missing", download_bytes: 0, percent: null, fits: { reason: null }, install_block: null } as unknown as StackPartView)).state === "installed");
   }
   auditAction("choices.recommended", source, remote, { changed: String(changed.length), installs: String(installs.length) });
   return { dry_run: false, changed, unchanged, roles, installs, skipped, needs_licence: needsLicence };
@@ -630,7 +651,8 @@ export async function addModel(input: { source: string; file?: string; tier: Cho
   writeAddedModels(added);
   if (input.use) writePicks(withPick(readPicks(), state.profile.id, "chat", input.tier, { model: id }));
   const installed = view === "installed";
-  if (input.use && installed && input.tier === "standard") applyPick(defOf("chat")!, "standard", { id, kind: "added", family: null, vetting: null, row: null, added: record }, true);
+  if (input.use) notifyChoicesChanged();
+  if (input.use && installed && input.tier === "standard") await applyPick(defOf("chat")!, "standard", { id, kind: "added", family: null, vetting: null, row: null, added: record }, true);
   auditAction("choices.add-model", source, remote, { id, level: input.tier, use: String(input.use) });
   return { ok: true, id, label, category: "chat", tier: input.tier, chosen: input.use, state: installed ? "installed" : "installing", install_job: job, size_bytes: found.sizeBytes, licence: found.licence };
 }
@@ -687,7 +709,7 @@ export async function migrate(input: MigrateInput, source: ActionSource, remote:
     picks = withPick(picks, judged.profile, judged.def.id, judged.tier, next);
     results.push({ kind: "slot", key, status: "accepted", reason: null });
   }
-  if (write) writePicks(picks);
+  if (write) { writePicks(picks); notifyChoicesChanged(); }
   let partChoices = state.partChoices;
   for (const order of input.orders) {
     const category = resolveCategoryId(order.category);

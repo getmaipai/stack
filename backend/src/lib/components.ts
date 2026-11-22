@@ -429,6 +429,11 @@ const pinInstalled = (pin: CatalogModelLike): boolean => { const record = getMod
 const pinBytes = (pin: CatalogModelLike): number => { const record = getModel(pin.id); if (!record?.modelPath) return 0; return record.sizeBytes ?? cachedBytes(record.modelPath); };
 const pinDownload = (pin: CatalogModelLike): number => pin.download?.approx_bytes ?? 0;
 
+/** Whether a part is installed right now, from files on disk (no probe, no job): null for an id that is no part. The model choices ask it on the hot path. */
+export function componentInstalledNow(id: string): boolean | null {
+  const unit = componentDefs().find((candidate) => candidate.id === id);
+  return unit ? unitInstalled(unit) : null;
+}
 function unitInstalled(unit: UnitDef): boolean { return unit.pins.every(pinInstalled) && unit.envs.every((env) => env.lazy || env.ready()); }
 function unitPartlyInstalled(unit: UnitDef): boolean { return unit.pins.some(pinInstalled) || unit.envs.some((env) => env.ready()); }
 function unitDiskBytes(unit: UnitDef, others: UnitDef[]): number {
