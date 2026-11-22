@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge } from "@maipai/ui/src/ui/badge";
+import { Pill } from "./kit";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Card, CardContent } from "@maipai/ui/src/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maipai/ui/src/ui/collapsible";
@@ -19,7 +19,7 @@ function Field({ s, value, error, onChange }: { s: Setting; value: SettingValue;
   return (
     <div className="flex flex-col gap-1.5 py-3">
       <div className="flex items-center gap-3">
-        <Label htmlFor={id} className="me-auto text-sm font-medium">{s.label}{s.level !== "basic" && <Badge variant="outline" className="ms-2">{s.level}</Badge>}</Label>
+        <Label htmlFor={id} className="me-auto text-sm font-medium">{s.label}{s.level !== "basic" && <Pill className="ms-2">{s.level}</Pill>}</Label>
         {s.selector === "boolean" && <Switch id={id} checked={value === true} onCheckedChange={(v) => onChange(v)} />}
         {s.selector === "select" && (
           <Select value={String(value ?? "")} onValueChange={(v) => onChange(v)}>
@@ -88,7 +88,7 @@ export function SettingsScreen({ notify }: { refresh: () => void; notify: Notify
         </div>
       )}
       {pending.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3 text-sm" role="status">
+        <div className="glass flex flex-wrap items-center gap-3 p-3 text-sm" role="status">
           <span className="me-auto">{pending.length} saved {pending.length === 1 ? "change is" : "changes are"} waiting to take effect.</span>
           <ConfirmButton variant="default" disabled={busy} label="Apply" title="Apply the saved changes?" confirm="Apply" text="The saved values become the ones the Stack uses from its next start. Restart the Stack afterwards from Tools." onConfirm={apply} />
         </div>
@@ -96,7 +96,7 @@ export function SettingsScreen({ notify }: { refresh: () => void; notify: Notify
       {groups.map((g, i) => (
         <Collapsible key={g.id} defaultOpen={i === 0} asChild>
           <Card className="gap-0 py-0">
-            <CollapsibleTrigger className="group flex w-full items-center gap-3 rounded-xl p-5 text-start focus-visible:outline-2 focus-visible:outline-ring">
+            <CollapsibleTrigger className="group flex w-full items-center gap-3 rounded-xl p-5 text-start transition-colors hover:bg-[color-mix(in_oklab,var(--primary)_5%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring">
               <span className="me-auto"><span className="block font-semibold">{g.label}</span><span className="block text-sm text-muted-foreground">{g.items.length} {g.items.length === 1 ? "setting" : "settings"}</span></span>
               <ChevronDown aria-hidden="true" className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
             </CollapsibleTrigger>

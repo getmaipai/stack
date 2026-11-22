@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, ToggleRight, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis } from "lucide-react";
+import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, ToggleRight, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis, Layers } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@maipai/ui/src/ui/sheet";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Status, StatusIndicator } from "@maipai/ui/src/ui/status";
@@ -21,23 +21,34 @@ import { Helper } from "./Helper";
 import { HelperProvider } from "./helperChat";
 import { HelperPanel } from "./HelperPanel";
 import { HELPER_SHORTCUT } from "./helperText";
-import { Engines, Health, healthKind, healthWord } from "./screens";
+import { Engines, Health, healthKind, healthWord, roleWord } from "./screens";
+import { IconChip, Pill } from "./kit";
+import { roleIcon } from "./roleIcons";
 import { Overview } from "./Overview";
 
 type Screen = "overview" | "features" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper";
-interface NavItem { id: Screen; label: string; question: string; Icon: typeof LayoutDashboard; more?: boolean }
+type Group = "monitor" | "setup" | "maintain" | "assist";
+interface NavItem { id: Screen; label: string; question: string; Icon: typeof LayoutDashboard; group: Group; more?: boolean }
 const NAV: NavItem[] = [
-  { id: "overview", label: "Overview", question: "Is everything working?", Icon: LayoutDashboard },
-  { id: "features", label: "Features", question: "What should this computer be able to do?", Icon: ToggleRight },
-  { id: "models", label: "Models", question: "Which AI model does each feature use?", Icon: Boxes },
-  { id: "health", label: "Health", question: "Does anything need fixing?", Icon: HeartPulse },
-  { id: "helper", label: "Helper", question: "Ask in plain words. Nothing changes until you approve.", Icon: Sparkles },
-  { id: "resources", label: "Resources", question: "Is there enough memory?", Icon: Gauge, more: true },
-  { id: "engines", label: "Engines", question: "What is doing the work behind the scenes?", Icon: Cpu, more: true },
-  { id: "updates", label: "Updates", question: "Is anything out of date?", Icon: CircleArrowUp, more: true },
-  { id: "settings", label: "Settings", question: "Fine tuning. The defaults are fine for most people.", Icon: SlidersHorizontal, more: true },
-  { id: "tools", label: "Tools", question: "Restart, check, and repair.", Icon: Wrench, more: true },
+  { id: "overview", label: "Overview", question: "Is everything working?", Icon: LayoutDashboard, group: "monitor" },
+  { id: "features", label: "Features", question: "What should this computer be able to do?", Icon: ToggleRight, group: "setup" },
+  { id: "models", label: "Models", question: "Which AI model does each feature use?", Icon: Boxes, group: "setup" },
+  { id: "health", label: "Health", question: "Does anything need fixing?", Icon: HeartPulse, group: "monitor" },
+  { id: "helper", label: "Helper", question: "Ask in plain words. Nothing changes until you approve.", Icon: Sparkles, group: "assist" },
+  { id: "resources", label: "Resources", question: "Is there enough memory?", Icon: Gauge, group: "monitor", more: true },
+  { id: "engines", label: "Engines", question: "What is doing the work behind the scenes?", Icon: Cpu, group: "setup", more: true },
+  { id: "updates", label: "Updates", question: "Is anything out of date?", Icon: CircleArrowUp, group: "maintain", more: true },
+  { id: "settings", label: "Settings", question: "Fine tuning. The defaults are fine for most people.", Icon: SlidersHorizontal, group: "maintain", more: true },
+  { id: "tools", label: "Tools", question: "Restart, check, and repair.", Icon: Wrench, group: "maintain", more: true },
 ];
+/** The sidebar's categories, in the order a person works through them: look, set up, keep tidy, ask. */
+const GROUPS: { id: Group; label: string; order: Screen[] }[] = [
+  { id: "monitor", label: "Monitor", order: ["overview", "health", "resources"] },
+  { id: "setup", label: "Set up", order: ["features", "models", "engines"] },
+  { id: "maintain", label: "Maintain", order: ["updates", "settings", "tools"] },
+  { id: "assist", label: "Assist", order: ["helper"] },
+];
+const groupLabel = (g: Group) => GROUPS.find((x) => x.id === g)!.label;
 const PRIMARY = NAV.filter((n) => !n.more);
 const MORE = NAV.filter((n) => n.more);
 
@@ -51,7 +62,7 @@ export function App() {
   useEffect(() => {
     api.session().then(() => setAuth("in")).catch(() => setAuth("out"));
   }, []);
-  if (auth === "checking") return <div className="flex min-h-dvh items-center justify-center text-muted-foreground" role="status">Loading</div>;
+  if (auth === "checking") return <div className="flex min-h-dvh flex-col items-center justify-center gap-3 text-sm text-muted-foreground" role="status"><span className="animate-pulse"><IconChip Icon={Layers} size="lg" /></span>Connecting to the Stack</div>;
   if (auth === "out") return <><Login onSignedIn={() => setAuth("in")} /><Toaster /></>;
   return <Signed onSignedOut={() => setAuth("out")} />;
 }
@@ -77,13 +88,14 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
     catch (e) { notify(e instanceof ApiError ? e.message : "The Stack could not be restarted."); }
   }, [notify]);
 
-  const screens: PaletteItem[] = useMemo(() => NAV.map((n) => ({ id: n.id, label: n.label, run: () => go(n.id) })), [go]);
+  const screens: PaletteItem[] = useMemo(() => GROUPS.flatMap((g) => g.order.map((id) => NAV.find((n) => n.id === id)!)).map((n) => ({ id: n.id, label: n.label, hint: n.question, Icon: n.Icon, keywords: [groupLabel(n.group)], run: () => go(n.id) })), [go]);
+  const features: PaletteItem[] = useMemo(() => (snap.roles ?? []).map((r) => ({ id: `role-${r.id}`, label: r.label, hint: roleWord(r), Icon: roleIcon(r.id), tone: r.enabled === false ? "muted" as const : "primary" as const, keywords: ["feature", "role"], run: () => go("features") })), [snap.roles, go]);
   const actions: PaletteItem[] = useMemo(() => [
-    { id: "helper", label: "Ask the Helper", run: () => setHelperOpen(true) },
-    { id: "refresh", label: "Refresh now", run: refresh },
-    { id: "theme", label: dark ? "Switch to light" : "Switch to dark", run: toggle },
-    { id: "restart", label: "Restart the Stack", run: () => { void restartStack(); } },
-    { id: "signout", label: "Sign out", run: () => { void signOut(); } },
+    { id: "helper", label: "Ask the Helper", hint: "Plain words. Nothing changes until you approve.", Icon: Sparkles, run: () => setHelperOpen(true) },
+    { id: "refresh", label: "Refresh now", hint: "Read the latest numbers.", Icon: RotateCw, run: refresh },
+    { id: "theme", label: dark ? "Switch to light" : "Switch to dark", hint: "This browser only.", Icon: dark ? Sun : Moon, run: toggle },
+    { id: "restart", label: "Restart the Stack", hint: "Engines stop and start again.", Icon: Wrench, tone: "warn" as const, run: () => { void restartStack(); } },
+    { id: "signout", label: "Sign out", Icon: LogOut, tone: "muted" as const, run: () => { void signOut(); } },
   ], [refresh, dark, toggle, restartStack, signOut]);
 
   const roleLabels = useMemo(() => Object.fromEntries((snap.roles ?? []).map((r) => [r.id, r.label])), [snap.roles]);
@@ -91,19 +103,25 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
   const problems = snap.health?.length ?? 0;
   const current = NAV.find((n) => n.id === screen) ?? NAV[0]!;
   const navButton = ({ id, label, Icon }: NavItem) => (
-    <Button key={id} variant={screen === id ? "secondary" : "ghost"} className="h-10 justify-start gap-3 rounded-xl px-3" aria-current={screen === id ? "page" : undefined} onClick={() => go(id)}>
+    <Button key={id} variant={screen === id ? "secondary" : "ghost"} className="nav-item h-10 justify-start gap-3 rounded-xl px-3" aria-current={screen === id ? "page" : undefined} onClick={() => go(id)}>
       <Icon aria-hidden="true" />{label}
-      {id === "health" && problems > 0 && <span className="ms-auto rounded-full bg-[var(--status-warning)] px-2 text-xs font-medium text-background">{problems}</span>}
+      {id === "health" && problems > 0 && <Pill tone="warn" className="ms-auto"><span className="sr-only">Problems: </span>{problems}</Pill>}
     </Button>
   );
   return (
     <HelperProvider notify={notify} refresh={refresh}>
     <div className="flex min-h-dvh flex-col md:flex-row">
       <nav aria-label="Main" className="hidden w-60 shrink-0 flex-col gap-1 overflow-y-auto border-e bg-sidebar p-4 text-sidebar-foreground md:sticky md:top-0 md:flex md:h-dvh md:self-start">
-        <p className="px-3 pb-4 pt-2 text-lg font-semibold tracking-tight">MaiPai Stack</p>
-        {PRIMARY.map(navButton)}
-        <p className="mt-6 px-3 pb-1 text-xs font-medium text-muted-foreground">More</p>
-        {MORE.map(navButton)}
+        <div className="flex items-center gap-3 px-2 pb-2 pt-1">
+          <IconChip Icon={Layers} size="md" />
+          <div className="min-w-0 leading-tight"><p className="font-semibold tracking-tight">MaiPai Stack</p><p className="text-xs text-muted-foreground">Admin</p></div>
+        </div>
+        {GROUPS.map((g) => (
+          <div key={g.id} role="group" aria-label={g.label} className="flex flex-col gap-0.5">
+            <p className="nav-label" aria-hidden="true">{g.label}</p>
+            {g.order.map((id) => NAV.find((n) => n.id === id)!).map(navButton)}
+          </div>
+        ))}
       </nav>
       <div className="flex min-w-0 flex-1 flex-col pb-24 md:pb-0">
         <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/75 px-4 py-3 backdrop-blur-xl md:px-8">
@@ -113,15 +131,19 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
           <Status status={snap.live ? "online" : "maintenance"} className="hidden sm:flex" aria-label={snap.live ? "Live updates connected" : "Live updates reconnecting"}>
             <StatusIndicator status={snap.live ? "online" : "maintenance"} ping={false} />{snap.live ? "Live" : "Reconnecting"}
           </Status>
-          <Button variant="ghost" size="sm" onClick={() => setPalette(true)} aria-label="Search and jump to a screen"><Search aria-hidden="true" /><kbd className="hidden text-xs text-muted-foreground sm:inline">⌘K</kbd></Button>
+          <button type="button" onClick={() => setPalette(true)} aria-label="Search and jump to a screen or feature" aria-keyshortcuts="Control+K Meta+K" className="search-field hidden h-9 w-56 items-center gap-2 rounded-xl px-3 text-sm text-muted-foreground md:flex lg:w-72">
+            <Search aria-hidden="true" className="size-4 shrink-0" /><span className="me-auto truncate">Search screens and features</span><kbd className="rounded-md px-1.5 py-0.5 text-xs shadow-[inset_0_0_0_1px_var(--fill-2)]">{isMac ? "⌘K" : "Ctrl K"}</kbd>
+          </button>
+          <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => setPalette(true)} aria-label="Search and jump to a screen or feature"><Search aria-hidden="true" /></Button>
           <Button variant="ghost" size="sm" onClick={() => setHelperOpen(true)} aria-label={`Ask the Helper (${isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other})`} aria-keyshortcuts="Control+/ Meta+/" title={`Ask the Helper (${isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other})`}><Sparkles aria-hidden="true" /><kbd className="hidden text-xs text-muted-foreground sm:inline">{isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other}</kbd></Button>
           <Button variant="ghost" size="icon-sm" onClick={refresh} aria-label="Refresh"><RotateCw aria-hidden="true" /></Button>
           <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={dark ? "Switch to light" : "Switch to dark"}>{dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}</Button>
           <Button variant="ghost" size="icon-sm" onClick={() => { void signOut(); }} aria-label="Sign out"><LogOut aria-hidden="true" /></Button>
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 md:px-8 md:py-10">
-          <div className="mb-8 flex flex-col gap-1">
-            <h2 className="text-3xl font-semibold tracking-tight">{current.label}</h2>
+          <div className="mb-8 flex flex-col gap-2">
+            <p className="eyebrow">{groupLabel(current.group)}</p>
+            <h2 className="page-title">{current.label}</h2>
             <p className="text-muted-foreground">{current.question}</p>
           </div>
           <div key={screen} className="animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none">
@@ -140,11 +162,11 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
       </div>
       <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-10 flex border-t bg-background/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
         {PRIMARY.map(({ id, label, Icon }) => (
-          <Button key={id} variant="ghost" className="h-14 min-w-0 flex-1 flex-col gap-0.5 rounded-none px-1 text-xs" aria-current={screen === id ? "page" : undefined} onClick={() => go(id)}>
+          <Button key={id} variant="ghost" className="tab-item h-14 min-w-0 flex-1 flex-col gap-0.5 rounded-none px-1 text-xs" aria-current={screen === id ? "page" : undefined} onClick={() => go(id)}>
             <Icon aria-hidden="true" className={screen === id ? "text-primary" : "text-muted-foreground"} />{label}
           </Button>
         ))}
-        <Button variant="ghost" className="h-14 min-w-0 flex-1 flex-col gap-0.5 rounded-none px-1 text-xs" aria-label="More screens" aria-current={current.more ? "page" : undefined} onClick={() => setMoreOpen(true)}>
+        <Button variant="ghost" className="tab-item h-14 min-w-0 flex-1 flex-col gap-0.5 rounded-none px-1 text-xs" aria-label="More screens" aria-current={current.more ? "page" : undefined} onClick={() => setMoreOpen(true)}>
           <Ellipsis aria-hidden="true" className={current.more ? "text-primary" : "text-muted-foreground"} />More
         </Button>
       </nav>
@@ -152,13 +174,15 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
         <SheetContent side="bottom" className="pb-[env(safe-area-inset-bottom)]">
           <SheetHeader><SheetTitle>More</SheetTitle><SheetDescription>Less common screens.</SheetDescription></SheetHeader>
           <div className="flex flex-col gap-1 px-4 pb-4">
-            {MORE.map(({ id, label, Icon }) => (
-              <Button key={id} variant={screen === id ? "secondary" : "ghost"} className="h-12 justify-start gap-3 rounded-xl" onClick={() => { setMoreOpen(false); go(id); }}><Icon aria-hidden="true" />{label}</Button>
+            {MORE.map(({ id, label, question, Icon, group }) => (
+              <Button key={id} variant={screen === id ? "secondary" : "ghost"} className="nav-item h-auto min-h-12 justify-start gap-3 rounded-xl py-2" aria-current={screen === id ? "page" : undefined} onClick={() => { setMoreOpen(false); go(id); }}>
+                <Icon aria-hidden="true" /><span className="flex min-w-0 flex-col items-start text-start"><span>{label}</span><span className="truncate text-xs font-normal text-muted-foreground">{groupLabel(group)} · {question}</span></span>
+              </Button>
             ))}
           </div>
         </SheetContent>
       </Sheet>
-      <Palette open={palette} onOpenChange={setPalette} screens={screens} actions={actions} />
+      <Palette open={palette} onOpenChange={setPalette} screens={screens} features={features} actions={actions} />
       <HelperPanel open={helperOpen} onOpenChange={setHelperOpen} />
       <Toaster />
     </div>

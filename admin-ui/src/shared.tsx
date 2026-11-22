@@ -24,8 +24,15 @@ export function useLoad<T>(fn: () => Promise<T>): { data: T | null; error: strin
   return { data, error, loading, reload, set: setData };
 }
 
+/** Cards shaped like the ones that replace them: an icon, a title line and a detail line, so nothing jumps when the data arrives. */
 export function Loading() {
-  return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading" role="status">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="glass flex items-start gap-3 p-4"><Skeleton className="size-10 shrink-0 rounded-xl" /><div className="flex flex-1 flex-col gap-2 pt-1"><Skeleton className="h-4 w-2/5 rounded-full" /><Skeleton className="h-3 w-4/5 rounded-full" /><Skeleton className="h-3 w-3/5 rounded-full" /></div></div>
+      ))}
+    </div>
+  );
 }
 export function Failure({ title = "That did not work", message }: { title?: string; message: string }) {
   return <Alert variant="destructive" role="alert"><AlertTitle>{title}</AlertTitle><AlertDescription>{message}</AlertDescription></Alert>;

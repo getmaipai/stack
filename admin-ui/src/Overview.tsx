@@ -12,7 +12,7 @@ import type { Role } from "./api";
 import type { Snapshot } from "./live";
 import { ago, bytes, uptime } from "./format";
 import { roleGroup, roleLine } from "./roleWords";
-import { IconChip, Meter, StatTile } from "./kit";
+import { EmptyState, IconChip, Meter, Pill, SectionHeader, StatTile } from "./kit";
 import type { Tone } from "./kit";
 import { roleIcon } from "./roleIcons";
 import { useRecent } from "./useHistory";
@@ -38,7 +38,7 @@ export function OverviewSkeleton() {
   return (
     <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading">
       <Skeleton className="h-40 rounded-2xl" />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
     </div>
   );
 }
@@ -49,14 +49,14 @@ function RoleTile({ role, budget, onOpen }: { role: Role; budget: number; onOpen
   const tone: Tone = g === "broken" ? "bad" : g === "off" ? "muted" : kind === "online" ? "ok" : "primary";
   const foot = role.model?.measuredFootprintBytes ?? 0;
   return (
-    <button type="button" onClick={onOpen} className="glass glass-lift group flex min-h-24 flex-col gap-3 p-4 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+    <button type="button" onClick={onOpen} className="glass glass-lift group flex min-h-24 min-w-0 flex-col gap-3 p-4 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
       <span className="flex items-center gap-3">
         <IconChip Icon={roleIcon(role.id)} tone={tone} />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-semibold">{role.label}</span>
           <span className="block truncate text-sm text-muted-foreground">{roleLine(role)}</span>
         </span>
-        <StatusIndicator status={kind} ping={kind === "online"} />
+        {g === "broken" ? <Pill tone="bad">Needs a look</Pill> : g === "off" ? <Pill tone="muted">Off</Pill> : <StatusIndicator status={kind} ping={kind === "online"} />}
       </span>
       {foot > 0 && budget > 0 && (
         <span className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -159,15 +159,11 @@ export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) =>
       </section>
 
       <section aria-labelledby="feat-h" className="flex flex-col gap-3">
-        <h2 id="feat-h" className="text-sm font-medium text-muted-foreground">What is running</h2>
+        <SectionHeader id="feat-h" eyebrow="Features" title="What is running" count={active.length} />
         {active.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{active.map((r) => <RoleTile key={r.id} role={r} budget={status.memory.budget_bytes} onOpen={() => setOpen(r)} />)}</div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{active.map((r) => <RoleTile key={r.id} role={r} budget={status.memory.budget_bytes} onOpen={() => setOpen(r)} />)}</div>
         ) : (
-          <div className="rounded-xl border border-dashed p-6 text-center">
-            <p className="font-medium">Nothing is running yet</p>
-            <p className="mb-3 text-sm text-muted-foreground">Turn a feature on and the Stack sets it up for you.</p>
-            <Button size="sm" onClick={() => go("features")}>Choose features</Button>
-          </div>
+          <EmptyState Icon={Activity} tone="muted" title="Nothing is running yet" text="Turn a feature on and the Stack sets it up for you." action={<Button size="sm" onClick={() => go("features")}>Choose features</Button>} />
         )}
         {grouped.off.length > 0 && (
           <Collapsible open={showOff} onOpenChange={setShowOff} className="flex flex-col gap-3">
@@ -175,7 +171,7 @@ export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) =>
               <Button variant="ghost" size="sm" className="self-start text-muted-foreground"><ChevronDown aria-hidden="true" className={`transition-transform motion-reduce:transition-none ${showOff ? "rotate-180" : ""}`} />{grouped.off.length} more {grouped.off.length === 1 ? "feature is" : "features are"} off or not set up</Button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{grouped.off.map((r) => <RoleTile key={r.id} role={r} budget={status.memory.budget_bytes} onOpen={() => setOpen(r)} />)}</div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{grouped.off.map((r) => <RoleTile key={r.id} role={r} budget={status.memory.budget_bytes} onOpen={() => setOpen(r)} />)}</div>
             </CollapsibleContent>
           </Collapsible>
         )}

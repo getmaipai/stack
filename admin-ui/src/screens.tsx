@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { IconChip } from "./kit";
+import { EmptyState, List, ListRow, ListSkeleton, Pill, SectionHeader } from "./kit";
+import type { Tone } from "./kit";
 import { Cpu, OctagonAlert, TriangleAlert, CircleAlert, PartyPopper } from "lucide-react";
-import { Badge } from "@maipai/ui/src/ui/badge";
 import { Button } from "@maipai/ui/src/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@maipai/ui/src/ui/card";
-import { Skeleton } from "@maipai/ui/src/ui/skeleton";
 import type { StatusKind } from "@maipai/ui/src/ui/status";
 import { ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maipai/ui/src/ui/collapsible";
@@ -36,14 +34,12 @@ export function healthKind(h: keyof typeof HEALTH_WORDS): StatusKind {
   return h === "ok" ? "online" : h === "degraded" ? "degraded" : h === "updating" ? "maintenance" : "offline";
 }
 
-function Loading() {
-  return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
-}
+function Loading() { return <ListSkeleton rows={4} />; }
 function Problem({ message }: { message: string }) {
   return <Alert variant="destructive" role="alert"><AlertTitle>The Stack is not answering</AlertTitle><AlertDescription>{message} This page keeps trying by itself.</AlertDescription></Alert>;
 }
-const SEVERITY: Record<HealthItem["severity"], { word: string; variant: "destructive" | "secondary" | "outline" }> = {
-  critical: { word: "Critical", variant: "destructive" }, error: { word: "Error", variant: "destructive" }, warning: { word: "Warning", variant: "secondary" },
+const SEVERITY: Record<HealthItem["severity"], { word: string; tone: Tone }> = {
+  critical: { word: "Critical", tone: "bad" }, error: { word: "Error", tone: "bad" }, warning: { word: "Warning", tone: "warn" },
 };
 
 export function Health({ snap, refresh, notify }: { snap: Snapshot; refresh: () => void; notify: Notify }) {
@@ -63,29 +59,22 @@ export function Health({ snap, refresh, notify }: { snap: Snapshot; refresh: () 
     }
   }
   if (snap.health.length === 0) {
-    return <Card><CardHeader><CardTitle className="flex items-center gap-3"><IconChip Icon={PartyPopper} tone="ok" />All clear</CardTitle><CardDescription>Nothing needs you right now. This updates by itself.</CardDescription></CardHeader></Card>;
+    return <EmptyState Icon={PartyPopper} tone="ok" title="All clear" text="Nothing needs you right now. This updates by itself." />;
   }
   return (
-    <ul className="flex flex-col gap-3" aria-label="Problems">
-      {snap.health.map((item) => (
-        <li key={item.code}>
-          <Card>
-            <CardHeader className="max-sm:flex max-sm:flex-col max-sm:items-start max-sm:gap-2">
-              <CardTitle className="flex flex-wrap items-center gap-3 text-base">
-                <IconChip Icon={item.severity === "critical" ? OctagonAlert : item.severity === "error" ? CircleAlert : TriangleAlert} tone={item.severity === "warning" ? "warn" : "bad"} />{item.title}<Badge variant={SEVERITY[item.severity].variant}>{SEVERITY[item.severity].word}</Badge>
-              </CardTitle>
-              <CardDescription>{item.text}</CardDescription>
-              {item.fix && (
-                <CardAction className="max-sm:order-last max-sm:self-start">
-                  <Button size="sm" disabled={busy === item.code} onClick={() => { void fix(item); }}>{busy === item.code ? "Working" : item.fix.label}</Button>
-                </CardAction>
-              )}
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">{item.cause} Open since {ago(item.since)}.</CardContent>
-          </Card>
-        </li>
-      ))}
-    </ul>
+    <section aria-labelledby="problems-h" className="flex flex-col gap-3">
+      <SectionHeader id="problems-h" title="Problems" count={snap.health.length} description="Each one says what is wrong and offers one fix." />
+      <List label="Problems">
+        {snap.health.map((item) => (
+          <ListRow key={item.code}
+            Icon={item.severity === "critical" ? OctagonAlert : item.severity === "error" ? CircleAlert : TriangleAlert} tone={item.severity === "warning" ? "warn" : "bad"}
+            title={item.title} pills={<Pill tone={SEVERITY[item.severity].tone}>{SEVERITY[item.severity].word}</Pill>}
+            detail={item.text}
+            extra={<span className="mt-1 block text-xs text-muted-foreground">{item.cause} Open since {ago(item.since)}.</span>}
+            actions={item.fix ? <Button size="sm" disabled={busy === item.code} onClick={() => { void fix(item); }}>{busy === item.code ? "Working" : item.fix.label}</Button> : undefined} />
+        ))}
+      </List>
+    </section>
   );
 }
 
@@ -134,26 +123,27 @@ export function Engines({ snap, refresh, notify }: { snap: Snapshot; refresh: ()
   const others = mine.filter((e) => !e.installed);
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {installed.map((e) => (
-          <Card key={e.id}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-3 text-base"><IconChip Icon={Cpu} tone={engineKind(e) === "online" ? "ok" : "muted"} />{e.label}</CardTitle>
-              <CardAction><Badge variant="secondary">{engineWord(e)}</Badge></CardAction>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
-              <p>Version {e.currentTag ?? "unknown"}{e.update ? `, ${e.update.newest} is available` : ""}.</p>
-              {e.needsRestart && <p>A newer build is installed. Restart to use it.</p>}
-              {e.roleReason && <p>{e.roleReason}</p>}
-              <div className="flex flex-wrap gap-2">
-                {e.running && <Button size="sm" variant="outline" disabled={busy === e.name} onClick={() => { void restart(e); }}>{busy === e.name ? "Restarting" : "Restart"}</Button>}
-                <Button size="sm" variant="ghost" onClick={() => setFilter(filter === e.name ? null : e.name)}>{filter === e.name ? "Show all log lines" : "Show its log lines"}</Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      {installed.length === 0 && <Card><CardHeader><CardTitle>No engines yet</CardTitle><CardDescription>Turn on a feature and the Stack sets up the engine it needs.</CardDescription></CardHeader></Card>}
+      {installed.length > 0 ? (
+        <section aria-labelledby="eng-set-h" className="flex flex-col gap-3">
+          <SectionHeader id="eng-set-h" title="Installed engines" count={installed.length} description={`${installed.filter((e) => e.running).length} running now.`} />
+          <List label="Engines">
+            {installed.map((e) => (
+              <ListRow key={e.id} Icon={Cpu} tone={engineKind(e) === "online" ? "ok" : "muted"}
+                title={e.label}
+                pills={<>
+                  <Pill tone={engineKind(e) === "online" ? "ok" : "muted"}>{engineWord(e)}</Pill>
+                  {e.update && <Pill tone="primary">Update available</Pill>}
+                  {e.needsRestart && <Pill tone="warn">Restart to use the new build</Pill>}
+                </>}
+                detail={<>Version {e.currentTag ?? "unknown"}{e.update ? `, ${e.update.newest} is available` : ""}.{e.roleReason ? ` ${e.roleReason}` : ""}</>}
+                actions={<>
+                  {e.running && <Button size="sm" variant="outline" disabled={busy === e.name} onClick={() => { void restart(e); }}>{busy === e.name ? "Restarting" : "Restart"}</Button>}
+                  <Button size="sm" variant="ghost" onClick={() => setFilter(filter === e.name ? null : e.name)}>{filter === e.name ? "Show all log lines" : "Show its log lines"}</Button>
+                </>} />
+            ))}
+          </List>
+        </section>
+      ) : <EmptyState Icon={Cpu} tone="muted" title="No engines yet" text="Turn on a feature and the Stack sets up the engine it needs." />}
       {others.length > 0 && <p className="text-sm text-muted-foreground">{others.length} more {others.length === 1 ? "engine is" : "engines are"} ready to download when a feature needs {others.length === 1 ? "it" : "them"}.</p>}
       <Collapsible className="flex flex-col gap-2">
         <CollapsibleTrigger asChild><Button variant="ghost" size="sm" className="group self-start text-muted-foreground"><ChevronDown aria-hidden="true" className="transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none" />{filter ? `Log lines for ${filter}` : "Show recent log lines"}</Button></CollapsibleTrigger>

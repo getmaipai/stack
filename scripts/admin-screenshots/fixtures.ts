@@ -162,7 +162,7 @@ export const helperHistoryDemo = (): Json => ({
     { role: "user", content: "Restart llama-server.", at: iso(4 * MIN) },
     { role: "assistant", content: "I can do that. Chat answers pause for a few seconds while it restarts. Click Approve below to go ahead.", at: iso(4 * MIN) },
   ],
-  pending: [{ id: "demo-approval-1", tool: "restart_engine", args: { name: "llama-server" }, summary: "Restart llama-server (chat answers pause for a few seconds)", at: iso(4 * MIN) }],
+  pending: [{ id: "demo-approval-1", action: "restart_engine", params: { name: "llama-server" }, summary: "Restart llama-server (chat answers pause for a few seconds)", changes: [{ label: "llama-server", from: "Running", to: "Restarted" }], note: null, at: iso(4 * MIN), expires_at: iso(-10 * MIN) }],
 });
 
 // ---- Resources -------------------------------------------------------------

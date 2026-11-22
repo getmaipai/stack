@@ -26,6 +26,10 @@ const SCREENS = [
   { id: "models", hash: "models", wait: 1800 }, { id: "resources", hash: "resources", wait: 2600 }, { id: "engines", hash: "engines", wait: 1400 },
   { id: "health", hash: "health", wait: 1200 }, { id: "settings", hash: "settings", wait: 1500 }, { id: "updates", hash: "updates", wait: 1200 },
   { id: "tools", hash: "tools", wait: 1400 }, { id: "helper", hash: "helper", wait: 1500 },
+  // The Helper slide-over, opened from the top bar on the Overview.
+  { id: "helper-panel", hash: "overview", wait: 1200, open: `document.querySelector('[aria-keyshortcuts="Control+/ Meta+/"]').click()` },
+  // The command palette, opened with its top-bar search box.
+  { id: "palette", hash: "overview", wait: 1200, open: `document.querySelector('button.search-field, header button[aria-label^="Search"]').click()` },
 ].filter((s) => !only || only.includes(s.id));
 const SIZES = [{ id: "desktop", width: 1280, height: 800, cap: 1600, mobile: false }, { id: "phone", width: 375, height: 812, cap: 2600, mobile: true }];
 
@@ -157,6 +161,7 @@ try {
           await cdp("Network.setCookie", { name: "stack_admin", value: token, url: base, httpOnly: true, sameSite: "Strict" });
           await load(`${base}/admin/#/${screen.hash}`);
           await evaluate("location.reload()"); await sleep(screen.wait);
+          if ("open" in screen && screen.open) { await evaluate(screen.open); await sleep(900); }
         }
         const file = join(outDir, `${screen.id}-${size.id}-${theme}.webp`);
         await shoot(file, size);

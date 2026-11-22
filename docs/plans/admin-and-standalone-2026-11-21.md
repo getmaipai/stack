@@ -58,6 +58,10 @@ the Stack page imports those and adds no library of its own. If any Valet
 code is ever copied, MIT notice goes in `NOTICE`. A design-resolver pass
 checks the page against the org UI rule before build.
 
+### Directory-site pass (2026-11-21)
+
+A second reference, a public community script directory for home servers, was reviewed for how it keeps a dense catalog easy to scan. Taken as ideas only, through the kit's tokens: a small uppercase eyebrow over each page and section title; tinted pills with a hairline for status, kind and counts; list rows with an icon chip, a title with pills, one line of detail and the action on the right; hover that tints the row toward the accent; one 2 px focus ring; sidebar categories with a quiet label each (Monitor, Set up, Maintain, Assist); a search box in the top bar that opens a palette of screens, features and actions; empty and loading states shaped like the rows they stand in for; a soft accent wash behind the page in dark mode. Licence: the reference project's public repositories are MIT; nothing was copied (no code, CSS, fonts or assets), so no `NOTICE` entry is needed, and none of its name, logo or wording appears on the page.
+
 ### Design bar (owner, 2026-11-21)
 
 A simplified UniFi app, as Apple would have designed it, with the polish

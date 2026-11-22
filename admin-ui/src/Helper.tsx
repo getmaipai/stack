@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ArrowRight, Check, Download, Send, Sparkles, Trash2, X } from "lucide-react";
 import { Badge } from "@maipai/ui/src/ui/badge";
+import { IconChip, Pill } from "./kit";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@maipai/ui/src/ui/card";
 import { Textarea } from "@maipai/ui/src/ui/textarea";
@@ -58,13 +59,15 @@ export function HelperChat({ compact = false, inputId = HELPER_INPUT_ID }: { com
   return (
     <div className={compact ? "flex h-full min-h-0 flex-col gap-3" : "mx-auto flex max-w-3xl flex-col gap-3"}>
       <div className="flex items-center gap-2 text-sm">
-        <Badge variant="outline">{helperStateWord(s.state, waking)}</Badge>
+        <Pill tone={s.state === "ready" || s.state === "loaded" || s.state === "busy" ? "ok" : "muted"}>{helperStateWord(s.state, waking)}</Pill>
         <span className="min-w-0 flex-1 truncate text-muted-foreground">Asks first. Nothing changes until you confirm.</span>
         <ConfirmButton variant="ghost" label={<><Trash2 aria-hidden="true" />Clear</>} title="Clear the chat?" text="The messages are deleted from the Stack's database and anything waiting for a confirm is dropped." confirm="Clear" onConfirm={h.clear} />
       </div>
       <div className={`flex flex-col gap-3 overflow-y-auto glass p-4 text-card-foreground ${compact ? "min-h-0 flex-1" : "min-h-[40dvh] max-h-[calc(100dvh-22rem)]"}`} role="log" aria-label="Chat with the Helper" aria-live="polite">
         {messages.length === 0 && !busy && (
           <div className="m-auto flex max-w-md flex-col items-center gap-3 text-center">
+            <IconChip Icon={Sparkles} size="lg" />
+            <p className="font-semibold">What would you like to know?</p>
             <p className="text-sm text-muted-foreground">Ask about health, memory, models, tiers or features, or tell me what to change. Type / for shortcuts: /health, /memory, /restart, /new.</p>
             <div className="flex flex-wrap justify-center gap-2">{SUGGESTIONS.map((q) => <Button key={q} variant="outline" size="sm" onClick={() => { void h.send(q); }}>{q}</Button>)}</div>
           </div>

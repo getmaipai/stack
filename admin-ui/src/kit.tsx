@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Area, AreaChart, ResponsiveContainer, YAxis } from "recharts";
 import type { LucideIcon } from "lucide-react";
+import { Skeleton } from "@maipai/ui/src/ui/skeleton";
 
 export type Tone = "primary" | "ok" | "warn" | "bad" | "muted";
 const TONE_VAR: Record<Tone, string> = { primary: "var(--primary)", ok: "var(--status-ok)", warn: "var(--status-warning)", bad: "var(--status-error)", muted: "var(--muted-foreground)" };
@@ -58,6 +59,83 @@ export function StatTile({ Icon, label, value, hint, series, tone = "primary", m
       <p className="text-3xl font-semibold tracking-tight tabular-nums"><Live>{value}</Live></p>
       {series ? <Sparkline data={series} tone={tone} max={max} /> : meter !== undefined ? <Meter value={meter} tone={tone} label={label} /> : null}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+/** A small rounded label tinted by tone: a status, a kind, a count. Color is never the only signal, the words say it too. */
+export function Pill({ tone = "muted", Icon, children, className }: { tone?: Tone; Icon?: LucideIcon; children: ReactNode; className?: string }) {
+  return <span className={`pill${className ? ` ${className}` : ""}`} style={{ "--pill-c": TONE_VAR[tone] } as React.CSSProperties}>{Icon && <Icon aria-hidden="true" className="size-3" />}{children}</span>;
+}
+
+/** Small uppercase label above a title: where you are, or what a group is. */
+export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
+  return <p className={`eyebrow${className ? ` ${className}` : ""}`}>{children}</p>;
+}
+
+/** A section title with an eyebrow, an optional count pill and a line of help. */
+export function SectionHeader({ id, eyebrow, title, count, description, action }: { id?: string; eyebrow?: string; title: string; count?: number | string; description?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+      <div className="flex min-w-0 flex-col gap-1">
+        {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+        <h2 id={id} className="flex items-center gap-2 text-lg font-semibold tracking-tight">{title}{count !== undefined && <Pill>{count}</Pill>}</h2>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/** The frame of a scannable list: one rounded surface, rows divided by hairlines. */
+export function List({ children, label }: { children: ReactNode; label: string }) {
+  return <ul className="glass list" aria-label={label}>{children}</ul>;
+}
+
+/**
+ * One row of a list: an icon chip, a title with pills, one line of detail, and what you can do on the right.
+ * With onClick the whole row is one button (no buttons inside it); with actions it is a plain row.
+ */
+export function ListRow({ Icon, tone = "primary", title, pills, detail, aside, actions, onClick, extra }: {
+  Icon: LucideIcon; tone?: Tone; title: ReactNode; pills?: ReactNode; detail?: ReactNode; aside?: ReactNode; actions?: ReactNode; onClick?: () => void; extra?: ReactNode;
+}) {
+  const body = (
+    <>
+      <IconChip Icon={Icon} tone={tone} />
+      <span className="min-w-0 flex-1 basis-48">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="min-w-0 font-medium leading-snug [overflow-wrap:anywhere]">{title}</span>{pills}</span>
+        {detail && <span className="mt-0.5 block text-sm leading-snug text-muted-foreground">{detail}</span>}
+        {extra}
+      </span>
+      {aside && <span className="list-aside shrink-0 text-end text-sm tabular-nums text-muted-foreground">{aside}</span>}
+      {actions && <span className="list-actions flex shrink-0 flex-wrap items-center gap-2 max-sm:basis-full max-sm:self-start max-sm:ps-[3.25rem]">{actions}</span>}
+    </>
+  );
+  return (
+    <li className="list-item">
+      {onClick ? <button type="button" onClick={onClick} className="list-row list-row-click">{body}</button> : <div className="list-row">{body}</div>}
+    </li>
+  );
+}
+
+/** Nothing here yet: says what it is and what to do, in plain words. */
+export function EmptyState({ Icon, title, text, action, tone = "primary" }: { Icon: LucideIcon; title: string; text: string; action?: ReactNode; tone?: Tone }) {
+  return (
+    <div className="empty flex flex-col items-center gap-3 px-6 py-10 text-center" role="status">
+      <IconChip Icon={Icon} tone={tone} size="lg" />
+      <div className="flex max-w-md flex-col gap-1"><p className="font-semibold">{title}</p><p className="text-sm text-muted-foreground">{text}</p></div>
+      {action}
+    </div>
+  );
+}
+
+/** Loading rows shaped like the rows that will replace them, so nothing jumps. */
+export function ListSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="glass list" aria-busy="true" aria-label="Loading" role="status">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="list-item"><div className="list-row"><Skeleton className="size-10 shrink-0 rounded-xl" /><div className="flex flex-1 flex-col gap-2"><Skeleton className="h-4 w-1/3 rounded-full" /><Skeleton className="h-3 w-2/3 rounded-full" /></div></div></div>
+      ))}
     </div>
   );
 }

@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, Cpu, Gauge, HardDrive, MemoryStick, Zap } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@maipai/ui/src/ui/alert";
-import { Badge } from "@maipai/ui/src/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maipai/ui/src/ui/collapsible";
 import { Skeleton } from "@maipai/ui/src/ui/skeleton";
 import { StatusIndicator } from "@maipai/ui/src/ui/status";
 import { ToggleGroup, ToggleGroupItem } from "@maipai/ui/src/ui/toggle-group";
 import { ApiError, api } from "./api";
 import { bytes } from "./format";
-import { Live, Meter, StatTile } from "./kit";
+import { Live, Meter, Pill, SectionHeader, StatTile } from "./kit";
+import type { Tone } from "./kit";
 import { EngineDetail, EngineTable } from "./ResourceEngines";
 import { LineCard, MemoryStack, Empty, ChartCard } from "./ResourceCharts";
 import { resourceApi } from "./resourceApi";
@@ -96,7 +96,7 @@ export function Resources({ changed }: { changed: unknown }) {
               <p className="text-sm text-muted-foreground">Memory in use right now</p>
               <p className="text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">{cur ? <Live>{`${bytes(used)} of ${bytes(total)}`}</Live> : "No reading yet"}</p>
             </div>
-            <Badge variant="secondary" className="gap-1.5"><StatusIndicator status={pressure.kind} ping={false} />{pressure.word}</Badge>
+            <Pill tone={pressure.kind === "online" ? "ok" : pressure.kind === "degraded" ? "warn" : "bad" as Tone}><StatusIndicator status={pressure.kind} ping={false} />{pressure.word}</Pill>
           </div>
           {cur ? (
             <>
@@ -154,12 +154,10 @@ export function Resources({ changed }: { changed: unknown }) {
       </section>
 
       <section aria-labelledby="hist-h" className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="hist-h" className="text-lg font-semibold">Over time</h2>
+        <SectionHeader id="hist-h" eyebrow="History" title="Over time" action={
           <ToggleGroup type="single" variant="outline" size="sm" value={range} onValueChange={(v) => { if (v) setRange(v as Range); }} aria-label="Time range">
             {RANGES.map((r) => <ToggleGroupItem key={r.id} value={r.id}>{r.label}</ToggleGroupItem>)}
-          </ToggleGroup>
-        </div>
+          </ToggleGroup>} />
         <ChartCard title="Memory by feature" description={perRole ? "What each feature's engine holds, with loads, unloads, restarts and mode switches marked." : "Memory by process. Per-feature figures appear as the Stack keeps sampling."}>
           {stack.rows.length < 2 ? <Empty>Not enough history yet. This chart fills in as the Stack keeps sampling.</Empty> : <MemoryStack rows={stack.rows} keep={stack.keep} labels={stack.labels} range={range} markers={markers} />}
         </ChartCard>
@@ -172,10 +170,7 @@ export function Resources({ changed }: { changed: unknown }) {
       </section>
 
       <section aria-labelledby="eng-h" className="flex flex-col gap-3">
-        <div>
-          <h2 id="eng-h" className="text-lg font-semibold">Engines</h2>
-          <p className="text-sm text-muted-foreground">Every engine the Stack runs, what it holds and why. Tap a row for detail.</p>
-        </div>
+        <SectionHeader id="eng-h" eyebrow="Per feature" title="Engines" count={rows.length} description="Every engine the Stack runs, what it holds and why. Tap a row for detail." />
         <EngineTable rows={rows} total={total} modelName={modelName} />
       </section>
 
