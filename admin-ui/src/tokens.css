@@ -6,3 +6,30 @@
 
 html, body, #root { min-height: 100dvh; }
 body { background: var(--surface-page, var(--background)); color: var(--foreground); font-family: var(--font-sans); }
+
+/* Valet's feel (ideas only, no code copied): quiet fills over the page, one easing curve, short press and move
+ * times, a thin tint on glass. All of it derives from kit tokens. */
+:root {
+  --fill-1: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --fill-2: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --fill-3: color-mix(in oklab, var(--foreground) 14%, transparent);
+  --dur-press: 120ms;
+  --dur-move: 280ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+[data-slot="card"] { transition: box-shadow var(--dur-move) var(--ease-out), background-color var(--dur-move) var(--ease-out); backdrop-filter: blur(14px); }
+.glass { position: relative; border-radius: 1.25rem; background: color-mix(in oklab, var(--card) 82%, transparent); box-shadow: inset 0 0 0 1px var(--fill-2), 0 10px 30px -18px color-mix(in oklab, var(--foreground) 30%, transparent); backdrop-filter: blur(16px); }
+.glass-lift { transition: transform var(--dur-press) var(--ease-out), box-shadow var(--dur-move) var(--ease-out), background-color var(--dur-press) var(--ease-out); }
+@media (hover: hover) { .glass-lift:hover { background: color-mix(in oklab, var(--card) 70%, var(--primary) 6%); box-shadow: inset 0 0 0 1px var(--fill-3), 0 14px 34px -16px color-mix(in oklab, var(--foreground) 36%, transparent); } }
+.glass-lift:active { transform: scale(0.992); }
+/* a thin bar: how far along, or how much; the fill slides */
+.meter { height: 6px; border-radius: 999px; background: var(--fill-2); overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: inherit; background: var(--meter-c, var(--primary)); transition: width 600ms var(--ease-out); }
+/* live: a soft pulse on a number that just changed */
+@keyframes live-flash { from { background: color-mix(in oklab, var(--primary) 28%, transparent); } }
+.live-flash { animation: live-flash 700ms var(--ease-out); border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  .glass-lift, .meter > i { transition: none; }
+  .glass-lift:active { transform: none; }
+  .live-flash { animation: none; }
+}

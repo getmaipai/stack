@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { StatTile } from "./kit";
+import { Cpu, HardDrive, Layers, MemoryStick } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "@maipai/ui/src/ui/alert";
 import { Badge } from "@maipai/ui/src/ui/badge";
@@ -59,7 +61,7 @@ export function Resources({ changed }: { changed: unknown }) {
   }, [kept]);
 
   if (!summary || !history) {
-    if (error) return <Alert variant="destructive" role="alert"><AlertTitle>Could not reach the Stack</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
+    if (error) return <Alert variant="destructive" role="alert"><AlertTitle>The Stack is not answering</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
     return <div className="grid gap-4" aria-busy="true" aria-label="Loading"><Skeleton className="h-40" /><Skeleton className="h-64" /></div>;
   }
 
@@ -71,7 +73,7 @@ export function Resources({ changed }: { changed: unknown }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {error && <Alert variant="destructive" role="alert"><AlertTitle>Could not reach the Stack</AlertTitle><AlertDescription>{error} Showing the last numbers it gave.</AlertDescription></Alert>}
+      {error && <Alert variant="destructive" role="alert"><AlertTitle>The Stack is not answering</AlertTitle><AlertDescription>{error} Showing the last numbers it gave.</AlertDescription></Alert>}
 
       <Card>
         <CardHeader>
@@ -102,11 +104,11 @@ export function Resources({ changed }: { changed: unknown }) {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <Stat label="CPU" value={cur?.cpu == null ? "No reading" : `${Math.round(cur.cpu)}%`} hint={summary.last_hour.cpu_peak == null ? "Needs a second sample." : `Peak ${Math.round(summary.last_hour.cpu_peak)}% in the last hour.`} />
-        <Stat label="Swap" value={cur ? bytes(cur.swap) : "No reading"} hint="Memory pushed to disk. Lower is better." />
-        <Stat label="Waiting requests" value={cur ? String(cur.queue) : "No reading"} hint={`Most at once in the last hour: ${summary.last_hour.queue_peak}.`} />
-        <Stat label="Models on disk" value={cur?.disk == null ? "No reading" : bytes(cur.disk)} hint="Space used by installed models and engines." />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatTile Icon={Cpu} tone="ok" label="Processor" value={cur?.cpu == null ? "No reading" : `${Math.round(cur.cpu)}%`} series={lines.map((r) => r.cpu ?? 0)} max={100} hint={summary.last_hour.cpu_peak == null ? "Needs a second sample." : `Peak ${Math.round(summary.last_hour.cpu_peak)}% in the last hour.`} />
+        <StatTile Icon={MemoryStick} tone="warn" label="Swap" value={cur ? bytes(cur.swap) : "No reading"} series={lines.map((r) => r.swap)} hint="Memory pushed to disk. Lower is better." />
+        <StatTile Icon={Layers} label="Waiting requests" value={cur ? String(cur.queue) : "No reading"} series={lines.map((r) => r.queue)} hint={`Most at once in the last hour: ${summary.last_hour.queue_peak}.`} />
+        <StatTile Icon={HardDrive} tone="muted" label="Models on disk" value={cur?.disk == null ? "No reading" : bytes(cur.disk)} meter={cur?.disk ? Math.min(1, cur.disk / (200 * 1024 ** 3)) : 0} hint="Space used by installed models and engines." />
       </div>
 
       <div className="flex items-center justify-between gap-3">
@@ -159,15 +161,6 @@ export function Resources({ changed }: { changed: unknown }) {
         )}
       </section>
     </div>
-  );
-}
-
-function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <Card>
-      <CardHeader><CardDescription>{label}</CardDescription><CardTitle className="text-2xl tabular-nums">{value}</CardTitle></CardHeader>
-      <CardContent className="text-sm text-muted-foreground">{hint}</CardContent>
-    </Card>
   );
 }
 

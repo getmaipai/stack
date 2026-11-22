@@ -94,7 +94,7 @@ export function Helper({ notify }: { notify: Notify }) {
         <span className="text-muted-foreground">Asks first. Nothing changes until you click Approve.</span>
         <ConfirmButton variant="ghost" label={<><Trash2 aria-hidden="true" />Clear</>} title="Clear the chat?" text="The messages are deleted from the Stack's database and anything waiting for approval is dropped." confirm="Clear" onConfirm={clear} />
       </div>
-      <div className="flex min-h-[40dvh] max-h-[calc(100dvh-22rem)] flex-col gap-3 overflow-y-auto rounded-xl border bg-card p-3 text-card-foreground" role="log" aria-label="Chat with the Helper" aria-live="polite">
+      <div className="flex min-h-[40dvh] max-h-[calc(100dvh-22rem)] flex-col gap-3 overflow-y-auto glass p-4 text-card-foreground" role="log" aria-label="Chat with the Helper" aria-live="polite">
         {messages.length === 0 && !busy && (
           <div className="m-auto flex max-w-md flex-col items-center gap-3 text-center">
             <p className="text-sm text-muted-foreground">Ask about health, memory, features, updates or settings. Type / for shortcuts: /health, /memory, /restart, /new.</p>

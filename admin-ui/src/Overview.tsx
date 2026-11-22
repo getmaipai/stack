@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, Cpu, HardDrive, MemoryStick, Activity } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@maipai/ui/src/ui/alert";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maipai/ui/src/ui/collapsible";
@@ -12,6 +12,10 @@ import type { Role } from "./api";
 import type { Snapshot } from "./live";
 import { ago, bytes, uptime } from "./format";
 import { roleGroup, roleLine } from "./roleWords";
+import { IconChip, Meter, StatTile } from "./kit";
+import type { Tone } from "./kit";
+import { roleIcon } from "./roleIcons";
+import { useRecent } from "./useHistory";
 import type { RoleGroup } from "./roleWords";
 
 /** The tint behind the big status card, from the status tokens only. */
@@ -39,17 +43,27 @@ export function OverviewSkeleton() {
   );
 }
 
-function RoleTile({ role, onOpen }: { role: Role; onOpen: () => void }) {
+function RoleTile({ role, budget, onOpen }: { role: Role; budget: number; onOpen: () => void }) {
   const g = roleGroup(role);
   const kind = groupKind(g, role);
+  const tone: Tone = g === "broken" ? "bad" : g === "off" ? "muted" : kind === "online" ? "ok" : "primary";
+  const foot = role.model?.measuredFootprintBytes ?? 0;
   return (
-    <button type="button" onClick={onOpen} className="group flex min-h-16 items-center gap-3 rounded-xl border bg-card p-4 text-start transition-[transform,box-shadow,background-color] duration-200 hover:bg-accent/40 hover:shadow-sm active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-      <StatusIndicator status={kind} ping={kind === "online"} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-semibold">{role.label}</span>
-        <span className="block truncate text-sm text-muted-foreground">{roleLine(role)}</span>
+    <button type="button" onClick={onOpen} className="glass glass-lift group flex min-h-24 flex-col gap-3 p-4 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+      <span className="flex items-center gap-3">
+        <IconChip Icon={roleIcon(role.id)} tone={tone} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">{role.label}</span>
+          <span className="block truncate text-sm text-muted-foreground">{roleLine(role)}</span>
+        </span>
+        <StatusIndicator status={kind} ping={kind === "online"} />
       </span>
-      <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" />
+      {foot > 0 && budget > 0 && (
+        <span className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex-1"><Meter value={foot / budget} tone={tone} label={`${role.label} memory`} /></span>
+          <span className="tabular-nums">{bytes(foot)}</span>
+        </span>
+      )}
     </button>
   );
 }
@@ -100,6 +114,7 @@ export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) =>
   const [open, setOpen] = useState<Role | null>(null);
   const [showOff, setShowOff] = useState(false);
   const { status, roles, healthz } = snap;
+  const recent = useRecent();
   if (!snap.loaded) return <OverviewSkeleton />;
   if (!status || !roles) {
     return <Alert variant="destructive" role="alert"><AlertTitle>The Stack is not answering</AlertTitle><AlertDescription>{snap.error ?? "No answer yet."} This page keeps trying by itself.</AlertDescription></Alert>;
@@ -113,7 +128,7 @@ export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) =>
   return (
     <div className="flex flex-col gap-8">
       {snap.error && <Alert variant="destructive" role="alert"><AlertTitle>The last refresh failed</AlertTitle><AlertDescription>{snap.error} The numbers below may be a little old.</AlertDescription></Alert>}
-      <section aria-label="Status" className={`flex flex-col gap-5 rounded-2xl border bg-gradient-to-br ${HERO_TINT[kind]} to-card p-5 sm:flex-row sm:items-center sm:justify-between sm:p-8`}>
+      <section aria-label="Status" className={`flex flex-col gap-5 rounded-3xl bg-gradient-to-br ${HERO_TINT[kind]} to-card shadow-[inset_0_0_0_1px_var(--fill-2)] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-8`}>
         <div className="flex flex-col gap-2">
           <p className="flex items-center gap-3 text-2xl font-semibold tracking-tight sm:text-4xl">
             <StatusIndicator status={kind} ping={kind === "online"} />{HEALTH_HEADLINE[status.health]}
@@ -136,10 +151,17 @@ export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) =>
         </div>
       </section>
 
+      <section aria-label="Live" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatTile Icon={MemoryStick} label="Memory" value={`${Math.round(ratio * 100)}%`} series={recent.history?.points.map((p) => (p.total > 0 ? (p.used / p.total) * 100 : 0))} max={100} hint={`${bytes(used)} in use`} />
+        <StatTile Icon={Cpu} label="Processor" tone="ok" value={recent.summary?.current?.cpu == null ? "..." : `${Math.round(recent.summary.current.cpu)}%`} series={recent.history?.points.map((p) => p.cpu ?? 0)} max={100} hint="Busy right now" />
+        <StatTile Icon={Activity} label="Requests" tone="warn" value={String(status.busy.running + status.busy.waiting)} series={recent.history?.points.map((p) => p.queue)} hint={`${status.busy.running} running, ${status.busy.waiting} waiting`} />
+        <StatTile Icon={HardDrive} label="Models on disk" tone="muted" value={recent.summary?.current?.disk == null ? "..." : bytes(recent.summary.current.disk)} meter={recent.summary?.current?.disk ? Math.min(1, recent.summary.current.disk / (200 * 1024 ** 3)) : 0} hint="Models and engines" />
+      </section>
+
       <section aria-labelledby="feat-h" className="flex flex-col gap-3">
         <h2 id="feat-h" className="text-sm font-medium text-muted-foreground">What is running</h2>
         {active.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{active.map((r) => <RoleTile key={r.id} role={r} onOpen={() => setOpen(r)} />)}</div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{active.map((r) => <RoleTile key={r.id} role={r} budget={status.memory.budget_bytes} onOpen={() => setOpen(r)} />)}</div>
         ) : (
           <div className="rounded-xl border border-dashed p-6 text-center">
             <p className="font-medium">Nothing is running yet</p>
@@ -153,7 +175,7 @@ export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) =>
               <Button variant="ghost" size="sm" className="self-start text-muted-foreground"><ChevronDown aria-hidden="true" className={`transition-transform motion-reduce:transition-none ${showOff ? "rotate-180" : ""}`} />{grouped.off.length} more {grouped.off.length === 1 ? "feature is" : "features are"} off or not set up</Button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{grouped.off.map((r) => <RoleTile key={r.id} role={r} onOpen={() => setOpen(r)} />)}</div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{grouped.off.map((r) => <RoleTile key={r.id} role={r} budget={status.memory.budget_bytes} onOpen={() => setOpen(r)} />)}</div>
             </CollapsibleContent>
           </Collapsible>
         )}

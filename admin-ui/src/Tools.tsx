@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { IconChip } from "./kit";
+import { Stethoscope, FileDown, RotateCw, Power } from "lucide-react";
 import { Download } from "lucide-react";
 import { Badge } from "@maipai/ui/src/ui/badge";
 import { Button } from "@maipai/ui/src/ui/button";
@@ -38,7 +40,7 @@ export function Tools({ roleLabels, notify }: { roleLabels: Record<string, strin
     <div className="grid gap-4 lg:grid-cols-2">
       <Card className="lg:col-span-2">
         <CardHeader>
-          <CardTitle className="text-base">Readiness check</CardTitle>
+          <CardTitle className="flex items-center gap-3 text-base"><IconChip Icon={Stethoscope} tone="primary" size="sm" />Readiness check</CardTitle>
           <CardDescription>Sends one small real request through each feature and checks that they fit in memory together. It can take a minute and may load models.</CardDescription>
           <CardAction><ConfirmButton variant="default" disabled={running} label={running ? "Checking" : "Run the check"} title="Run the readiness check?" confirm="Run" text="Each turned-on feature gets one small request. Models that are not loaded will load, which uses memory and takes a moment." onConfirm={readiness} /></CardAction>
         </CardHeader>
@@ -66,15 +68,15 @@ export function Tools({ roleLabels, notify }: { roleLabels: Record<string, strin
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle className="text-base">Diagnostics</CardTitle><CardDescription>A zip with the log tail, health, hardware, settings and versions, with secrets removed. Nothing is sent anywhere.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-3 text-base"><IconChip Icon={FileDown} tone="muted" size="sm" />Diagnostics</CardTitle><CardDescription>A zip with the log tail, health, hardware, settings and versions, with secrets removed. Nothing is sent anywhere.</CardDescription></CardHeader>
         <CardContent><Button asChild variant="outline"><a href="/stack/v1/diagnostics" download="maipai-stack-diagnostics.zip"><Download aria-hidden="true" />Download diagnostics</a></Button></CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle className="text-base">Restart the Stack</CardTitle><CardDescription>Stops the engines, restarts the service and starts them again when asked. Requests in flight are finished first.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-3 text-base"><IconChip Icon={RotateCw} tone="warn" size="sm" />Restart the Stack</CardTitle><CardDescription>Stops the engines, restarts the service and starts them again when asked. Requests in flight are finished first.</CardDescription></CardHeader>
         <CardContent><ConfirmButton label="Restart the Stack" title="Restart the Stack?" confirm="Restart" text="Engines stop and start again. Anything using the Stack waits a few seconds. This page reconnects by itself." onConfirm={restart} /></CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle className="text-base">Restart the computer</CardTitle><CardDescription>{canReboot ? "Restarts the whole computer." : "Switched off. Turn on \"Allow restarting the computer from the admin page\" in Settings, advanced, to use this."}</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-3 text-base"><IconChip Icon={Power} tone="bad" size="sm" />Restart the computer</CardTitle><CardDescription>{canReboot ? "Restarts the whole computer." : "Switched off. Turn on \"Allow restarting the computer from the admin page\" in Settings, advanced, to use this."}</CardDescription></CardHeader>
         <CardContent><ConfirmButton destructive variant="destructive" disabled={!canReboot} label="Restart the computer" title="Restart the whole computer?" confirm="Restart now" text="Everything on this computer closes and starts again, including anything else running on it. The Stack comes back by itself when the computer is up." onConfirm={reboot} /></CardContent>
       </Card>
     </div>

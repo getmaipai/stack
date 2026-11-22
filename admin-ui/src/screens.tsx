@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { IconChip } from "./kit";
+import { Cpu, OctagonAlert, TriangleAlert, CircleAlert, PartyPopper } from "lucide-react";
 import { Badge } from "@maipai/ui/src/ui/badge";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@maipai/ui/src/ui/card";
 import { Skeleton } from "@maipai/ui/src/ui/skeleton";
-import { StatusIndicator } from "@maipai/ui/src/ui/status";
 import type { StatusKind } from "@maipai/ui/src/ui/status";
 import { ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maipai/ui/src/ui/collapsible";
@@ -62,7 +63,7 @@ export function Health({ snap, refresh, notify }: { snap: Snapshot; refresh: () 
     }
   }
   if (snap.health.length === 0) {
-    return <Card><CardHeader><CardTitle className="flex items-center gap-2"><StatusIndicator status="online" ping={false} />All clear</CardTitle><CardDescription>Nothing needs you right now. This updates by itself.</CardDescription></CardHeader></Card>;
+    return <Card><CardHeader><CardTitle className="flex items-center gap-3"><IconChip Icon={PartyPopper} tone="ok" />All clear</CardTitle><CardDescription>Nothing needs you right now. This updates by itself.</CardDescription></CardHeader></Card>;
   }
   return (
     <ul className="flex flex-col gap-3" aria-label="Problems">
@@ -70,8 +71,8 @@ export function Health({ snap, refresh, notify }: { snap: Snapshot; refresh: () 
         <li key={item.code}>
           <Card>
             <CardHeader className="max-sm:flex max-sm:flex-col max-sm:items-start max-sm:gap-2">
-              <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                <Badge variant={SEVERITY[item.severity].variant}>{SEVERITY[item.severity].word}</Badge>{item.title}
+              <CardTitle className="flex flex-wrap items-center gap-3 text-base">
+                <IconChip Icon={item.severity === "critical" ? OctagonAlert : item.severity === "error" ? CircleAlert : TriangleAlert} tone={item.severity === "warning" ? "warn" : "bad"} />{item.title}<Badge variant={SEVERITY[item.severity].variant}>{SEVERITY[item.severity].word}</Badge>
               </CardTitle>
               <CardDescription>{item.text}</CardDescription>
               {item.fix && (
@@ -137,7 +138,7 @@ export function Engines({ snap, refresh, notify }: { snap: Snapshot; refresh: ()
         {installed.map((e) => (
           <Card key={e.id}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base"><StatusIndicator status={engineKind(e)} ping={engineKind(e) === "online"} />{e.label}</CardTitle>
+              <CardTitle className="flex items-center gap-3 text-base"><IconChip Icon={Cpu} tone={engineKind(e) === "online" ? "ok" : "muted"} />{e.label}</CardTitle>
               <CardAction><Badge variant="secondary">{engineWord(e)}</Badge></CardAction>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">

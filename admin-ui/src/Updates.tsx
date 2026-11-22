@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { IconChip } from "./kit";
+import { CircleArrowUp, CircleCheck } from "lucide-react";
 import { Badge } from "@maipai/ui/src/ui/badge";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@maipai/ui/src/ui/card";
@@ -66,7 +68,7 @@ export function Updates({ refresh, notify }: { refresh: () => void; notify: Noti
             <li key={e.name}>
               <Card className="h-full">
                 <CardHeader>
-                  <CardTitle className="text-base">{e.name}</CardTitle>
+                  <CardTitle className="flex items-center gap-3 text-base"><IconChip Icon={newer ? CircleArrowUp : CircleCheck} tone={newer ? "warn" : "ok"} />{e.name}</CardTitle>
                   <CardDescription>{e.installed ? `Installed ${e.installed}` : "Not installed"}{e.availableKnown ? `, newest ${e.available}` : ", newest not known yet"}</CardDescription>
                   <CardAction><Badge variant={newer ? "default" : "secondary"}>{newer ? "Update available" : "Up to date"}</Badge></CardAction>
                 </CardHeader>
