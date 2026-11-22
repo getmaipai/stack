@@ -27430,30 +27430,75 @@
                         "type": "object",
                         "properties": {
                           "id": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "The proposal id; Confirm and Cancel name it."
                           },
-                          "tool": {
-                            "type": "string"
+                          "action": {
+                            "type": "string",
+                            "description": "One of the allow-listed action types."
                           },
-                          "args": {
+                          "params": {
                             "type": "object",
                             "additionalProperties": {
-                              "nullable": true
-                            }
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            },
+                            "description": "The exact parameters that will run. Confirm must send these back unchanged."
                           },
                           "summary": {
                             "type": "string"
                           },
+                          "changes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "label": {
+                                  "type": "string"
+                                },
+                                "from": {
+                                  "type": "string"
+                                },
+                                "to": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "label",
+                                "from",
+                                "to"
+                              ]
+                            }
+                          },
+                          "note": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "at": {
+                            "type": "string"
+                          },
+                          "expires_at": {
                             "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "tool",
-                          "args",
+                          "action",
+                          "params",
                           "summary",
-                          "at"
+                          "changes",
+                          "note",
+                          "at",
+                          "expires_at"
                         ]
                       }
                     }
@@ -27548,7 +27593,7 @@
           "Helper"
         ],
         "summary": "Send the Helper a message",
-        "description": "Loads the Helper's model if it is asleep (a few seconds), lets it call read tools, and returns its answer. Any change it wants comes back in `pending`; nothing changes until `POST /stack/v1/helper/approvals/{id}/approve`. Messages are at most 2000 characters. 409 `not_installed` when the model is not on disk, 503 `helper_unavailable` when it cannot start (not enough memory, engine missing).",
+        "description": "Loads the Helper's model if it is asleep (a few seconds), lets it call read tools, and returns its answer. Any change it wants comes back in `pending` as a proposal card (action, exact parameters, a plain sentence and the current and new values); nothing changes until `POST /stack/v1/helper/actions/{id}/confirm` carries those same parameters back. Messages are at most 2000 characters. 409 `not_installed` when the model is not on disk, 503 `helper_unavailable` when it cannot start (not enough memory, engine missing).",
         "requestBody": {
           "required": true,
           "content": {
@@ -27586,30 +27631,75 @@
                         "type": "object",
                         "properties": {
                           "id": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "The proposal id; Confirm and Cancel name it."
                           },
-                          "tool": {
-                            "type": "string"
+                          "action": {
+                            "type": "string",
+                            "description": "One of the allow-listed action types."
                           },
-                          "args": {
+                          "params": {
                             "type": "object",
                             "additionalProperties": {
-                              "nullable": true
-                            }
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            },
+                            "description": "The exact parameters that will run. Confirm must send these back unchanged."
                           },
                           "summary": {
                             "type": "string"
                           },
+                          "changes": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "label": {
+                                  "type": "string"
+                                },
+                                "from": {
+                                  "type": "string"
+                                },
+                                "to": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "label",
+                                "from",
+                                "to"
+                              ]
+                            }
+                          },
+                          "note": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "at": {
+                            "type": "string"
+                          },
+                          "expires_at": {
                             "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "tool",
-                          "args",
+                          "action",
+                          "params",
                           "summary",
-                          "at"
+                          "changes",
+                          "note",
+                          "at",
+                          "expires_at"
                         ]
                       }
                     },
@@ -27619,6 +27709,31 @@
                         "type": "string"
                       }
                     },
+                    "calls": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "args": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "nullable": true
+                            }
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "args"
+                        ]
+                      }
+                    },
+                    "dropped": {
+                      "type": "integer",
+                      "description": "Sentences removed because a number or model name was not in what the tools returned."
+                    },
                     "wake_ms": {
                       "type": "integer"
                     }
@@ -27627,6 +27742,8 @@
                     "reply",
                     "pending",
                     "tools",
+                    "calls",
+                    "dropped",
                     "wake_ms"
                   ]
                 }
@@ -27702,13 +27819,13 @@
         }
       }
     },
-    "/stack/v1/helper/approvals/{id}/approve": {
+    "/stack/v1/helper/actions/{id}/confirm": {
       "post": {
         "tags": [
           "Helper"
         ],
-        "summary": "Approve one change the Helper asked for",
-        "description": "Runs the change through the same route the page uses and logs it as `admin.action.helper.approved` (by Helper, approved by admin). A request waits at most 10 minutes.",
+        "summary": "Confirm one proposed change",
+        "description": "Runs the proposal through the same routes the page uses and logs it as `admin.action.helper.approved`. The body must carry the proposal's `action` and `params` exactly as the card showed them. The Stack checks that the id was proposed in this chat, is still waiting, has not expired (10 minutes) and was not edited, and runs the stored parameters, never the posted ones. 404 `not_found`: never proposed here. 409 `used`: already confirmed or cancelled. 409 `edited`: the parameters differ, nothing ran and the proposal is burned. 410 `expired`. 502 `change_failed`: tried and refused.",
         "parameters": [
           {
             "schema": {
@@ -27719,6 +27836,31 @@
             "in": "path"
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string"
+                  },
+                  "params": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  }
+                },
+                "required": [
+                  "action",
+                  "params"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Done.",
@@ -27772,7 +27914,51 @@
             }
           },
           "404": {
-            "description": "That request is no longer waiting.",
+            "description": "The Helper never proposed that change here.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already used, or the parameters were edited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The proposal expired.",
             "content": {
               "application/json": {
                 "schema": {
@@ -27818,12 +28004,12 @@
         }
       }
     },
-    "/stack/v1/helper/approvals/{id}/deny": {
+    "/stack/v1/helper/actions/{id}/cancel": {
       "post": {
         "tags": [
           "Helper"
         ],
-        "summary": "Turn down one change the Helper asked for",
+        "summary": "Cancel one proposed change",
         "parameters": [
           {
             "schema": {
@@ -27879,7 +28065,7 @@
             }
           },
           "404": {
-            "description": "That request is no longer waiting.",
+            "description": "That proposal is no longer waiting.",
             "content": {
               "application/json": {
                 "schema": {

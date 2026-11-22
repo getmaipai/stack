@@ -89,10 +89,10 @@ Every setting the Stack declares, grouped, with a plain sentence under each. Cha
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../images/admin/helper-desktop-dark.webp">
-  <img src="../images/admin/helper-desktop-light.webp" alt="Helper chat with a question, an answer and a change waiting for Approve or Deny." width="720">
+  <img src="../images/admin/helper-desktop-light.webp" alt="Helper chat with a question, an answer and a change waiting for your click." width="720">
 </picture>
 
-A chat box for questions about this computer. See [Ask the Helper a question](helper.md).
+A chat box for questions about this computer, also open from the sparkle button at the top right of any screen. See [Ask the Helper a question](helper.md).
 
 ## Tools
 

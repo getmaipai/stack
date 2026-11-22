@@ -18,6 +18,9 @@ import { SettingsScreen } from "./SettingsScreen";
 import { Updates } from "./Updates";
 import { Tools } from "./Tools";
 import { Helper } from "./Helper";
+import { HelperProvider } from "./helperChat";
+import { HelperPanel } from "./HelperPanel";
+import { HELPER_SHORTCUT } from "./helperText";
 import { Engines, Health, healthKind, healthWord } from "./screens";
 import { Overview } from "./Overview";
 
@@ -59,6 +62,8 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
   const [screen, setScreen] = useState<Screen>(screenFromHash);
   const [palette, setPalette] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [helperOpen, setHelperOpen] = useState(false);
+  const isMac = typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
   useEffect(() => {
     const onHash = () => setScreen(screenFromHash());
     window.addEventListener("hashchange", onHash);
@@ -74,6 +79,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
 
   const screens: PaletteItem[] = useMemo(() => NAV.map((n) => ({ id: n.id, label: n.label, run: () => go(n.id) })), [go]);
   const actions: PaletteItem[] = useMemo(() => [
+    { id: "helper", label: "Ask the Helper", run: () => setHelperOpen(true) },
     { id: "refresh", label: "Refresh now", run: refresh },
     { id: "theme", label: dark ? "Switch to light" : "Switch to dark", run: toggle },
     { id: "restart", label: "Restart the Stack", run: () => { void restartStack(); } },
@@ -91,6 +97,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
     </Button>
   );
   return (
+    <HelperProvider notify={notify} refresh={refresh}>
     <div className="flex min-h-dvh flex-col md:flex-row">
       <nav aria-label="Main" className="hidden w-60 shrink-0 flex-col gap-1 overflow-y-auto border-e bg-sidebar p-4 text-sidebar-foreground md:sticky md:top-0 md:flex md:h-dvh md:self-start">
         <p className="px-3 pb-4 pt-2 text-lg font-semibold tracking-tight">MaiPai Stack</p>
@@ -107,6 +114,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
             <StatusIndicator status={snap.live ? "online" : "maintenance"} ping={false} />{snap.live ? "Live" : "Reconnecting"}
           </Status>
           <Button variant="ghost" size="sm" onClick={() => setPalette(true)} aria-label="Search and jump to a screen"><Search aria-hidden="true" /><kbd className="hidden text-xs text-muted-foreground sm:inline">⌘K</kbd></Button>
+          <Button variant="ghost" size="sm" onClick={() => setHelperOpen(true)} aria-label={`Ask the Helper (${isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other})`} aria-keyshortcuts="Control+/ Meta+/" title={`Ask the Helper (${isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other})`}><Sparkles aria-hidden="true" /><kbd className="hidden text-xs text-muted-foreground sm:inline">{isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other}</kbd></Button>
           <Button variant="ghost" size="icon-sm" onClick={refresh} aria-label="Refresh"><RotateCw aria-hidden="true" /></Button>
           <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={dark ? "Switch to light" : "Switch to dark"}>{dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}</Button>
           <Button variant="ghost" size="icon-sm" onClick={() => { void signOut(); }} aria-label="Sign out"><LogOut aria-hidden="true" /></Button>
@@ -125,7 +133,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
             {screen === "models" && <Models snap={snap} refresh={refresh} notify={notify} />}
             {screen === "updates" && <Updates refresh={refresh} notify={notify} />}
             {screen === "settings" && <SettingsScreen refresh={refresh} notify={notify} />}
-            {screen === "helper" && <Helper notify={notify} />}
+            {screen === "helper" && <Helper />}
             {screen === "tools" && <Tools roleLabels={roleLabels} notify={notify} />}
           </div>
         </main>
@@ -151,7 +159,9 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
         </SheetContent>
       </Sheet>
       <Palette open={palette} onOpenChange={setPalette} screens={screens} actions={actions} />
+      <HelperPanel open={helperOpen} onOpenChange={setHelperOpen} />
       <Toaster />
     </div>
+    </HelperProvider>
   );
 }

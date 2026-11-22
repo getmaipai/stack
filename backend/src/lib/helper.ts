@@ -1,28 +1,27 @@
-// The Helper (HELPER-01): the admin page's chat assistant. It runs on its
-// own role and its own small model, so it still answers when `chat` is down.
-// Read tools run at once; every write is parked as a pending approval and
-// runs only when the signed-in admin approves it in the page. Tools call the
-// same /stack/v1 routes the page uses, in process. History lives in the
-// Stack's `meta` table (one row) and has a clear button.
+// The Helper (HELPER-01): the admin page's chat assistant. It runs on its own role and its own small
+// model, so it still answers when `chat` is down. Read tools run at once and return plain sentences. A
+// change is only ever PROPOSED: the server keeps the proposal by id and runs it when the admin confirms
+// that exact card (helperActions.ts). History lives in the Stack's `meta` table (one row) with a clear button.
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { logger } from "@/lib/log";
-import { HELPER_SYSTEM_PROMPT, helperTool, helperToolSpecs, type HelperTool } from "@/lib/helperTools";
+import { HELPER_SYSTEM_PROMPT, helperTool, helperToolSpecs, type RouteCall, type ToolOutcome } from "@/lib/helperTools";
+import { buildProposal, PROPOSAL_TTL_MS, runProposal, sameParams, type Proposal } from "@/lib/helperActions";
+import { interpretationHint, roleLabel, topicFromCalls, type Topic } from "@/lib/helperKnowledge";
+import { interpret } from "@/lib/helperInterpret";
+import { explainTerm, readEngineUse, readHardware, readHealth, readLogs, readMemory, readModels, readRoles, readSettings, readUpdates } from "@/lib/helperReads";
 import { STACK_HELPER_MODEL_ID } from "@/lib/modelCatalog";
 import { getModel } from "@/lib/modelStore";
-import { ROLE_IDS } from "@/roles";
-import { SETTINGS, settingValues } from "@/settings";
 
-export type ChatMessage = { role: "user" | "assistant"; content: string; at: string; tools?: string[] };
-export interface Pending { id: string; tool: string; args: Record<string, unknown>; summary: string; at: string; }
-export interface ToolOutcome { ok: boolean; text: string; }
+export type { RouteCall, ToolOutcome };
+export type HelperCall = { name: string; args: Record<string, unknown> };
+export type ChatMessage = { role: "user" | "assistant"; content: string; at: string; tools?: string[]; calls?: HelperCall[]; topic?: Topic };
+export type Pending = Proposal;
 
 const HISTORY_KEY = "helper.history";
 const HISTORY_MAX = 40;
-const PENDING_TTL_MS = 10 * 60_000;
 const MAX_ROUNDS = 4;
-const RESULT_CHARS = 2800;
 const MESSAGE_MAX = 2000;
 export const HELPER_MESSAGE_MAX = MESSAGE_MAX;
 
@@ -43,7 +42,6 @@ export function setHelperModelForTests(next: ModelCall | null): void { model = n
 export function helperModelInstalled(): boolean { return model !== realModel || !!getModel(STACK_HELPER_MODEL_ID)?.modelPath; }
 
 // --- tool door (a test replaces it) ------------------------------------
-export type RouteCall = (method: string, path: string, body?: unknown) => Promise<{ status: number; json: unknown }>;
 const realRoute: RouteCall = async (method, path, body) => {
   const { app } = await import("@/app");
   const response = await app.request(path, { method, headers: { "content-type": "application/json", host: "127.0.0.1" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -55,134 +53,69 @@ const realRoute: RouteCall = async (method, path, body) => {
 let route: RouteCall = realRoute;
 export function setHelperRouteForTests(next: RouteCall | null): void { route = next ?? realRoute; }
 
-const clip = (text: string) => (text.length > RESULT_CHARS ? `${text.slice(0, RESULT_CHARS)}\n[cut: ${text.length - RESULT_CHARS} more characters]` : text);
-
-function slimRoles(json: unknown): unknown {
-  const roles = (json as { roles?: Array<Record<string, any>> })?.roles;
-  if (!Array.isArray(roles)) return json;
-  return roles.map((r) => ({ id: r.id, on: r.enabled, priority: r.priority, state: r.state?.state, reason: r.reason ?? r.state?.reason ?? undefined, model: r.model?.id ?? null }));
+/** Runs one read tool. Returns text the model reads; a failure says what could not be read, in plain words. */
+export async function runRead(name: string, args: Record<string, unknown>): Promise<ToolOutcome> {
+  switch (name) {
+    case "get_health": return readHealth(route);
+    case "get_roles": return readRoles(route, args);
+    case "get_models": return readModels(route, args);
+    case "get_memory": return readMemory(route);
+    case "get_engine_use": return readEngineUse(route, args);
+    case "get_hardware": return readHardware(route);
+    case "get_updates": return readUpdates(route);
+    case "get_settings": return readSettings(String(args.prefix ?? "stack."));
+    case "get_logs": return readLogs(route, Number(args.tail) || 50);
+    case "explain": return explainTerm(String(args.term ?? ""));
+    default: return { ok: false, text: `There is no tool called ${name}.` };
+  }
 }
 
-const SECRET_SETTING = /token|secret|password|key$|_key|cookie/i;
-function settingsText(prefix: string): string {
-  const values = settingValues();
-  const lines = SETTINGS.filter((s) => s.key.startsWith(prefix) && !SECRET_SETTING.test(s.key)).map((s) => `${s.key}=${String(values[s.key] ?? s.default)}`);
-  if (lines.length > 0) return lines.join("\n");
-  const prefixes = [...new Set(SETTINGS.filter((x) => !SECRET_SETTING.test(x.key)).map((x) => x.key.split(".").slice(0, 3).join(".")))].slice(0, 40);
-  return `No setting starts with "${prefix}". Real prefixes: ${prefixes.join(", ")}.`;
-}
-
-/** The one role's model, from the roles route, never from the model's memory. */
-function roleModelText(json: unknown, role: string): ToolOutcome {
-  const roles = (json as { roles?: Array<Record<string, any>> })?.roles;
-  const r = Array.isArray(roles) ? roles.find((x) => x.id === role) : undefined;
-  if (!r) return { ok: false, text: `There is no role called "${role}". Real roles: ${ROLE_IDS.join(", ")}.` };
-  const on = r.enabled ? "on" : "off";
-  const state = r.state?.state ?? "unknown";
-  const model = r.model?.id ? `the model is ${r.model.id}` : "no model is installed for it";
-  return { ok: true, text: `Role ${role} is ${on}, state ${state}; ${model}.` };
-}
-
-const LEAK = /\b(get_[a-z_]+|set_[a-z_]+|restart_[a-z]+|function|tool)\b|does not exist|The Stack answered \d{3}|No setting starts/i;
-/** Removes what must never reach the admin: a tool's raw error, tool names, a "Looked at" line the model typed itself. */
+// --- the reply: no tool talk, and nothing the tools did not say --------
+const LEAK = /\b(get_[a-z_]+|propose_action|explain tool|function|tool call|tool result)\b|does not exist|The Stack answered \d{3}|No setting starts/i;
+const BYTES = /\b\d{1,3}(,\d{3}){2,}\b|\b\d{9,}\b/;
+/** Removes what must never reach the admin: tool names, a "Looked at" line the model typed, raw error text. */
 export function cleanReply(raw: string, hadFailure: boolean, hadSuccess: boolean): string {
-  let text = raw.replace(/\s*Looked at:[\s\S]*$/i, "").trim();
-  const sentences = text.split(/(?<=[.!?])\s+|\n+/).filter((x) => x.trim() && !LEAK.test(x));
+  let text = raw.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/\s*Looked at:[\s\S]*$/i, "").trim();
+  const sentences = text.split(/(?<=[.!?])\s+|\n+/).filter((x) => x.trim() && !LEAK.test(x) && !BYTES.test(x));
   text = sentences.join(" ").trim();
   if (!text || (hadFailure && !hadSuccess)) return "I could not read that just now. Try again, or look on the Models or Settings screen.";
   return text;
 }
 
-/** The plain sentence the Approve button shows. */
-export function summarizeWrite(tool: string, args: Record<string, unknown>): string {
-  const a = (k: string) => String(args[k] ?? "");
-  switch (tool) {
-    case "set_role_enabled": return `Turn ${a("role")} ${args.enabled === true || args.enabled === "true" ? "on" : "off"}`;
-    case "set_setting": return `Set ${a("key")} to ${a("value")}`;
-    case "restart_engine": return `Restart the ${a("name")} engine`;
-    case "restart_stack": return "Restart the Stack";
-    case "check_updates": return "Check the catalog for newer engine builds";
-    case "apply_update": return `Install the newer ${a("name")} build`;
-    case "rollback_update": return `Go back to ${a("name")} build ${a("tag")}`;
-    default: return tool;
-  }
-}
-
-const ENGINE_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
-const BUILD_TAG = /^[A-Za-z0-9._-]{1,64}$/;
-
-/** Checks a write's arguments before it is offered or run; returns the reason it is refused, or null. */
-export function refuseWrite(tool: string, args: Record<string, unknown>): string | null {
-  switch (tool) {
-    case "set_role_enabled":
-      if (!ROLE_IDS.includes(String(args.role) as never)) return `There is no role called "${String(args.role)}". Use get_roles for the names.`;
-      if (typeof args.enabled !== "boolean" && args.enabled !== "true" && args.enabled !== "false") return "enabled must be true or false.";
-      return null;
-    case "set_setting": {
-      const key = String(args.key ?? "");
-      const declaration = SETTINGS.find((s) => s.key === key);
-      if (!declaration) return `There is no setting called "${key}". Use get_settings for the names.`;
-      if (key.startsWith("stack.admin.") || SECRET_SETTING.test(key)) return "The Helper may not change admin, sign-in or secret settings. Change it by hand on the Settings screen.";
-      return null;
+const numbersIn = (s: string): number[] => [...s.replace(/(\d),(?=\d{3}\b)/g, "$1").matchAll(/\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
+const ID_LIKE = /\b[a-z][a-z0-9]*(?:[-.][a-z0-9]+){2,}\b/gi;
+export interface Grounded { text: string; dropped: number }
+/** Keeps only sentences whose numbers and model ids appear in what the tools returned this turn (or in the question). */
+export function groundReply(reply: string, evidence: string): Grounded {
+  const known = numbersIn(evidence);
+  const flat = evidence.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const sentences = reply.split(/(?<=[.!?])\s+|\n+/).filter((s) => s.trim());
+  const kept: string[] = [];
+  let dropped = 0;
+  for (const s of sentences) {
+    let ok = true;
+    for (const id of s.match(ID_LIKE) ?? []) if (!flat.includes(id.toLowerCase().replace(/[^a-z0-9]+/g, ""))) ok = false;
+    for (const n of numbersIn(s)) {
+      if (n < 10 && Number.isInteger(n)) continue;
+      if (!known.some((k) => Math.abs(k - n) <= Math.max(0.55, k * 0.03))) ok = false;
     }
-    case "restart_engine": case "apply_update": return ENGINE_NAME.test(String(args.name ?? "")) ? null : "Give the engine name from get_roles or get_updates.";
-    case "rollback_update": return ENGINE_NAME.test(String(args.name ?? "")) && BUILD_TAG.test(String(args.tag ?? "")) ? null : "Give the engine name and the build tag to return to.";
-    default: return null;
+    if (ok) kept.push(s); else dropped++;
   }
-}
-
-function coerceSetting(key: string, raw: unknown): unknown {
-  const declaration = SETTINGS.find((s) => s.key === key);
-  if (declaration?.selector === "number") return Number(raw);
-  if (declaration?.selector === "boolean") return raw === true || raw === "true";
-  return String(raw);
-}
-
-/** Runs one tool. Reads are always safe; a write must only be called from `approve`. */
-export async function runTool(tool: HelperTool, args: Record<string, unknown>): Promise<ToolOutcome> {
-  const bad = tool.kind === "write" ? refuseWrite(tool.name, args) : null;
-  if (bad) return { ok: false, text: bad };
-  const done = (r: { status: number; json: unknown }): ToolOutcome => {
-    const text = typeof r.json === "string" ? r.json : JSON.stringify(r.json);
-    return { ok: r.status < 400, text: r.status < 400 ? clip(text) : `The Stack answered ${r.status}: ${clip(text)}` };
-  };
-  const enc = (v: unknown) => encodeURIComponent(String(v));
-  switch (tool.name) {
-    case "get_health": return done(await route("GET", "/stack/v1/health"));
-    case "get_roles": { const r = await route("GET", "/stack/v1/roles"); return done({ ...r, json: slimRoles(r.json) }); }
-    case "get_role_model": { const r = await route("GET", "/stack/v1/roles"); return r.status >= 400 ? done(r) : roleModelText(r.json, String(args.role ?? "")); }
-    case "get_memory": return done(await route("GET", "/stack/v1/memory"));
-    case "get_hardware": return done(await route("GET", "/stack/v1/hardware"));
-    case "get_updates": return done(await route("GET", "/stack/v1/updates"));
-    case "get_settings": return { ok: true, text: clip(settingsText(String(args.prefix ?? "stack."))) };
-    case "get_logs": return done(await route("GET", `/stack/v1/logs?tail=${Math.min(200, Math.max(1, Number(args.tail) || 50))}`));
-    case "set_role_enabled": {
-      const put = await route("PUT", "/stack/v1/settings", { [`stack.roles.${args.role}.enabled`]: args.enabled === true || args.enabled === "true" });
-      if (put.status >= 400) return done(put);
-      const applied = await route("POST", "/stack/v1/settings/apply", {});
-      return applied.status >= 400 ? done(applied) : { ok: true, text: "Saved and applied." };
-    }
-    case "set_setting": {
-      const key = String(args.key);
-      const put = await route("PUT", "/stack/v1/settings", { [key]: coerceSetting(key, args.value) });
-      if (put.status >= 400) return done(put);
-      const applied = await route("POST", "/stack/v1/settings/apply", {});
-      return applied.status >= 400 ? done(applied) : { ok: true, text: "Saved and applied." };
-    }
-    case "restart_engine": return done(await route("POST", `/stack/v1/engines/${enc(args.name)}/restart`));
-    case "restart_stack": return done(await route("POST", "/stack/v1/service/restart"));
-    case "check_updates": return done(await route("POST", "/stack/v1/updates/check", {}));
-    case "apply_update": return done(await route("POST", `/stack/v1/updates/engines/${enc(args.name)}/apply`, {}));
-    case "rollback_update": return done(await route("POST", `/stack/v1/updates/engines/${enc(args.name)}/rollback`, { tag: String(args.tag) }));
-    default: return { ok: false, text: `There is no tool called ${tool.name}.` };
-  }
+  return { text: kept.join(" ").trim(), dropped };
 }
 
 // --- state --------------------------------------------------------------
-const pending = new Map<string, Pending>();
-function sweep(): void { const cut = Date.now() - PENDING_TTL_MS; for (const [id, p] of pending) if (Date.parse(p.at) < cut) pending.delete(id); }
-export function listPending(): Pending[] { sweep(); return [...pending.values()]; }
-export function __resetHelperForTests(): void { pending.clear(); clearHistory(); model = realModel; route = realRoute; }
+type Status = "pending" | "used" | "cancelled" | "rejected";
+const proposals = new Map<string, { p: Proposal; status: Status }>();
+const TOMBSTONES = 200;
+function sweep(): void {
+  if (proposals.size > TOMBSTONES) { for (const [id, v] of proposals) { if (v.status !== "pending") proposals.delete(id); if (proposals.size <= TOMBSTONES / 2) break; } }
+}
+const expired = (p: Proposal) => Date.parse(p.expires_at) <= Date.now();
+export function listPending(): Pending[] { sweep(); return [...proposals.values()].filter((v) => v.status === "pending" && !expired(v.p)).map((v) => v.p); }
+export function __resetHelperForTests(): void { proposals.clear(); clearHistory(); model = realModel; route = realRoute; }
+/** A test moves a proposal's clock; nothing else uses it. */
+export function __expireProposalForTests(id: string): void { const v = proposals.get(id); if (v) v.p = { ...v.p, expires_at: new Date(Date.now() - 1000).toISOString() }; }
 
 export function readHistory(): ChatMessage[] {
   const row = db.select({ value: meta.value }).from(meta).where(eq(meta.key, HISTORY_KEY)).get();
@@ -193,17 +126,18 @@ function writeHistory(messages: ChatMessage[]): void {
   const value = JSON.stringify(messages.slice(-HISTORY_MAX));
   db.insert(meta).values({ key: HISTORY_KEY, value }).onConflictDoUpdate({ target: meta.key, set: { value } }).run();
 }
-export function clearHistory(): void { db.delete(meta).where(eq(meta.key, HISTORY_KEY)).run(); pending.clear(); }
+export function clearHistory(): void { db.delete(meta).where(eq(meta.key, HISTORY_KEY)).run(); proposals.clear(); }
 
 function audit(event: string, extra: Record<string, string>): void {
-  logger.appendLine(JSON.stringify({ event: `admin.action.helper.${event}`, at: new Date().toISOString(), source: "helper", approvedBy: "admin", ...extra }));
+  // "approvedBy" appears only where an admin actually clicked Confirm.
+  logger.appendLine(JSON.stringify({ event: `admin.action.helper.${event}`, at: new Date().toISOString(), source: "helper", ...(event === "approved" ? { approvedBy: "admin" } : {}), ...extra }));
 }
 
-/** The page's own notices (an ask, a Done line) are shown in the chat but not fed back to the model, which would copy their wording into plain answers. */
-const NOTICE = /^(I need your approval before|Done: |Okay, I did not do it|That did not work)/;
+/** The page's own notices are shown in the chat but not fed back to the model, which would copy their wording into plain answers. */
+const NOTICE = /^(I can do that|Here is the change|I need your approval before|Done: |Okay, I did not do it|That did not work)/;
 export function isNotice(message: ChatMessage): boolean { return message.role === "assistant" && NOTICE.test(message.content); }
 
-export interface ChatResult { reply: string; pending: Pending[]; tools: string[]; wakeMs: number; }
+export interface ChatResult { reply: string; pending: Pending[]; tools: string[]; calls: HelperCall[]; wakeMs: number; dropped: number }
 
 function parseArgs(raw: string | Record<string, unknown> | undefined): Record<string, unknown> {
   if (!raw) return {};
@@ -211,86 +145,166 @@ function parseArgs(raw: string | Record<string, unknown> | undefined): Record<st
   try { const parsed = JSON.parse(raw); return parsed && typeof parsed === "object" ? parsed : {}; } catch { return {}; }
 }
 
-/** One admin message in, one answer out. Read tools run inside; writes come back as pending approvals. */
+const lastTopic = (history: ChatMessage[]): Topic | null => { for (let i = history.length - 1; i >= 0; i--) { const m = history[i]!; if (m.role === "assistant" && m.topic) return m.topic; } return null; };
+const describeTopic = (t: Topic | null): string => (t && (t.role || t.tier || t.engine) ? `The question before was about ${[t.role ? `the ${roleLabel(t.role)} feature (${t.role})` : "", t.tier ? `the ${t.tier} tier` : "", t.engine ? `the ${t.engine} engine` : ""].filter(Boolean).join(", ")}.` : "");
+
+/** A small model sometimes types its tool call as text (`explain {"term": "splash"}`) instead of calling it. This reads that back as a call. */
+export function salvageCalls(content: string): Array<{ function: { name: string; arguments: Record<string, unknown> } }> {
+  const text = content.replace(/<\/?tool_call>/g, "").trim();
+  const named = /^([a-z_]+)\s*(\{[\s\S]*\})$/.exec(text);
+  try {
+    if (named && helperTool(named[1]!)) return [{ function: { name: named[1]!, arguments: JSON.parse(named[2]!) } }];
+    const json = text.startsWith("{") ? JSON.parse(text) : null;
+    if (json?.name && helperTool(String(json.name))) return [{ function: { name: String(json.name), arguments: json.arguments ?? json.parameters ?? {} } }];
+  } catch { /* not a call */ }
+  return [];
+}
+
+/** One admin message in, one answer out. The message is read first (helperInterpret.ts); read tools run inside; a change comes back as a proposal card. */
 export async function chat(text: string): Promise<ChatResult> {
   const history = readHistory();
   const now = () => new Date().toISOString();
+  const previous = lastTopic(history);
   history.push({ role: "user", content: text, at: now() });
-  const messages: Array<Record<string, unknown>> = [
-    { role: "system", content: HELPER_SYSTEM_PROMPT },
-    ...history.filter((m) => !isNotice(m)).slice(-12).map((m) => ({ role: m.role, content: m.content })),
-  ];
+  // STACK_HELPER_INTERPRET=off is for the eval only: it measures the model and its tools without the reading step.
+  const plan = process.env.STACK_HELPER_INTERPRET === "off" ? { reads: [] } : interpret(text, previous);
+  const calls: HelperCall[] = [];
   const used: string[] = [];
+  const parked: Proposal[] = [];
+  const evidence: string[] = [text];
+  let wakeMs = 0;
+  let dropped = 0;
+  let reply = "";
+
+  const park = async (action: string, params: Record<string, unknown>): Promise<string | null> => {
+    const outcome = await buildProposal(route, action, params);
+    if (!outcome.ok) return outcome.kind === "ambiguous" ? `${outcome.message} Which one do you mean?` : outcome.message;
+    const at = new Date();
+    const p: Proposal = { id: crypto.randomUUID(), ...outcome.proposal, at: at.toISOString(), expires_at: new Date(at.getTime() + PROPOSAL_TTL_MS).toISOString() };
+    proposals.set(p.id, { p, status: "pending" }); parked.push(p);
+    audit("proposed", { id: p.id, action: p.action, params: JSON.stringify(p.params).slice(0, 300) });
+    return null;
+  };
+  const fixedAsk = () => `Here is the change: ${parked.map((p) => p.summary).join("; ")}. Check the card and click Confirm. Nothing has changed yet.`;
+
+  if (plan.say) reply = plan.say;
+  else if (plan.action) {
+    calls.push({ name: "propose_action", args: { action: plan.action.action, ...plan.action.params } });
+    const refusal = await park(plan.action.action, plan.action.params);
+    reply = refusal ?? fixedAsk();
+  }
+  if (reply) {
+    history.push({ role: "assistant", content: reply, at: now(), calls, topic: topicFromCalls(calls.map((c) => ({ name: c.name, args: c.args })), text) });
+    writeHistory(history);
+    return { reply, pending: parked, tools: used, calls, wakeMs, dropped };
+  }
+
+  const hint = interpretationHint(text, previous);
+  const prefetched = plan.reads.length > 0;
+  const system = [HELPER_SYSTEM_PROMPT, prefetched ? "The facts for this question are already in the tool results below. Answer from them in plain words and do not ask the admin to look anything up." : "", describeTopic(previous), hint].filter(Boolean).join("\n");
+  const messages: Array<Record<string, unknown>> = [
+    { role: "system", content: system },
+    ...history.filter((m) => !isNotice(m)).slice(-8).map((m) => ({ role: m.role, content: m.content })),
+  ];
   let failed = false;
   let succeeded = false;
-  const parked: Pending[] = [];
+  const leads: Array<{ lead: string; must: Array<string | RegExp> }> = [];
+  if (prefetched) {
+    const fetched: Array<{ id: string; name: string; args: Record<string, unknown>; text: string }> = [];
+    for (const [i, r] of plan.reads.entries()) {
+      calls.push({ name: r.name, args: r.args });
+      const outcome = await runRead(r.name, r.args);
+      if (outcome.ok) { used.push(r.name); succeeded = true; evidence.push(outcome.text); if (outcome.lead) leads.push({ lead: outcome.lead, must: outcome.must ?? [] }); fetched.push({ id: `pre_${i}`, name: r.name, args: r.args, text: outcome.text }); }
+      else failed = true;
+    }
+    if (fetched.length > 0) {
+      messages.push({ role: "assistant", content: "", tool_calls: fetched.map((f) => ({ id: f.id, type: "function", function: { name: f.name, arguments: JSON.stringify(f.args) } })) });
+      for (const f of fetched) messages.push({ role: "tool", tool_call_id: f.id, content: f.text });
+    }
+  }
   const started = Date.now();
-  let wakeMs = 0;
-  let reply = "";
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const answer = await model({ model: "helper", temperature: 0, max_tokens: 400, messages, tools: helperToolSpecs() });
     if (round === 0) wakeMs = Date.now() - started;
-    const calls = answer.message.tool_calls ?? [];
-    if (calls.length === 0) { reply = cleanReply((answer.message.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, ""), failed, succeeded); break; }
-    messages.push({ role: "assistant", content: answer.message.content ?? "", tool_calls: calls.map((c, i) => ({ id: c.id ?? `call_${round}_${i}`, type: "function", function: { name: c.function.name, arguments: typeof c.function.arguments === "string" ? c.function.arguments : JSON.stringify(c.function.arguments) } })) });
-    for (const [i, call] of calls.entries()) {
+    let toolCalls = answer.message.tool_calls ?? [];
+    if (toolCalls.length === 0) toolCalls = salvageCalls(answer.message.content ?? "") as never;
+    if (toolCalls.length === 0) {
+      const cleaned = cleanReply(answer.message.content ?? "", failed, succeeded);
+      const grounded = used.length > 0 ? groundReply(cleaned, evidence.join("\n")) : { text: cleaned, dropped: 0 };
+      dropped += grounded.dropped;
+      reply = grounded.text || (used.length > 0 ? "I could not confirm that from the Stack just now. Ask again, or look on the Models or Resources screen." : cleaned);
+      // The one fact that was asked for must be in the answer. If the small model left it out, its wording is not trusted
+      // (it may contradict the fact), so the Stack's own sentence is the answer.
+      const missing = leads.filter((l) => !l.must.every((m) => (typeof m === "string" ? reply.toLowerCase().includes(m.toLowerCase()) : m.test(reply))));
+      if (missing.length > 0) reply = missing.map((l) => l.lead).join(" ");
+      break;
+    }
+    messages.push({ role: "assistant", content: answer.message.content ?? "", tool_calls: toolCalls.map((c, i) => ({ id: c.id ?? `call_${round}_${i}`, type: "function", function: { name: c.function.name, arguments: typeof c.function.arguments === "string" ? c.function.arguments : JSON.stringify(c.function.arguments) } })) });
+    for (const [i, call] of toolCalls.entries()) {
       const id = call.id ?? `call_${round}_${i}`;
       const tool = helperTool(call.function.name);
       const args = parseArgs(call.function.arguments);
       let result: string;
-      if (!tool) { failed = true; result = `There is no tool called ${call.function.name}.`; }
+      if (!tool) { failed = true; result = `There is no tool called ${call.function.name}. Use one from the list.`; }
       else if (tool.kind === "read") {
-        const outcome = await runTool(tool, args);
-        if (outcome.ok) { used.push(tool.name); succeeded = true; result = outcome.text; }
-        else { failed = true; result = `COULD NOT READ (${outcome.text.slice(0, 300)}). Try get_role_model or get_roles once, otherwise tell the admin plainly you could not read it. Do not repeat this text.`; }
-      }
-      else {
-        const refusal = refuseWrite(tool.name, args);
-        if (refusal) result = refusal;
-        else {
-          const p: Pending = { id: crypto.randomUUID(), tool: tool.name, args, summary: summarizeWrite(tool.name, args), at: now() };
-          pending.set(p.id, p); parked.push(p);
-          result = "Waiting for the administrator to click Approve. Nothing has changed yet.";
-        }
+        calls.push({ name: tool.name, args });
+        const outcome = await runRead(tool.name, args);
+        if (outcome.ok) { used.push(tool.name); succeeded = true; result = outcome.text; evidence.push(outcome.text); }
+        else { failed = true; result = `COULD NOT READ: ${outcome.text.slice(0, 300)} Try another tool once, otherwise say plainly that you could not read it.`; }
+      } else {
+        const { action, ...rest } = args;
+        calls.push({ name: tool.name, args });
+        const refusal = await park(String(action ?? ""), rest);
+        if (refusal) { result = `NOT PROPOSED: ${refusal} Tell the admin this in one plain sentence, or ask the one question it needs.`; evidence.push(refusal); succeeded = true; }
+        else result = "Waiting for the administrator to click Confirm on the card. Nothing has changed yet.";
       }
       messages.push({ role: "tool", tool_call_id: id, content: result });
     }
-    if (parked.length > 0) {
-      // The wording of an ask is fixed, never the model's: it must say plainly that nothing has changed yet.
-      reply = `I need your approval before I change anything: ${parked.map((p) => p.summary).join("; ")}. Nothing has changed yet.`;
-      break;
-    }
+    if (parked.length > 0) { reply = fixedAsk(); break; }
   }
-  if (!reply) reply = parked.length > 0 ? `I need your approval: ${parked.map((p) => p.summary).join("; ")}.` : "I could not put an answer together. Try asking a shorter question.";
-  history.push({ role: "assistant", content: reply, at: now(), ...(used.length > 0 ? { tools: used } : {}) });
+  if (!reply) reply = "I could not put an answer together. Try asking a shorter question.";
+  history.push({ role: "assistant", content: reply, at: now(), ...(used.length > 0 ? { tools: used } : {}), calls, topic: topicFromCalls(calls.map((c) => ({ name: c.name, args: c.args })), text) });
   writeHistory(history);
-  return { reply, pending: parked, tools: used, wakeMs };
+  return { reply, pending: parked, tools: used, calls, wakeMs, dropped };
 }
 
-export type Decision = { ok: true; summary: string; result: string } | { ok: false; code: "not_found" | "failed"; error: string };
+export type Decision =
+  | { ok: true; summary: string; result: string }
+  | { ok: false; code: "not_found" | "expired" | "used" | "edited" | "failed"; error: string };
 
-export async function approve(id: string): Promise<Decision> {
-  sweep();
-  const p = pending.get(id);
-  if (!p) return { ok: false, code: "not_found", error: "That request is no longer waiting. Ask the Helper again." };
-  pending.delete(id);
-  const tool = helperTool(p.tool)!;
-  audit("approved", { tool: p.tool, args: JSON.stringify(p.args).slice(0, 300) });
-  const outcome = await runTool(tool, p.args);
+function note(content: string): void {
   const history = readHistory();
-  history.push({ role: "assistant", content: outcome.ok ? `Done: ${p.summary}.` : `That did not work (${p.summary}): ${outcome.text.slice(0, 300)}`, at: new Date().toISOString() });
+  history.push({ role: "assistant", content, at: new Date().toISOString() });
   writeHistory(history);
+}
+
+/** Runs one proposal, once, and only when the posted action and parameters are exactly the ones that were shown. */
+export async function confirm(id: string, posted: { action?: unknown; params?: unknown }): Promise<Decision> {
+  sweep();
+  const entry = proposals.get(id);
+  if (!entry) return { ok: false, code: "not_found", error: "The Helper never proposed that change in this chat, or the chat was cleared. Ask the Helper again." };
+  if (entry.status !== "pending") return { ok: false, code: "used", error: entry.status === "used" ? "That change was already made." : "That change was cancelled. Ask the Helper again." };
+  if (expired(entry.p)) { entry.status = "cancelled"; audit("expired", { id, action: entry.p.action }); return { ok: false, code: "expired", error: "That proposal ran out after 10 minutes. Ask the Helper again." }; }
+  const postedParams = posted.params && typeof posted.params === "object" ? (posted.params as Record<string, unknown>) : null;
+  if (posted.action !== entry.p.action || !postedParams || !sameParams(postedParams, entry.p.params)) {
+    entry.status = "rejected";
+    audit("rejected", { id, reason: "changed", proposed: `${entry.p.action} ${JSON.stringify(entry.p.params)}`.slice(0, 200), posted: `${String(posted.action)} ${JSON.stringify(posted.params)}`.slice(0, 200) });
+    return { ok: false, code: "edited", error: "That change does not match what was proposed, so nothing was done. Ask the Helper again." };
+  }
+  entry.status = "used";
+  const { p } = entry;
+  audit("approved", { id, action: p.action, params: JSON.stringify(p.params).slice(0, 300) });
+  const outcome = await runProposal(route, p);
+  note(outcome.ok ? `Done: ${p.summary}.` : `That did not work (${p.summary}): ${outcome.text.slice(0, 300)}`);
   if (!outcome.ok) return { ok: false, code: "failed", error: outcome.text.slice(0, 400) };
   return { ok: true, summary: p.summary, result: outcome.text.slice(0, 600) };
 }
 
-export function deny(id: string): boolean {
-  const p = pending.get(id);
-  if (!p) return false;
-  pending.delete(id);
-  audit("denied", { tool: p.tool });
-  const history = readHistory();
-  history.push({ role: "assistant", content: `Okay, I did not do it: ${p.summary}.`, at: new Date().toISOString() });
-  writeHistory(history);
+export function cancel(id: string): boolean {
+  const entry = proposals.get(id);
+  if (!entry || entry.status !== "pending") return false;
+  entry.status = "cancelled";
+  audit("denied", { id, action: entry.p.action });
+  note(`Okay, I did not do it: ${entry.p.summary}.`);
   return true;
 }

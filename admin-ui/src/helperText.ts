@@ -18,3 +18,20 @@ export function expandCommand(text: string): { send: string } | { clear: true } 
   if (t === "/memory") return { send: "How much memory is free right now?" };
   return null;
 }
+
+/** "on" and "off" read as On and Off; numbers, build names and everything else stay as written. */
+export function valueWord(v: string): string { return v === "on" || v === "off" ? v[0]!.toUpperCase() + v.slice(1) : v; }
+/** One line of a confirm card: what changes, from what, to what. */
+export function changeLine(c: { label: string; from: string; to: string }): string { return `${c.label}: ${valueWord(c.from)} to ${valueWord(c.to)}`; }
+/** How long a card keeps waiting, in plain words. */
+export function waitsText(expiresAt: string, now = Date.now()): string {
+  const ms = Date.parse(expiresAt) - now;
+  if (!Number.isFinite(ms) || ms <= 0) return "This request has run out. Ask again.";
+  const minutes = Math.ceil(ms / 60_000);
+  return `Waits ${minutes} more minute${minutes === 1 ? "" : "s"}.`;
+}
+/** The key combination that opens the Helper from any screen. */
+export const HELPER_SHORTCUT = { key: "/", mac: "⌘/", other: "Ctrl+/" } as const;
+export function isHelperShortcut(e: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }): boolean {
+  return e.key === HELPER_SHORTCUT.key && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey;
+}

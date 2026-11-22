@@ -83,8 +83,11 @@ export interface HelperStatus {
   tools: { name: string; kind: "read" | "write"; description: string }[];
 }
 export interface HelperMessage { role: "user" | "assistant"; content: string; at: string; tools?: string[] }
-export interface HelperPending { id: string; tool: string; args: Record<string, unknown>; summary: string; at: string }
-export interface HelperReply { reply: string; pending: HelperPending[]; tools: string[]; wake_ms: number }
+export interface HelperChange { label: string; from: string; to: string }
+/** One change the Helper proposes. Confirm sends `action` and `params` back unchanged; the Stack runs the stored copy and refuses an edited one. */
+export interface HelperProposal { id: string; action: string; params: Record<string, string | number | boolean>; summary: string; changes: HelperChange[]; note: string | null; at: string; expires_at: string }
+export type HelperPending = HelperProposal;
+export interface HelperReply { reply: string; pending: HelperProposal[]; tools: string[]; calls: { name: string; args: Record<string, unknown> }[]; dropped: number; wake_ms: number }
 
 export interface CheckResult {
   at: string; ok: boolean; results: { role: string; ok: boolean; ms: number; reason?: string; skipped?: boolean }[];
@@ -148,8 +151,8 @@ export const api = {
   helperHistory: () => call<{ messages: HelperMessage[]; pending: HelperPending[] }>("GET", "/stack/v1/helper/history"),
   helperChat: (message: string) => call<HelperReply>("POST", "/stack/v1/helper/chat", { message }),
   helperClear: () => call<{ ok: true }>("DELETE", "/stack/v1/helper/history"),
-  helperApprove: (id: string) => call<{ ok: true; summary: string }>("POST", `/stack/v1/helper/approvals/${encodeURIComponent(id)}/approve`, {}),
-  helperDeny: (id: string) => call<{ ok: true }>("POST", `/stack/v1/helper/approvals/${encodeURIComponent(id)}/deny`, {}),
+  helperConfirm: (p: HelperProposal) => call<{ ok: true; summary: string; result: string }>("POST", `/stack/v1/helper/actions/${encodeURIComponent(p.id)}/confirm`, { action: p.action, params: p.params }),
+  helperCancel: (id: string) => call<{ ok: true }>("POST", `/stack/v1/helper/actions/${encodeURIComponent(id)}/cancel`, {}),
   installHelperModel: (m: HelperStatus["model"]) => call<unknown>("POST", "/stack/v1/models", { id: m.id, role: m.role, repo: m.repo, url: m.url, sha256: m.sha256, approx_bytes: m.approx_bytes, licence: m.licence, revision: m.revision, engine: m.engine }),
   rebootHost: () => call<{ ok: true }>("POST", "/stack/v1/host/reboot", {}),
   restartStack: () => call<{ ok: true }>("POST", "/stack/v1/service/restart"),
