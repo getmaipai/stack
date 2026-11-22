@@ -77,7 +77,7 @@ test("the candidates route and the capabilities answer are built from the Max ro
   const capabilities = await (await app.request("/stack/v1/capabilities")).json() as { rows: Array<{ category: string; tier: string; fits_ever: boolean; needs_bytes: number | null; cap_bytes: number; model: string | null }> };
   const get = (category: string, tier: string) => capabilities.rows.find((item) => item.category === category && item.tier === tier)!;
   // Video's only Standard candidate (Wan) is above the Standard cap and its Max candidate fits the Max room: Standard false with the need stated, Max true.
-  expect(get("video", "standard")).toMatchObject({ fits_ever: false, needs_bytes: 25_400_000_000, model: null });
+  expect(get("video", "standard")).toMatchObject({ fits_ever: false, needs_bytes: 25_300_000_000, model: null });
   expect(get("video", "max")).toMatchObject({ fits_ever: true, needs_bytes: 61_500_000_000, model: LTX_MAX, cap_bytes: Math.round(tierRoomBytes("max")) });
   expect(get("chat", "max")).toMatchObject({ fits_ever: true, model: FLASH_NEXT });
   for (const category of ["chat", "image", "video", "music", "voice"]) {

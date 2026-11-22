@@ -388,13 +388,13 @@ test("the component and the disk plan offer it on a 128 GB computer only, option
   for (const tier of ["p16", "p32", "p64"] as const) expect(diskPlanForTier(tier)!.rows.some((candidate) => candidate.id === "video-ltx25")).toBe(false);
 });
 
-test("the tier table lists measured rows and keeps LTX-2.5 off every tier until Home's slot step", () => {
+test("the tier table lists measured rows and puts LTX-2.5 on Standard and Boost (vetted, owner 2026-11-22)", () => {
   const candidate = TIER_CANDIDATES.find((item) => item.id === STACK_VIDEO_LTX25_MODEL_ID)!;
-  expect(candidate.tiers).toEqual([]);
-  expect(candidate.vetting).toContain("VIDEO-TIERS-01");
+  expect(candidate.tiers).toEqual(["standard", "boost"]);
+  expect(candidate.vetting).toBeUndefined();
   expect(candidate.peaks.map((peak) => peak.peakBytes)).toEqual([25_300_000_000, 39_400_000_000, 32_400_000_000, 45_800_000_000]);
   expect(candidate.peaks.every((peak) => peak.status === "measured")).toBe(true);
-  expect(TIER_CANDIDATES.filter((item) => item.category === "video" && item.tiers.length > 0).map((item) => item.id)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", "minimax-h3", "ltx-2-5-bf16-distilled-mlx-max"]);
+  expect(TIER_CANDIDATES.filter((item) => item.category === "video" && item.tiers.length > 0).map((item) => item.id)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", "ltx-2-5-q8-distilled-mlx", "minimax-h3", "ltx-2-5-bf16-distilled-mlx-max"]);
 });
 
 // ---- privacy: generation makes no outbound connection ----

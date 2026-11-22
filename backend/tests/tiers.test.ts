@@ -16,7 +16,7 @@ describe("tier resolver", () => {
     }
     const reduced = resolveTier({ category: "chat", tier: "reduced", profile: "p128", roomBytes: 72 * GB });
     expect(slots.find((row) => row.category === "chat" && row.tier === "reduced")?.peak_bytes).toBe(reduced?.peakBytes);
-    expect(slots.filter((row) => row.peak_bytes !== null).map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "video:max", "music:standard", "voice:reduced", "voice:standard", "stems:standard"]);
+    expect(slots.filter((row) => row.peak_bytes !== null).map(({ category, tier }) => `${category}:${tier}`)).toEqual(["chat:reduced", "chat:standard", "chat:boost", "chat:max", "pictures:standard", "pictures:boost", "pictures:max", "video:standard", "video:boost", "video:max", "music:standard", "voice:reduced", "voice:standard", "stems:standard"]);
     // p16 has the streaming MiniMax H3-Image as its Standard picture candidate (H3-IMAGE-STACK-01); nothing else but chat, voice and stems.
     expect(budgetSlots("p16", 12 * GB).filter((row) => row.peak_bytes !== null).every((row) => row.category === "chat" || row.category === "voice" || row.category === "stems" || (row.category === "pictures" && row.tier === "standard" && row.model === "minimax-h3-image"))).toBe(true);
     expect(budgetSlots("p16", 12 * GB).some((row) => row.category === "video" || row.category === "music")).toBe(false);
@@ -53,12 +53,12 @@ describe("tier resolver", () => {
     expect(resolveTier({ category: "chat", tier: "max", profile: "p128", roomBytes: 67 * GB, reducedFreedBytes: 9 * GB })?.model).toBe("qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs");
   });
 
-  test("video Standard needs 0.6 R to hold Wan's measured 25.4 GB and Max lists the LTX profile", () => {
+  test("video Standard needs 0.6 R to hold the measured LTX-2.5 and Wan figures, Boost holds LTX-2.5, and Max lists the LTX profile", () => {
     const tight = resolveLadder("video", "p128", 40 * GB);
     expect(tight[0]?.resolved).toBeNull();
-    expect(tight[1]?.resolved).toBeNull();
+    expect(tight[1]?.resolved?.model).toBe("ltx-2-5-q8-distilled-mlx");
     const roomy = resolveLadder("video", "p128", 72 * GB);
-    expect(roomy.map((row) => row.resolved?.model ?? null)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", null, "ltx-2-5-bf16-distilled-mlx-max"]);
+    expect(roomy.map((row) => row.resolved?.model ?? null)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", "ltx-2-5-q8-distilled-mlx", "ltx-2-5-bf16-distilled-mlx-max"]);
     expect(roomy[0]?.resolved?.verified).toBe(true);
     expect(resolveTier({ category: "video", tier: "max", profile: "p128", roomBytes: 40 * GB, reducedFreedBytes: 22 * GB, slot: { model: "ltx-2-5-bf16-distilled-mlx-max", options: { input: "picture" } } })).toMatchObject({ peakBytes: 61_500_000_000 });
     expect(resolveLadder("voice", "p128", 72 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["chatterbox-turbo-fp16", null, null]);
@@ -159,7 +159,7 @@ describe("tier candidate lists for the slot dialog", () => {
 
   test("a vetting-only model is catalogued but never resolved or offered", () => {
     const vetting = TIER_CANDIDATES.filter((candidate) => candidate.vetting);
-    expect(vetting.map((candidate) => candidate.id)).toEqual(["qwen3-6-35b-a3b-ud-q4-k-xl", "ltx-2-5-q8-distilled-mlx"]);
+    expect(vetting.map((candidate) => candidate.id)).toEqual(["qwen3-6-35b-a3b-ud-q4-k-xl"]);
     const ladder = resolveLadder("chat", "p128", 72 * GB).map((row) => row.resolved?.model);
     expect(ladder).not.toContain("qwen3-6-35b-a3b-ud-q4-k-xl");
     const ids = tierCandidateLists("chat", "p128", 72 * GB).flatMap((level) => level.candidates.map((row) => row.id));

@@ -26,7 +26,8 @@ describe("hardware budget (TIER-BUDGET-01)", () => {
 
   test("an empty level is listed with nulls, never omitted", () => {
     const slots = budgetSlots("p128", 72 * GB);
-    expect(slots.find((row) => row.category === "video" && row.tier === "boost")).toMatchObject({ model: null, peak_bytes: null, basis: null, fits_ever: false });
+    // Video Boost is LTX-2.5 since 2026-11-22, so the empty example is music Boost.
+    expect(slots.find((row) => row.category === "music" && row.tier === "boost")).toMatchObject({ model: null, peak_bytes: null, basis: null, fits_ever: false });
     expect(slots.find((row) => row.category === "music" && row.tier === "max")).toMatchObject({ model: null, peak_bytes: null });
   });
 

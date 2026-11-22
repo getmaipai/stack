@@ -15,6 +15,7 @@ is published yet. This file tracks what either picks up.
 
 ### Changed
 
+- LTX-2.5 is off the vetting list (owner, 2026-11-22: it was vetted): it is the recommended Standard and Boost video model on a 128 GB computer, ahead of MiniMax H3, and LTX-2.5 Max stays the Max pick.
 - The recommended Standard picture model on a 64 GB computer or bigger is FLUX 3 (the 2026-11-17 owner decision); MiniMax H3-Image stays the Boost pick and is one choice away.
 - Home's installer now builds the admin page with the UI package's own shared spec (Home `e5fb717`), so `/admin/` is served again after a Home ship. This entry also gives the Stack a new commit, which makes Home's installer rebuild the Stack once and pick the page up.
 
