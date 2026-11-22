@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Badge } from "@maipai/ui/src/ui/badge";
 import { Button } from "@maipai/ui/src/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@maipai/ui/src/ui/card";
+import { Card, CardContent } from "@maipai/ui/src/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maipai/ui/src/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 import { Input } from "@maipai/ui/src/ui/input";
 import { Label } from "@maipai/ui/src/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@maipai/ui/src/ui/select";
@@ -31,7 +33,7 @@ function Field({ s, value, error, onChange }: { s: Setting; value: SettingValue;
       </div>
       <p className="text-xs text-muted-foreground">{s.help}</p>
       {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
-      {s.needs_restart && <p className="text-xs text-muted-foreground">Takes effect after Apply and a restart.</p>}
+      {s.needs_restart && <p className="text-xs text-muted-foreground">Needs a restart to take effect.</p>}
     </div>
   );
 }
@@ -77,28 +79,36 @@ export function SettingsScreen({ notify }: { refresh: () => void; notify: Notify
   }
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Label className="flex items-center gap-2 text-sm"><Switch checked={advanced} onCheckedChange={setAdvanced} />Show advanced settings</Label>
-        <div className="ms-auto flex flex-wrap gap-2">
-          <Button disabled={busy || dirty === 0} onClick={() => { void save(); }}>{dirty ? `Save ${dirty} ${dirty === 1 ? "change" : "changes"}` : "Save"}</Button>
-          <Button variant="ghost" disabled={busy || dirty === 0} onClick={() => { setDraft({}); setErrors({}); }}>Discard</Button>
+      <Label className="flex items-center gap-2 text-sm text-muted-foreground"><Switch checked={advanced} onCheckedChange={setAdvanced} />Show more settings (for experts)</Label>
+      {dirty > 0 && (
+        <div className="sticky bottom-20 z-10 flex flex-wrap items-center gap-3 rounded-2xl border bg-background/85 p-3 shadow-lg backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2 motion-reduce:animate-none md:bottom-4" role="status">
+          <span className="me-auto text-sm">{dirty} unsaved {dirty === 1 ? "change" : "changes"}.</span>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => { setDraft({}); setErrors({}); }}>Discard</Button>
+          <Button size="sm" disabled={busy} onClick={() => { void save(); }}>Save</Button>
         </div>
-      </div>
+      )}
       {pending.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3 text-sm" role="status">
-          <span className="me-auto">{pending.length} saved {pending.length === 1 ? "change waits" : "changes wait"} for the next start.</span>
+          <span className="me-auto">{pending.length} saved {pending.length === 1 ? "change is" : "changes are"} waiting to take effect.</span>
           <ConfirmButton variant="default" disabled={busy} label="Apply" title="Apply the saved changes?" confirm="Apply" text="The saved values become the ones the Stack uses from its next start. Restart the Stack afterwards from Tools." onConfirm={apply} />
         </div>
       )}
-      {groups.map((g) => (
-        <Card key={g.id}>
-          <CardHeader><CardTitle className="text-base">{g.label}</CardTitle><CardDescription>{g.items.length} {g.items.length === 1 ? "setting" : "settings"}</CardDescription></CardHeader>
-          <CardContent className="divide-y">
-            {g.items.map((s) => <Field key={s.key} s={s} value={settingValue(s, draft)} error={errors[s.key]} onChange={(raw) => change(s, raw)} />)}
-          </CardContent>
-        </Card>
+      {groups.map((g, i) => (
+        <Collapsible key={g.id} defaultOpen={i === 0} asChild>
+          <Card className="gap-0 py-0">
+            <CollapsibleTrigger className="group flex w-full items-center gap-3 rounded-xl p-5 text-start focus-visible:outline-2 focus-visible:outline-ring">
+              <span className="me-auto"><span className="block font-semibold">{g.label}</span><span className="block text-sm text-muted-foreground">{g.items.length} {g.items.length === 1 ? "setting" : "settings"}</span></span>
+              <ChevronDown aria-hidden="true" className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="divide-y border-t px-5 pb-2">
+                {g.items.map((s) => <Field key={s.key} s={s} value={settingValue(s, draft)} error={errors[s.key]} onChange={(raw) => change(s, raw)} />)}
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       ))}
-      {groups.length === 0 && <p className="text-sm text-muted-foreground">No settings to show. Switch on "Show advanced settings" to see more.</p>}
+      {groups.length === 0 && <p className="text-sm text-muted-foreground">No settings to show. Turn on "Show more settings" to see more.</p>}
     </div>
   );
 }

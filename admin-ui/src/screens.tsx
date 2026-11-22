@@ -2,15 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@maipai/ui/src/ui/badge";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@maipai/ui/src/ui/card";
-import { Progress } from "@maipai/ui/src/ui/progress";
 import { Skeleton } from "@maipai/ui/src/ui/skeleton";
 import { StatusIndicator } from "@maipai/ui/src/ui/status";
 import type { StatusKind } from "@maipai/ui/src/ui/status";
+import { ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maipai/ui/src/ui/collapsible";
 import { Alert, AlertDescription, AlertTitle } from "@maipai/ui/src/ui/alert";
 import { ApiError, api } from "./api";
 import type { Engine, HealthItem, Role } from "./api";
 import type { Snapshot } from "./live";
-import { ago, bytes, uptime } from "./format";
+import { ago } from "./format";
 
 export type Notify = (message: string) => void;
 
@@ -18,12 +19,12 @@ export function roleKind(role: Role): StatusKind {
   if (role.enabled === false) return "maintenance";
   switch (role.state.state) {
     case "ready": case "loaded": return "online";
-    case "installed": return "maintenance";
+    case "installed": case "notInstalled": return "maintenance";
     default: return "offline";
   }
 }
 const ROLE_WORDS: Record<Role["state"]["state"], string> = {
-  ready: "Ready", loaded: "Loaded", installed: "Installed, not running", notInstalled: "Not installed", offline: "Offline",
+  ready: "Ready", loaded: "Loaded", installed: "Ready, not started", notInstalled: "Not set up yet", offline: "Not answering",
 };
 export function roleWord(role: Role): string {
   return role.enabled === false ? "Turned off" : ROLE_WORDS[role.state.state];
@@ -33,81 +34,13 @@ export function healthWord(h: keyof typeof HEALTH_WORDS): string { return HEALTH
 export function healthKind(h: keyof typeof HEALTH_WORDS): StatusKind {
   return h === "ok" ? "online" : h === "degraded" ? "degraded" : h === "updating" ? "maintenance" : "offline";
 }
-const PRESSURE_WORDS = { normal: "Comfortable", warn: "Getting tight", critical: "Critical" } as const;
 
 function Loading() {
   return <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading"><Skeleton className="h-28" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
 }
 function Problem({ message }: { message: string }) {
-  return <Alert variant="destructive" role="alert"><AlertTitle>Could not reach the Stack</AlertTitle><AlertDescription>{message}</AlertDescription></Alert>;
+  return <Alert variant="destructive" role="alert"><AlertTitle>The Stack is not answering</AlertTitle><AlertDescription>{message} This page keeps trying by itself.</AlertDescription></Alert>;
 }
-function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <Card>
-      <CardHeader><CardDescription>{label}</CardDescription><CardTitle className="text-2xl">{value}</CardTitle></CardHeader>
-      {hint && <CardContent className="text-sm text-muted-foreground">{hint}</CardContent>}
-    </Card>
-  );
-}
-
-export function Overview({ snap }: { snap: Snapshot }) {
-  const { status, roles, healthz } = snap;
-  if (!snap.loaded) return <Loading />;
-  if (!status || !roles) return <Problem message={snap.error ?? "No answer yet."} />;
-  const used = Math.max(0, status.memory.total_bytes - status.memory.free_bytes);
-  const percent = status.memory.total_bytes > 0 ? Math.round((used / status.memory.total_bytes) * 100) : 0;
-  return (
-    <div className="flex flex-col gap-6">
-      {snap.error && <Problem message={snap.error} />}
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <Card className="col-span-2 xl:col-span-1">
-          <CardHeader>
-            <CardDescription>Status</CardDescription>
-            <CardTitle className="flex items-center gap-2 text-2xl"><StatusIndicator status={healthKind(status.health)} ping={status.health === "ok"} />{healthWord(status.health)}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            {status.problems.length === 0 ? "No open problems." : `${status.problems.length} open ${status.problems.length === 1 ? "problem" : "problems"}.`}
-            {" "}{status.busy.running} running, {status.busy.waiting} waiting.
-          </CardContent>
-        </Card>
-        <Tile label="Version" value={healthz ? healthz.version : "unknown"} hint={healthz ? `Wire contract ${healthz.contract}` : undefined} />
-        <Tile label="Up for" value={healthz ? uptime(healthz.uptimeSeconds) : "unknown"} hint="Since the Stack last started." />
-        <Card className="col-span-2 xl:col-span-1">
-          <CardHeader><CardDescription>Memory</CardDescription><CardTitle className="text-2xl">{PRESSURE_WORDS[status.memory.pressure]}</CardTitle></CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <Progress value={percent} aria-label="Memory in use" />
-            <p className="text-sm text-muted-foreground">{bytes(used)} of {bytes(status.memory.total_bytes)} in use. Budget for engines: {bytes(status.memory.budget_bytes)}.</p>
-          </CardContent>
-        </Card>
-      </div>
-      <section aria-labelledby="roles-h" className="flex flex-col gap-3">
-        <h2 id="roles-h" className="text-lg font-semibold">Features</h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {roles.map((role) => <RoleCard key={role.id} role={role} />)}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function RoleCard({ role }: { role: Role }) {
-  const why = role.plain_reason ?? role.reason ?? role.state.reason ?? null;
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base"><StatusIndicator status={roleKind(role)} ping={roleKind(role) === "online"} />{role.label}</CardTitle>
-        <CardAction><Badge variant="secondary">{roleWord(role)}</Badge></CardAction>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-1 text-sm text-muted-foreground">
-        <p>{role.model ? `Answering with ${role.model.id}` : "No model chosen yet."}</p>
-        {role.model?.measuredFootprintBytes ? <p>Uses about {bytes(role.model.measuredFootprintBytes)} of memory.</p> : null}
-        {why && <p>{why}</p>}
-        <p className="text-xs">Since {ago(role.state.since)}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
 const SEVERITY: Record<HealthItem["severity"], { word: string; variant: "destructive" | "secondary" | "outline" }> = {
   critical: { word: "Critical", variant: "destructive" }, error: { word: "Error", variant: "destructive" }, warning: { word: "Warning", variant: "secondary" },
 };
@@ -129,7 +62,7 @@ export function Health({ snap, refresh, notify }: { snap: Snapshot; refresh: () 
     }
   }
   if (snap.health.length === 0) {
-    return <Card><CardHeader><CardTitle className="flex items-center gap-2"><StatusIndicator status="online" ping={false} />No problems</CardTitle><CardDescription>Nothing needs your attention. This list updates by itself.</CardDescription></CardHeader></Card>;
+    return <Card><CardHeader><CardTitle className="flex items-center gap-2"><StatusIndicator status="online" ping={false} />All clear</CardTitle><CardDescription>Nothing needs you right now. This updates by itself.</CardDescription></CardHeader></Card>;
   }
   return (
     <ul className="flex flex-col gap-3" aria-label="Problems">
@@ -161,8 +94,8 @@ function engineKind(e: Engine): StatusKind {
   return "maintenance";
 }
 function engineWord(e: Engine): string {
-  if (!e.installed) return "Not installed";
-  return e.running ? "Running" : "Installed, not running";
+  if (!e.installed) return "Not set up yet";
+  return e.running ? "Running" : "Ready, not started";
 }
 
 export function Engines({ snap, refresh, notify }: { snap: Snapshot; refresh: () => void; notify: Notify }) {
@@ -219,14 +152,16 @@ export function Engines({ snap, refresh, notify }: { snap: Snapshot; refresh: ()
           </Card>
         ))}
       </div>
-      {installed.length === 0 && <Card><CardHeader><CardTitle>No engines installed yet</CardTitle><CardDescription>Engines install when a feature that needs one is turned on.</CardDescription></CardHeader></Card>}
-      {others.length > 0 && <p className="text-sm text-muted-foreground">{others.length} more {others.length === 1 ? "engine build is" : "engine builds are"} pinned for this computer and not installed yet. They install when a feature needs them.</p>}
-      <section aria-labelledby="log-h" className="flex flex-col gap-2">
-        <h2 id="log-h" className="text-lg font-semibold">Recent log lines{filter ? ` for ${filter}` : ""}</h2>
-        {logError ? <Problem message={logError} /> : (
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-lg border bg-card p-3 text-xs leading-5 text-card-foreground" tabIndex={0} aria-label="Stack log">{shown.length ? shown.join("\n") : "No log lines yet."}</pre>
-        )}
-      </section>
+      {installed.length === 0 && <Card><CardHeader><CardTitle>No engines yet</CardTitle><CardDescription>Turn on a feature and the Stack sets up the engine it needs.</CardDescription></CardHeader></Card>}
+      {others.length > 0 && <p className="text-sm text-muted-foreground">{others.length} more {others.length === 1 ? "engine is" : "engines are"} ready to download when a feature needs {others.length === 1 ? "it" : "them"}.</p>}
+      <Collapsible className="flex flex-col gap-2">
+        <CollapsibleTrigger asChild><Button variant="ghost" size="sm" className="group self-start text-muted-foreground"><ChevronDown aria-hidden="true" className="transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none" />{filter ? `Log lines for ${filter}` : "Show recent log lines"}</Button></CollapsibleTrigger>
+        <CollapsibleContent>
+          {logError ? <Problem message={logError} /> : (
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl border bg-card p-4 text-xs leading-5 text-card-foreground" tabIndex={0} aria-label="Stack log">{shown.length ? shown.join("\n") : "No log lines yet."}</pre>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
