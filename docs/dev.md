@@ -2690,6 +2690,12 @@ no Splash start has failed this run. Unread facts (no daemon start) refuse Splas
 (both needed the entry; `engineRole` defaults unknown names to `chat`). The model records are chosen without an engine filter for `coding`,
 because one GGUF serves both engines (`recordEngineFor`).
 
+**Start-up restore (STACK-START-01, 2026-11-21).** A persisted `stack.engines.coding.home_mode` of `coding` is restored after the Stack listens,
+never before: the daemon calls `setupHomeModeRuntime` (which configures the mode runtime and returns at once) and the switch runs in the
+background (`homeModeRestore()`). The large model takes minutes to load and Home's installer waits only 20 s for `/healthz`. While it loads,
+`GET /stack/v1/coding/mode` says `state: "switching"`, `target: "coding"`, and a chat, judge, router or coding request gets the usual 503
+"Home is changing modes". A restore that fails falls back to Normal and records the reason, as before.
+
 **The launch** (`splashArgs()` in `engineArgs.ts`, `splashLaunchPlan()` and `splashEnv()`): the bundled `python/bin/python3 -u install/launcher.py serve`
 with `--model <repo>:<variant from the pin> --revision <commit> --offline --host 127.0.0.1 --port <free> --language-only --served-model-name
 <pin id> --announce-served-name --default-reasoning-effort medium --thinking-token-budget <ceiling> --max-context <window> --max-cache-disk

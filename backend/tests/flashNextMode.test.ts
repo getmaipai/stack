@@ -8,7 +8,8 @@ import { STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT as DRAFT, STACK_CHAT_QWEN38_FLASH_NE
 import { clearModelsForTests, upsertModel, type CatalogModelLike } from "@/lib/modelStore";
 import { codingModeHeavy, splashRoot } from "@/lib/splashStore";
 import { currentHomeMode, homeModeView, initializeHomeMode, switchHomeMode } from "@/lib/homeMode";
-import { setupHomeModeRuntime } from "@/lib/homeModeRuntime";
+import { homeModeRestore, setupHomeModeRuntime } from "@/lib/homeModeRuntime";
+import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly } from "@/lib/governor";
 import { __setAppleChipForTests, __resetAppleChipForTests } from "@/lib/hardware";
 import { __resetHealthForTests } from "@/lib/health";
@@ -110,4 +111,38 @@ test("the coding launch keeps Flash Next's pinned 32K window, Ornith keeps the c
   expect(plan.command).toContain("--model-dir");
   const ornith = await launchPlan("coding", getModel(ORNITH.id)!, 8813);
   expect(ornith.contextLength).toBe(131_072);
+});
+
+// STACK-START-01: the daemon awaited the restore of a persisted coding mode before it listened, so /healthz was silent for the minutes the
+// large model took to load, Home's installer gave up after 20 s and rolled the update back. The restore now runs in the background.
+test("a persisted coding mode restores in the background: setup returns at once, /healthz and the mode route answer while it loads, and a request for chat gets the honest mode-change answer", async () => {
+  installPin(FLASH); installPin(DRAFT);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  setSupervisorFactoryForTests(async (role, modelId) => {
+    if (role === "coding") await gate;
+    return scriptedProcess(role, { modelId: modelId ?? role, client: okClient });
+  });
+  const returned = await Promise.race([setupHomeModeRuntime("coding").then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_000))]);
+  expect(returned).toBe(true);
+  expect(homeModeRestore()).not.toBeNull();
+  const health = await app.request("/healthz");
+  expect(health.status).toBe(200);
+  const view = await (await app.request("/stack/v1/coding/mode")).json() as { mode: string; target: string; state: string };
+  expect(view).toMatchObject({ mode: "normal", target: "coding", state: "switching" });
+  const chat = await app.request("/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: "chat", messages: [{ role: "user", content: "hi" }] }) });
+  expect(chat.status).toBe(503);
+  expect(JSON.stringify(await chat.json())).toContain("changing modes");
+  release();
+  await homeModeRestore();
+  expect(currentHomeMode()).toBe("coding");
+  expect(homeModeView().state).toBe("stable");
+});
+
+test("a persisted coding mode that cannot be restored still falls back to Normal, in the background", async () => {
+  // Nothing installed: the mode is unavailable.
+  await setupHomeModeRuntime("coding");
+  await homeModeRestore();
+  expect(currentHomeMode()).toBe("normal");
+  expect(homeModeView().state).toBe("failed");
 });

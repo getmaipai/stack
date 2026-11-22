@@ -95,7 +95,9 @@ async function postLoadCodingCheck(): Promise<void> {
   await checkHomeModeOpenAIWire(process.client);
 }
 
+/** Sets the mode runtime up and returns at once. Restoring a persisted "coding" mode continues in the background (see `homeModeRestore`). */
 export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
+  restore = null;
   const adapter: HomeModeRuntime = {
     inspect: () => { const result = checks(); return { ...result, available: Object.values(result.checks).every(Boolean), reason: result.reason }; },
     stopResidents: async () => {
@@ -120,9 +122,18 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
     pins: () => JSON.stringify([currentEngineTag("splash") ?? "", codingModeHeavy().pin.revision, codingModeHeavy().draftPin.revision]),
   };
   configureHomeMode(adapter); initializeHomeMode("normal");
-  if (initial === "coding") await switchHomeMode("coding").catch((error) => {
-    const reason = error instanceof Error ? error.message : String(error);
-    homeModeFailure(reason, "unavailable");
-    updateSettings({ "stack.engines.coding.home_mode": "normal" });
-  });
+  if (initial === "coding") {
+    // STACK-START-01: the persisted mode is restored in the background. The large model takes minutes to load, and the Stack must already
+    // answer /healthz and the status routes meanwhile (Home's installer waits only 20 s). switchHomeMode sets its "switching" state before
+    // its first await, so every request and the startup warm-up see "entering coding" the moment this returns.
+    restore = switchHomeMode("coding").catch((error) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      homeModeFailure(reason, "unavailable");
+      updateSettings({ "stack.engines.coding.home_mode": "normal" });
+    }).catch(() => {});
+  }
 }
+
+let restore: Promise<void> | null = null;
+/** The restore of the persisted coding mode, still running or finished; null when the Stack started in Normal mode. Never rejects. */
+export function homeModeRestore(): Promise<void> | null { return restore; }
