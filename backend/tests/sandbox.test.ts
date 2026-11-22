@@ -283,3 +283,43 @@ test.skipIf(!realOn)("real machine: a machine whose lock marker is missing refus
     await expect(service.restore("sess-real002", snap.id)).rejects.toMatchObject({ code: "lock_failed" });
   } finally { await service.remove("sess-real002"); }
 }, 120_000);
+
+test("a create starts the container system once when it is not running, then carries on", async () => {
+  let started = 0;
+  const runner: ContainerRunner = async (args, options) => {
+    if (args[0] === "system" && args[1] === "start") { started += 1; return { code: 0, stdout: "", stderr: "" }; }
+    if (args[0] === "network" && args[1] === "list" && started === 0) return { code: 1, stdout: "", stderr: "XPC connection error" };
+    return fake(args, options);
+  };
+  const info = await new SandboxService(runner, config(), () => now, fakeStream).create({ id: "sess-start01", workspace: work });
+  expect(started).toBe(1);
+  expect(info.state).toBe("running");
+});
+
+test("a create says to start the container system when starting it did not help", async () => {
+  const runner: ContainerRunner = async (args) => (args[0] === "network" || args[0] === "system" ? { code: 1, stdout: "", stderr: "XPC connection error" } : { code: 0, stdout: "", stderr: "" });
+  await expect(new SandboxService(runner, config(), () => now, fakeStream).create({ id: "sess-start02", workspace: work })).rejects.toMatchObject({ code: "runtime_unavailable" });
+});
+
+test("the runtime status reports the system, the image and the network, and starts nothing", async () => {
+  const calls2: string[][] = [];
+  const mk = (image: string, withNet: boolean, up: boolean): ContainerRunner => async (args) => {
+    calls2.push(args);
+    if (!up) return { code: 1, stdout: "", stderr: "XPC connection error" };
+    if (args[0] === "image") return { code: 0, stdout: JSON.stringify([{ configuration: { name: `docker.io/library/${image}` } }]), stderr: "" };
+    if (args[0] === "network") return { code: 0, stdout: JSON.stringify(withNet ? [{ configuration: { name: SANDBOX_NETWORK } }] : []), stderr: "" };
+    return { code: 0, stdout: "", stderr: "" };
+  };
+  expect(await new SandboxService(mk("maipai-sandbox:test", true, true), config(), () => now, fakeStream).runtimeStatus()).toEqual({ container_system: "running", image: "maipai-sandbox:test", image_built: true, network: true, detail: "" });
+  expect(await new SandboxService(mk("other:1", false, true), config(), () => now, fakeStream).runtimeStatus()).toMatchObject({ container_system: "running", image_built: false, network: false });
+  expect(await new SandboxService(mk("x:1", false, false), config(), () => now, fakeStream).runtimeStatus()).toMatchObject({ container_system: "stopped", image_built: false, detail: "XPC connection error" });
+  expect(calls2.some((c) => c[0] === "system" || c[0] === "run")).toBe(false);
+});
+
+test("GET /stack/v1/sandboxes/runtime answers before the id route", async () => {
+  const service = new SandboxService(async (args) => (args[0] === "image" ? { code: 0, stdout: "[]", stderr: "" } : { code: 0, stdout: "[]", stderr: "" }), config(), () => now, fakeStream);
+  setSandboxServiceForTests(service);
+  const res = await app.request("/stack/v1/sandboxes/runtime");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ container_system: "running", image_built: false });
+});

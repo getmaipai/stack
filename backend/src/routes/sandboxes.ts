@@ -24,6 +24,8 @@ const restoreR = createRoute({ method: "post", path: "/{id}/snapshots/{snapshot}
 const idParams = { params: idParamSchema("id") };
 const createR = createRoute({ method: "post", path: "/", tags: ["Sandboxes"], summary: "Start a sandbox machine", request: { body: { content: { "application/json": { schema: CreateBody } } } }, responses: { 201: { content: { "application/json": { schema: Sandbox } }, description: "The machine runs behind its network lock." }, ...createErrors } });
 const listR = createRoute({ method: "get", path: "/", tags: ["Sandboxes"], summary: "List sandboxes", responses: { 200: { content: { "application/json": { schema: z.object({ sandboxes: z.array(Sandbox) }) } }, description: "Every sandbox the Stack knows." } } });
+const RuntimeSchema = z.object({ container_system: z.enum(["running", "stopped"]), image: z.string(), image_built: z.boolean(), network: z.boolean(), detail: z.string() }).openapi("SandboxRuntime");
+const runtimeR = createRoute({ method: "get", path: "/runtime", tags: ["Sandboxes"], summary: "Whether the container system, the sandbox image and the sandbox network are ready", responses: { 200: { content: { "application/json": { schema: RuntimeSchema } }, description: "Read-only facts for the Code ready check; nothing is started." } } });
 const getR = createRoute({ method: "get", path: "/{id}", tags: ["Sandboxes"], summary: "One sandbox", request: idParams, responses: { 200: { content: { "application/json": { schema: Sandbox } }, description: "Its state." }, ...notFound } });
 const stopR = createRoute({ method: "post", path: "/{id}/stop", tags: ["Sandboxes"], summary: "Stop a sandbox", request: idParams, responses: { 200: { content: { "application/json": { schema: Sandbox } }, description: "Stopped; the workspace folder is untouched." }, ...notFound } });
 const deleteR = createRoute({ method: "delete", path: "/{id}", tags: ["Sandboxes"], summary: "Remove a sandbox machine", request: idParams, responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "The machine is gone; the workspace folder is untouched." }, ...notFound } });
@@ -46,6 +48,7 @@ sandboxRoutes.openapi(createR, async (c) => {
     return c.json({ error: f.error }, 500);
   }
 });
+sandboxRoutes.openapi(runtimeR, async (c) => c.json(await sandboxService(dataDir).runtimeStatus(), 200));
 sandboxRoutes.openapi(listR, (c) => c.json({ sandboxes: sandboxService(dataDir).list() }, 200));
 sandboxRoutes.openapi(getR, (c) => {
   try { return c.json(sandboxService(dataDir).get(c.req.valid("param").id), 200); } catch (error) { return c.json({ error: fail(error).error }, 404); }

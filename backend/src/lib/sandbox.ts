@@ -27,6 +27,9 @@ export type SandboxErrorCode = "invalid_id" | "invalid_request" | "bad_workspace
 const STATUS: Record<SandboxErrorCode, 400 | 404 | 409 | 500 | 503> = { not_running: 409, snapshot_failed: 500, invalid_id: 400, invalid_request: 400, bad_workspace: 400, exists: 409, not_found: 404, lock_failed: 500, start_failed: 500, runtime_unavailable: 503, network_unavailable: 503 };
 
 /** A typed failure; `message` is plain words that say what went wrong and what to do. */
+/** `container_system` is `stopped` when the container tool does not answer (not started, not installed). */
+export interface RuntimeStatus { container_system: "running" | "stopped"; image: string; image_built: boolean; network: boolean; detail: string }
+
 export class SandboxError extends Error {
   readonly status: 400 | 404 | 409 | 500 | 503;
   constructor(readonly code: SandboxErrorCode, message: string) { super(message); this.name = "SandboxError"; this.status = STATUS[code]; }
@@ -175,10 +178,27 @@ export class SandboxService {
     return real;
   }
 
+  /** What Code needs from the container system, as plain facts for Home's ready check: the system answers, the sandbox image is built, the sandbox network exists.
+   * Read-only: it starts nothing (a create does the one start). */
+  async runtimeStatus(): Promise<RuntimeStatus> {
+    const images = await this.run(["image", "list", "--format", "json"]);
+    if (images.code !== 0) return { container_system: "stopped", image: this.config.image, image_built: false, network: false, detail: tail(images.stderr) || "no output" };
+    const names = (Array.isArray(parseJson(images.stdout)) ? (parseJson(images.stdout) as Array<{ configuration?: { name?: unknown } }>) : []).map((item) => item.configuration?.name);
+    const built = names.some((name) => typeof name === "string" && (name === this.config.image || name.endsWith(`/${this.config.image}`)));
+    const networks = await this.run(["network", "list", "--format", "json"]);
+    const network = networks.code === 0 && JSON.stringify(parseJson(networks.stdout) ?? "").includes(`"${SANDBOX_NETWORK}"`);
+    return { container_system: "running", image: this.config.image, image_built: built, network, detail: "" };
+  }
+
   /** Creates the host-only network once; returns its gateway address. */
   private async ensureNetwork(): Promise<string> {
     if (!this.networkReady) {
-      const listed = await this.run(["network", "list", "--format", "json"]);
+      let listed = await this.run(["network", "list", "--format", "json"]);
+      if (listed.code !== 0) {
+        // The container system is a per-user service that is not running after a restart of the computer. Start it once and ask again.
+        await this.run(["system", "start"], { timeoutMs: 120_000 });
+        listed = await this.run(["network", "list", "--format", "json"]);
+      }
       if (listed.code !== 0) throw new SandboxError("runtime_unavailable", `The sandbox runtime did not answer (${tail(listed.stderr) || "no output"}). Start the container system and try again.`);
       const known = JSON.stringify(parseJson(listed.stdout) ?? "").includes(`"${SANDBOX_NETWORK}"`);
       if (!known) {
