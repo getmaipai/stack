@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
-import { MACHINE_PREFIX, SANDBOX_NETWORK, SandboxError, SandboxService, clamp, machineName, setSandboxServiceForTests, type ContainerRunner, type ContainerStreamer, type ExecChunk, type SandboxConfig } from "@/lib/sandbox";
+import { MACHINE_PREFIX, SANDBOX_EXEC_WRAPPER, SANDBOX_NETWORK, SandboxError, SandboxService, clamp, machineName, setSandboxServiceForTests, type ContainerRunner, type ContainerStreamer, type ExecChunk, type SandboxConfig } from "@/lib/sandbox";
 
 let streamed: string[][]; let streamAborted: boolean;
 const fakeStream: ContainerStreamer = async function* (args, signal) {
@@ -164,7 +164,7 @@ test("exec streams ndjson lines then the exit, as the unprivileged user, env onl
   expect(res.headers.get("content-type")).toBe("application/x-ndjson");
   const lines = (await res.text()).trim().split("\n").map((l) => JSON.parse(l));
   expect(lines).toEqual([{ stream: "stdout", text: "hi\n" }, { stream: "stderr", text: "oops\n" }, { exit: 0 }]);
-  expect(streamed[0]).toEqual(["exec", "--user", "agent", "--workdir", "/workspace/src", "-e", "TOKEN=s3cret", "maipai-sbx-sess-exec01", "echo", "a b"]);
+  expect(streamed[0]).toEqual(["exec", "--user", "agent", "--workdir", "/workspace/src", "-e", "TOKEN=s3cret", "maipai-sbx-sess-exec01", "sh", "-c", SANDBOX_EXEC_WRAPPER, "sandbox-exec", expect.stringMatching(/^\/tmp\/\.exec-[0-9a-f]{16}\.pid$/), "echo", "a b"]);
   // The value is in no other container call and in no create/list record.
   expect(JSON.stringify(calls)).not.toContain("s3cret");
   expect(JSON.stringify(await (await api("/sess-exec01", "GET")).json())).not.toContain("s3cret");
@@ -205,6 +205,7 @@ test("aborting the request reaches the streamer's signal (which kills the proces
   await reader.read().catch(() => undefined);
   await Bun.sleep(20);
   expect(streamAborted).toBe(true);
+  expect(calls.some((c) => c[0] === "exec" && c.includes("kill -KILL -- -\"$(cat /tmp/.exec-" + (streamed[0]!.at(-2)!.slice("/tmp/.exec-".length)).replace(/\.pid$/, "") + '.pid)" 2>/dev/null; rm -f ' + streamed[0]!.at(-2)!))).toBe(true);
 });
 
 test("snapshot clones the workspace, restore puts it back, and both need the lock", async () => {
@@ -229,13 +230,50 @@ test("snapshot clones the workspace, restore puts it back, and both need the loc
   expect((await api(`/sess-snap01/snapshots/${snap.id}/restore`, "POST")).status).toBe(500);
 });
 
-// Real machine: opt-in only (STACK_REAL_SANDBOX_TESTS=1 with the container system running and the image built).
-test.skipIf(process.env.STACK_REAL_SANDBOX_TESTS !== "1")("real machine: exec prints and exits", async () => {
+// Real machine: opt-in only (STACK_REAL_SANDBOX_TESTS=1 with the container system running and the image built as maipai-sandbox:local).
+const realOn = process.env.STACK_REAL_SANDBOX_TESTS === "1";
+const collect = async (stream: AsyncIterable<ExecChunk>) => { const out: ExecChunk[] = []; for await (const chunk of stream) out.push(chunk); return out; };
+const realService = async () => {
   const { realRunner, realStreamer, defaultConfig } = await import("@/lib/sandbox");
-  const service = new SandboxService(realRunner, { ...defaultConfig(root), startTimeoutMs: 20_000 }, Date.now, realStreamer);
+  return new SandboxService(realRunner, { ...defaultConfig(root), startTimeoutMs: 30_000, pollMs: 500 }, Date.now, realStreamer);
+};
+
+test.skipIf(!realOn)("real machine: exec prints and exits, abort kills the process group, snapshot and restore work", async () => {
+  const service = await realService();
   await service.create({ id: "sess-real001", workspace: work });
   try {
-    const out: ExecChunk[] = []; for await (const chunk of await service.exec("sess-real001", { argv: ["sh", "-c", "echo hi; exit 3"] }, new AbortController().signal)) out.push(chunk);
-    expect(out).toEqual([{ stream: "stdout", text: "hi\n" }, { exit: 3 }]);
+    expect(await collect(await service.exec("sess-real001", { argv: ["sh", "-c", "echo hi; exit 3"] }, new AbortController().signal))).toEqual([{ stream: "stdout", text: "hi\n" }, { exit: 3 }]);
+
+    // Abort: a shell and its child sleep both end (the marker file proves the command ran in the machine).
+    const controller = new AbortController();
+    const stream = (await service.exec("sess-real001", { argv: ["sh", "-c", "echo started; sleep 300 & sleep 301"] }, controller.signal))[Symbol.asyncIterator]();
+    expect(((await stream.next()).value as { text: string }).text).toBe("started\n");
+    controller.abort();
+    while (!(await stream.next()).done) { /* drain to the end, as the route does */ }
+    let left = "x";
+    for (let i = 0; i < 20 && left.trim() !== ""; i++) { await Bun.sleep(500); left = (await collect(await service.exec("sess-real001", { argv: ["sh", "-c", "ps | grep -c '[s]leep 30' || true"] }, new AbortController().signal))).map((c) => ("text" in c ? c.text : "")).join("").trim() === "0" ? "" : "x"; }
+    expect(left).toBe("");
+
+    // Snapshot and restore through the real mount.
+    writeFileSync(join(work, "a.txt"), "one");
+    const snap = await service.snapshot("sess-real001", "before");
+    await collect(await service.exec("sess-real001", { argv: ["sh", "-c", "echo two > /workspace/a.txt; echo x > /workspace/extra.txt"] }, new AbortController().signal));
+    expect(readFileSync(join(work, "a.txt"), "utf8").trim()).toBe("two");
+    await service.restore("sess-real001", snap.id);
+    expect(readFileSync(join(work, "a.txt"), "utf8")).toBe("one");
+    expect(existsSync(join(work, "extra.txt"))).toBe(false);
   } finally { await service.remove("sess-real001"); }
-});
+}, 180_000);
+
+test.skipIf(!realOn)("real machine: a machine whose lock marker is missing refuses exec, snapshot and restore", async () => {
+  const service = await realService();
+  await service.create({ id: "sess-real002", workspace: work });
+  try {
+    const snap = await service.snapshot("sess-real002", "ok");
+    const { realRunner } = await import("@/lib/sandbox");
+    await realRunner(["exec", "--user", "root", machineName("sess-real002"), "rm", "-f", "/run/sandbox-lock-ok"]);
+    await expect(service.exec("sess-real002", { argv: ["echo", "hi"] }, new AbortController().signal)).rejects.toMatchObject({ code: "lock_failed" });
+    await expect(service.snapshot("sess-real002", "x")).rejects.toMatchObject({ code: "lock_failed" });
+    await expect(service.restore("sess-real002", snap.id)).rejects.toMatchObject({ code: "lock_failed" });
+  } finally { await service.remove("sess-real002"); }
+}, 120_000);

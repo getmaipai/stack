@@ -33,6 +33,9 @@ export class SandboxError extends Error {
 }
 
 export interface RunResult { code: number; stdout: string; stderr: string }
+/** Runs the command in its own session, in the background so busybox setsid does not fork (the exit status is the command's), and waits for it. */
+export const SANDBOX_EXEC_WRAPPER = 'p="$1"; shift; setsid sh -c \'echo $$ > "$1"; shift; exec "$@"\' sandbox-exec "$p" "$@" & wait $!';
+
 /** The one place the `container` program is called. Tests pass a fake. */
 export type ContainerRunner = (args: string[], options?: { timeoutMs?: number }) => Promise<RunResult>;
 
@@ -323,10 +326,18 @@ export class SandboxService {
       cwd = clean.replace(/\/+$/, "") || WORKSPACE_MOUNT;
     }
     const entry = await this.needLocked(id);
-    const args = ["exec", "--user", "agent", "--workdir", cwd, ...Object.entries(request.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]), entry.machine, ...argv];
-    const stream = this.stream;
+    // Killing the host's `container exec` client does not end the command inside the machine, so the command starts in its own
+    // process group (setsid) whose id is written to a file; an abort then kills that group in the machine too.
+    const pidFile = `/tmp/.exec-${randomBytes(8).toString("hex")}.pid`;
+    const wrapped = ["sh", "-c", SANDBOX_EXEC_WRAPPER, "sandbox-exec", pidFile, ...argv];
+    const args = ["exec", "--user", "agent", "--workdir", cwd, ...Object.entries(request.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]), entry.machine, ...wrapped];
+    const stream = this.stream; const run = this.run; const machine = entry.machine;
     const touch = () => { try { this.touch(id); } catch { /* removed mid-run */ } };
-    return (async function* () { for await (const chunk of stream(args, signal)) { touch(); yield chunk; } })();
+    const killInMachine = () => run(["exec", "--user", "agent", machine, "sh", "-c", `kill -KILL -- -"$(cat ${pidFile})" 2>/dev/null; rm -f ${pidFile}`]).catch(() => undefined);
+    return (async function* () {
+      try { for await (const chunk of stream(args, signal)) { touch(); yield chunk; } }
+      finally { if (signal.aborted) await killInMachine(); else await run(["exec", "--user", "agent", machine, "rm", "-f", pidFile]).catch(() => undefined); }
+    })();
   }
 
   private snapshotRoot(): string { return this.config.snapshotRoot ?? join(this.config.codingRoot, ".snapshots"); }
