@@ -40,7 +40,7 @@ function target(noun: string, previous: Topic | null, what: string): Target {
 }
 
 const REBOOT = /\b(reboot|restart|shut ?down|power off|power cycle)\b.*\b(computer|pc|laptop|mac|macbook|machine|studio|mac mini)\b/;
-const REMOVE = /\b(delete|remove|uninstall|erase|wipe|get rid of)\b.*\b(model|models|weights|27b|122b|ornith|qwen|file|files|engine)\b/;
+const REMOVE = /\b(delete|remove|uninstall|erase|wipe|get rid of)\b.*\b(model|models|weights|27b|qwen|file|files|engine)\b/;
 const SECRET = /\b(password|passcode|token|api key|secret|credential)s?\b/;
 
 /** Words that make a message a definition question ("what is", "what does ... mean", "explain"). */

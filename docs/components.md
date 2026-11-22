@@ -58,9 +58,7 @@ Engines per platform:
 | p64 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M | 15.33 GB | not measured | not measured | Apache-2.0 | unsloth/Qwen3.8-27B-GGUF @ 4ca720788d1e01f1bff70c033e0d0028fd02e502 | pinned |
 | p128 | on demand | `qwen3.8-27b-ud-q4-k-m` | UD-Q4_K_M | 15.33 GB | not measured | not measured | Apache-2.0 | unsloth/Qwen3.8-27B-GGUF @ 4ca720788d1e01f1bff70c033e0d0028fd02e502 | pinned |
 
-Also pinned, started only when chosen (Home's "load this model"): `ornith-1-5-122b-mlx-4bit` (MLX-4bit, 64.86 GB, MIT, ezoushen/ornith-1.5-122b-mlx-4bit @ e30487752c2fcb9157ec970060a2a018be94563c, optional p128 coding choice; not selected by default).
-
-Installed beside the model, never selected on its own: `qwen3.8-27b-dflash2-draft` (draft, 3.58 GB, Apache-2.0, incoai/Qwen3.8-27B-DFlash2 @ 015e795645c74b1a0eeef3b570031fb62e769bc5); `ornith-1-5-122b-dflash2-draft` (draft, 1.73 GB, Apache-2.0, incoai/Ornith-1.5-122B-DFlash2 @ 9baefc1bec85c08193ab442e0ca5f7057669b61d).
+Installed beside the model, never selected on its own: `qwen3.8-27b-dflash2-draft` (draft, 3.58 GB, Apache-2.0, incoai/Qwen3.8-27B-DFlash2 @ 015e795645c74b1a0eeef3b570031fb62e769bc5).
 
 ## judge (Judge)
 

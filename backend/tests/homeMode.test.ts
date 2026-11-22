@@ -104,7 +104,7 @@ test("coding requests get medium and the configured ceiling while chat requests 
   expect(applyHomeModeCodingDefaults("coding", { messages: [] })).toMatchObject({ reasoning_effort: "medium", thinking_budget_tokens: 2000 });
   expect(applyHomeModeCodingDefaults("chat", { messages: [], reasoning_effort: "none" })).toEqual({ messages: [], reasoning_effort: "none" });
   const forwarded: Array<Record<string, unknown>> = [];
-  setSupervisorFactoryForTests(async (role) => scriptedProcess(role, { modelId: "ornith-1-5-122b-mlx-4bit", client: {
+  setSupervisorFactoryForTests(async (role) => scriptedProcess(role, { modelId: "qwen3.8-27b-ud-q4-k-m", client: {
     baseUrl: "scripted://coding",
     request: async (_path, body) => { forwarded.push(body); return { status: 200, body: { choices: [{ message: { content: "ok" } }] } }; },
     health: async () => true,
@@ -174,7 +174,7 @@ test("leaving coding mode, chat resolves to its own model while the residents st
   let during: string | undefined = "unset"; let processRole = "";
   runtime.startResidents = async () => { during = selectedModel("chat")?.id; processRole = processRoleFor("chat"); };
   await switchHomeMode("normal");
-  expect(during).not.toBe("ornith-1-5-122b-mlx-4bit");
+  expect(during).not.toBe("qwen3.8-27b-ud-q4-k-m");
   expect(processRole).toBe("chat");
 });
 

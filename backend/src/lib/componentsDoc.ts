@@ -55,7 +55,7 @@ function minimumProfileIndex(model: CatalogModelLike): number {
   return index < 0 ? PROFILE_ORDER.length - 1 : index;
 }
 function fits(model: CatalogModelLike, profile: ProfileTier): boolean {
-  return PROFILE_ORDER.indexOf(profile.id) >= minimumProfileIndex(model) && !(model.role === "coding" && model.id === "ornith-1-5-122b-mlx-4bit");
+  return PROFILE_ORDER.indexOf(profile.id) >= minimumProfileIndex(model);
 }
 /** The largest pin that fits: the highest minimum profile, then the
  * biggest file, never the array's order. */

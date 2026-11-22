@@ -42,7 +42,7 @@ The launch passes `--model <repo> --model-dir <gguf> --draft-model <draft folder
 
 - **Split GGUF.** The weights are three parts (93.68 GB together). They are one directory model: the existing `download.files` list pins each part by size and sha256, the first part is the pin's file, and the parts land in one folder. Splash is given the first part and reads the others beside it. No new download code.
 - **Memory.** Measured on a 128 GB M5 Max with Splash 1.7.0: 70 GB loaded at a 32K window, 74 GB after long code replies, 81 tokens per second, first token 1.13 s on a 6,400-token prompt. Splash keeps about 27 GB of the weights on the SSD, so the estimate counts only the rest (`ssdBytes` in the list). The pin fixes the window at 32,768 (`launch.contextLength`); the launch budget is the estimate plus the headroom setting.
-- **Tier.** A Max chat candidate on p128 (peak 75 GB, measured), listed after Ornith so it is never the recommendation, and excluded from the automatic ladder. It runs alone: Max drains the other loads first. Home chooses it by sending its id.
+- **Tier.** A Max chat candidate on p128 (peak 75 GB, measured), the only Max chat candidate since Ornith was retired (2026-11-21), and excluded from the automatic ladder (the planner never upgrades chat to it on its own). It runs alone: Max drains the other loads first. Home chooses it by sending its id.
 - **Adopting files already on the disk.** Before the install job runs, put (hardlink or move) each part at `<data dir>/models/<model id>/Qwen3.8-Flash-Next-UD-IQ4_XS/unsloth-UD-IQ4_XS/<part name>` and the draft's `config.json` and `model.safetensors` at `<data dir>/models/<draft id>/Qwen3.8-Flash-Next-DFlash2/`. The install hashes each file, fetches only what is missing or wrong, and nothing is downloaded when all match.
 
 ## Not verified without a live install
@@ -51,7 +51,7 @@ The pins, optional plan rows, selection by setting, launch arguments, prepare st
 
 ### Coding mode and Max chat load Flash Next
 
-Home's Max chat is a lease on the coding mode, which loads the big model. `codingModeHeavy()` in `splashStore.ts` is the one place that picks it: Flash Next when it and its draft are installed and verified, otherwise Ornith as before. The mode's checks, memory plan, post-load check and launch all follow that pick; the unload-residents, post-load check and return-on-failure steps are unchanged. The coding launch keeps Flash Next's pinned 32K window instead of the coding setting's 131,072 (larger windows are unmeasured). Whether 32K is enough for long repository work is open: the 5-task repo check ran at 32K, and the window is shared by the coding slots.
+Home's Max chat is a lease on the coding mode, which loads the big model. `codingModeHeavy()` in `splashStore.ts` is the one place that picks it: Flash Next when it and its draft are installed and verified, otherwise the everyday coding pair (Qwen3.8 27B and its draft). History: Ornith 1.5 122B was the fallback until the owner retired it on 2026-11-21; `retiredModels.ts` lists it for cleanup only. The mode's checks, memory plan, post-load check and launch all follow that pick; the unload-residents, post-load check and return-on-failure steps are unchanged. The coding launch keeps Flash Next's pinned 32K window instead of the coding setting's 131,072 (larger windows are unmeasured). Whether 32K is enough for long repository work is open: the 5-task repo check ran at 32K, and the window is shared by the coding slots.
 
 ### Admission of Flash Next (measured peak)
 

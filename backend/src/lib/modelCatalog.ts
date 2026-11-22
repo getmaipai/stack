@@ -182,7 +182,7 @@ export const STACK_CHAT_QWEN38_FLASH_NEXT_MODEL: CatalogModelLike = {
   license: "qwen-community-1.0",
   revision: FLASH_NEXT_REVISION,
   engine: "splash",
-  // 2026-11-21, provisional: 5 of 5 on a five-task repo coding check (the uncensored Ornith GGUF got 3 of 5), 81 tokens/s, 70 to 74 GB at 32K. Coding mode loads it instead of Ornith when it and its draft are installed; the window stays at the pinned 32K (larger windows are unmeasured).
+  // 2026-11-21, provisional: 5 of 5 on a five-task repo coding check 81 tokens/s, 70 to 74 GB at 32K. Coding mode loads it when it and its draft are installed, and the everyday coding model (Qwen3.8 27B) when they are not; the window stays at the pinned 32K (larger windows are unmeasured).
   modeVerdict: "offer_with_limits",
   companions: ["qwen3-8-flash-next-177b-dflash2-draft"],
   sizing: { profile: "p128", quantization: "UD-IQ4_XS" },
@@ -309,84 +309,6 @@ export const STACK_CODING_DRAFT_MODEL: CatalogModelLike = {
     files: [
       { path: "config.json", sha256: "873e3556509b0da06e29654ba00d4944888d4b5e8a33afde25f7eb27d321e980", bytes: 1_239 },
       { path: "model.safetensors", sha256: "67fc76d68dc5a9415511a4f394ef744d67510cd20e93b37cc2cc7d28e4bab65c", bytes: 3_848_817_896 },
-    ],
-  },
-};
-
-// Home's optional p128 coding choice: Ornith-1.5-122B in MLX 4-bit, pinned
-// from verified files (MIT). Its model-card sampling is for precise coding
-// tasks; Home's first-run plan and default selection remain the 27B model.
-export const ORNITH_122B_REPO = "ezoushen/ornith-1.5-122b-mlx-4bit";
-const ORNITH_122B_REVISION = "e30487752c2fcb9157ec970060a2a018be94563c";
-export const ORNITH_122B_DRAFT_REPO = "incoai/Ornith-1.5-122B-DFlash2";
-const ORNITH_122B_DRAFT_REVISION = "9baefc1bec85c08193ab442e0ca5f7057669b61d";
-
-export const STACK_CODING_HEAVY_MODEL: CatalogModelLike = {
-  id: "ornith-1-5-122b-mlx-4bit",
-  role: "coding",
-  repo: ORNITH_122B_REPO,
-  license: "MIT",
-  revision: ORNITH_122B_REVISION,
-  engine: "splash",
-  // 2026-10-22, provisional: measured on a 128 GB machine through a real mode switch (self-test with a tool call and a thinking
-  // turn, hard coding tasks the 27B fails, a coding task through Home's gateway). The household chat bench (CHAT-AB-01: tool
-  // decision, repetition, companion voice, contention) is still owed, so minors keep thinking off and no tools (rule 8).
-  modeVerdict: "offer_with_limits",
-  companions: ["ornith-1-5-122b-dflash2-draft"],
-  sizing: { profile: "p128", quantization: "MLX-4bit" },
-  download: {
-    url: hfUrl(`${ORNITH_122B_REPO}/resolve/${ORNITH_122B_REVISION}/model-00013-of-00014.safetensors`),
-    sha256: "42e689b43451bc89f5c6340d291b2a19723baa90da243da47516ec384e1f67fb",
-    approx_bytes: 69642918741,
-    directory: "Ornith-1.5-122B-MLX-4bit",
-    files: [
-      { path: "chat_template.jinja", sha256: "8b4d21a1e70ccbc8849e5e5e6dd32f3acfb2e2060739475909edc6e9b27c7165", bytes: 7_594 },
-      { path: "config.json", sha256: "6de6931334221a4783c5d27f8b379bf72571f1d357e67bbd07c6f06b314c67b9", bytes: 23_357 },
-      { path: "merges.txt", sha256: "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d", bytes: 3_353_259 },
-      { path: "model-00001-of-00014.safetensors", sha256: "e862bf75c1099ca1acf55532a91e1b5f8307f4e9d428aec8f1842d050ccce587", bytes: 5_172_126_621 },
-      { path: "model-00002-of-00014.safetensors", sha256: "9ad63e3052915e6a663e412b20c2bbf3aeb2720ffbe440145b4fa42a0ce1a701", bytes: 5_201_327_902 },
-      { path: "model-00003-of-00014.safetensors", sha256: "1ce16e6c33c4bf74ab84fa6a844228015efdc7607bd3d2f858671ecb6fe96df6", bytes: 5_150_926_576 },
-      { path: "model-00004-of-00014.safetensors", sha256: "12198e1aeb861366429145bfd2f76dcfdd61b381f3a1ba06fc77b6c86c83a290", bytes: 5_201_328_136 },
-      { path: "model-00005-of-00014.safetensors", sha256: "da94add39a40e81db85eef8e1f8a00d7ee5c7e9faea1f3e559cae4d6754d1fbe", bytes: 5_201_328_104 },
-      { path: "model-00006-of-00014.safetensors", sha256: "f090a3b7aa288d9a9c5f891a87751f6cba7632c1ed306467077c215a181478c3", bytes: 5_145_298_568 },
-      { path: "model-00007-of-00014.safetensors", sha256: "1becd66dc1049f1646db52aa63f152898c3112aaebcf3deb38be2353c3980acf", bytes: 5_201_328_160 },
-      { path: "model-00008-of-00014.safetensors", sha256: "e23615aff25fb72d15bc6e409e7feb13e6bdd2d99c1c85d707c22e9c0717d009", bytes: 5_201_328_072 },
-      { path: "model-00009-of-00014.safetensors", sha256: "e3c6d94acc72f44976f29d2c1abfde075d6d56481decff13fa1a4063f81824c7", bytes: 5_145_298_550 },
-      { path: "model-00010-of-00014.safetensors", sha256: "bf24388b98f03ee88dc60ff2a815752d576b2f6b7527e57dceae19c4dceeadd4", bytes: 5_201_328_156 },
-      { path: "model-00011-of-00014.safetensors", sha256: "78b742e08c5d2f93cf530d67f73f008729232271d036fc41bb8afb891641366c", bytes: 5_201_328_064 },
-      { path: "model-00012-of-00014.safetensors", sha256: "6a80e29e9325af175fa0bfe19d055f486b1109c5ebb859498bd8b0190aad3ad7", bytes: 5_145_298_572 },
-      { path: "model-00013-of-00014.safetensors", sha256: "42e689b43451bc89f5c6340d291b2a19723baa90da243da47516ec384e1f67fb", bytes: 5_201_328_180 },
-      { path: "model-00014-of-00014.safetensors", sha256: "8c9601642ce7e20407500dece66b58c61f84a1b2239ffcb5f850a82d5466d7e4", bytes: 1_340_387_394 },
-      { path: "model-vision.safetensors", sha256: "97095a5a86d7da387057f1be4f2ccf8d6479b0f985a5d486a00a3751fef4f4a0", bytes: 902_618_768 },
-      { path: "model.safetensors.index.json", sha256: "deea07c02a2b760c991d27e5646c3c42bae8d5fa8a4a63be349f95655485f3a1", bytes: 240_719 },
-      { path: "preprocessor_config.json", sha256: "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516", bytes: 390 },
-      { path: "tokenizer.json", sha256: "a5cd9732badce41de57e6efce8302930ded1c1188c5f81feb2bd6c24c4a1941f", bytes: 19_989_339 },
-      { path: "tokenizer_config.json", sha256: "86f01837a638275f2d3479804e79802aaff0e3ccef15e5f29dd6afbe6551daed", bytes: 1_501 },
-      { path: "vocab.json", sha256: "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003", bytes: 6_722_759 },
-    ],
-  },
-  sampling: { temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 0.0, source: "ornith-ai/Ornith-1.5-122B model card, precise coding tasks" },
-};
-
-// The pinned Apache-2.0 DFlash2 companion uses verified files and is installed
-// only with the optional p128 Ornith coding model.
-export const STACK_CODING_HEAVY_DRAFT_MODEL: CatalogModelLike = {
-  id: "ornith-1-5-122b-dflash2-draft",
-  role: "coding",
-  component: "draft",
-  repo: ORNITH_122B_DRAFT_REPO,
-  license: "Apache-2.0",
-  revision: ORNITH_122B_DRAFT_REVISION,
-  engine: "splash",
-  sizing: { profile: "p128", quantization: "BF16" },
-  download: {
-    url: hfUrl(`${ORNITH_122B_DRAFT_REPO}/resolve/${ORNITH_122B_DRAFT_REVISION}/model.safetensors`),
-    sha256: "448fed97ee07d1bd2ab2550231ceeb6272f7c846903bac46060757757227b05f",
-    approx_bytes: 1860569628,
-    directory: "Ornith-1.5-122B-DFlash2",
-    files: [
-      { path: "config.json", sha256: "f85c6e9f50a2f9bd5cc6d855569de90e96dd697a6c4a9f6911f19244bf361f52", bytes: 1_292 },
-      { path: "model.safetensors", sha256: "448fed97ee07d1bd2ab2550231ceeb6272f7c846903bac46060757757227b05f", bytes: 1_860_568_336 },
     ],
   },
 };
@@ -1668,7 +1590,7 @@ export const STACK_WAKEWORD_MODELS: CatalogModelLike[] = [
 
 // Every pinned model this build ships, by role. The Catalog's signed
 // index replaces this list as the source at STACK-97's model half.
-export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS, ...STACK_TTS_VOXCPM2_MODELS, ...STACK_TTS_VOXCPM2_STT_MODELS];
+export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT_QWEN36_35B_MODEL, STACK_CHAT_QWEN36_35B_PROJECTOR, STACK_CHAT_QWEN38_UNCENSORED_MODEL, STACK_CHAT_QWEN38_UNCENSORED_PROJECTOR, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, STACK_JUDGE_MODEL, STACK_CODING_MODEL, STACK_CODING_DRAFT_MODEL, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_VAD_MODEL, STACK_DIARIZATION_SEGMENTATION_MODEL, STACK_DIARIZATION_EMBEDDING_MODEL, STACK_ENDPOINT_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_RECORDED_SPEECH_MODEL, STACK_DEREVERB_MODEL, STACK_IMAGE_MODEL, ...STACK_IMAGE_TOOL_MODELS, ...STACK_LIVEPORTRAIT_MODELS, ...STACK_IMAGE_ENGINE_MODELS, ...STACK_IMAGE_H3_MODELS, ...STACK_IMAGE_RESTORE_MODELS, ...STACK_VIDEO_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, ...STACK_MUSIC_XL_MODELS, ...STACK_MUSIC_MAX_MODELS, ...STACK_STEMS_MODELS, ...STACK_ALIGN_MODELS, ...STACK_SFX_MODELS, ...STACK_VOICE_CONVERT_MODELS, STACK_EMBED_MODEL, STACK_VISION_MODEL, STACK_VISION_PROJECTOR, STACK_CHAT_VL_8B_MODEL, STACK_CHAT_VL_8B_PROJECTOR, ...STACK_WAKEWORD_MODELS, ...STACK_TTS_VOXCPM2_MODELS, ...STACK_TTS_VOXCPM2_STT_MODELS];
 
 // Engines and models named in dev.md or the backlog for a role but not
 // pinned yet: the components inventory lists them as candidates, so a

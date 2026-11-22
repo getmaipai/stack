@@ -11,7 +11,7 @@ import { dataDir } from "@/lib/paths";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { registerCatalogModel, upsertModel } from "@/lib/modelStore";
-import { STACK_CODING_HEAVY_MODEL, STACK_CODING_MODEL, STACK_JUDGE_MODEL } from "@/lib/modelCatalog";
+import { STACK_CODING_MODEL, STACK_JUDGE_MODEL } from "@/lib/modelCatalog";
 import { updateSettings } from "@/settings";
 
 const helperFile = process.argv[2];
@@ -29,12 +29,12 @@ mkdirSync(helperDir, { recursive: true });
 const helperLink = join(helperDir, "model.gguf");
 if (!existsSync(helperLink)) symlinkSync(helperFile, helperLink);
 install(STACK_JUDGE_MODEL, helperLink);
-for (const m of [STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL]) {
-  const dir = join(dataDir, "models", m.id);
+{
+  const dir = join(dataDir, "models", STACK_CODING_MODEL.id);
   mkdirSync(dir, { recursive: true });
   const stand = join(dir, "stand-in.gguf");
   writeFileSync(stand, "");
-  install(m, m.id === STACK_CODING_HEAVY_MODEL.id ? dir : stand);
+  install(STACK_CODING_MODEL, stand);
 }
 updateSettings({ "stack.roles.music.enabled": false });
 console.log(`Seeded ${dataDir}`);

@@ -1,10 +1,10 @@
-// Home's coding mode (the lease Max chat uses) loads Flash Next when it and its draft are installed, and Ornith as before when they are not.
+// Home's coding mode (the lease Max chat uses) loads Flash Next when it and its draft are installed, and the everyday coding pair (Qwen3.8 27B and its draft) when they are not. Ornith was retired 2026-11-21.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ENGINE_READY_MARKER, SPLASH_PIN } from "@/lib/engineCatalog";
 import { engineDir } from "@/lib/engineInstall";
-import { STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT as DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL as FLASH, STACK_CODING_HEAVY_DRAFT_MODEL as ORNITH_DRAFT, STACK_CODING_HEAVY_MODEL as ORNITH } from "@/lib/modelCatalog";
+import { STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT as DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL as FLASH, STACK_CODING_DRAFT_MODEL as CODING_DRAFT, STACK_CODING_MODEL as CODING } from "@/lib/modelCatalog";
 import { clearModelsForTests, upsertModel, type CatalogModelLike } from "@/lib/modelStore";
 import { codingModeHeavy, splashRoot } from "@/lib/splashStore";
 import { currentHomeMode, homeModeView, initializeHomeMode, switchHomeMode } from "@/lib/homeMode";
@@ -49,10 +49,10 @@ afterEach(() => {
   clearModelsForTests(); __resetSettingsForTests(); __resetGovernorForTests();
 });
 
-test("the mode's big model is Flash Next only when it and its draft are both installed; otherwise Ornith, as before", () => {
-  expect(codingModeHeavy()).toEqual({ pin: ORNITH, draftPin: ORNITH_DRAFT });
+test("the mode's big model is Flash Next only when it and its draft are both installed; otherwise the 27B pair", () => {
+  expect(codingModeHeavy()).toEqual({ pin: CODING, draftPin: CODING_DRAFT });
   installPin(FLASH);
-  expect(codingModeHeavy().pin.id).toBe(ORNITH.id);
+  expect(codingModeHeavy().pin.id).toBe(CODING.id);
   installPin(DRAFT);
   expect(codingModeHeavy()).toEqual({ pin: FLASH, draftPin: DRAFT });
   expect(FLASH.modeVerdict).toBe("offer_with_limits");
@@ -70,21 +70,24 @@ test("with Flash Next installed, the mode checks pass on its pieces and its own 
   await switchHomeMode("coding");
   expect(currentHomeMode()).toBe("coding");
   expect(started.find(([role]) => role === "coding")).toEqual(["coding", FLASH.id]);
-  expect(started.some(([, id]) => id === ORNITH.id)).toBe(false);
+  expect(started.some(([, id]) => id === CODING.id)).toBe(false);
   expect(selectedModel("coding")?.id).toBe(FLASH.id);
   expect(selectedModel("chat")?.id).toBe(FLASH.id);
   expect(selectableModels("chat")).toEqual([{ id: FLASH.id, name: FLASH.id }]);
 });
 
-test("without Flash Next installed, the mode loads Ornith exactly as before", async () => {
-  installPin(ORNITH); installPin(ORNITH_DRAFT);
-  await setupHomeModeRuntime("normal");
-  expect(homeModeView().checks.pieces).toBe(true);
-  const started: Array<[string, string | undefined]> = [];
-  setSupervisorFactoryForTests(async (role, modelId) => { started.push([role, modelId]); return scriptedProcess(role, { modelId: modelId ?? role, client: okClient }); });
-  await switchHomeMode("coding");
-  expect(started.find(([role]) => role === "coding")).toEqual(["coding", ORNITH.id]);
-  expect(selectedModel("coding")?.id).toBe(ORNITH.id);
+test("without Flash Next installed, the mode's pick is the 27B, the mode is not offered with a plain reason, and a persisted coding mode restores to Normal without failing start-up", async () => {
+  installPin(CODING); installPin(CODING_DRAFT);
+  const started = performance.now();
+  await setupHomeModeRuntime("coding");
+  await homeModeRestore();
+  expect(performance.now() - started).toBeLessThan(2_000);
+  expect(currentHomeMode()).toBe("normal");
+  expect(homeModeView().available).toBe(false);
+  expect(homeModeView().reason).toMatch(/Flash Next/);
+  expect(homeModeView().reason).not.toMatch(/ornith/i);
+  await expect(switchHomeMode("coding")).rejects.toMatchObject({ name: "HomeModeError" });
+  expect(codingModeHeavy().pin.id).toBe(CODING.id);
 });
 
 test("a Flash Next that does not start returns to the residents and stays in Normal mode", async () => {
@@ -102,15 +105,14 @@ test("a Flash Next that does not start returns to the residents and stays in Nor
   expect(selectedModel("coding")?.id).not.toBe(FLASH.id);
 });
 
-test("the coding launch keeps Flash Next's pinned 32K window, Ornith keeps the coding setting's window", async () => {
-  installPin(FLASH); installPin(DRAFT); installPin(ORNITH); installPin(ORNITH_DRAFT);
+test("the coding launch keeps Flash Next's pinned 32K window", async () => {
+  // The everyday coding pair is installed on every hub; it is what makes Splash the coding engine.
+  installPin(FLASH); installPin(DRAFT); installPin(CODING); installPin(CODING_DRAFT);
   const { getModel } = await import("@/lib/modelStore");
   const plan = await launchPlan("coding", getModel(FLASH.id)!, 8812);
   expect(plan.contextLength).toBe(32_768);
   expect(plan.command[plan.command.indexOf("--max-context") + 1]).toBe("32768");
   expect(plan.command).toContain("--model-dir");
-  const ornith = await launchPlan("coding", getModel(ORNITH.id)!, 8813);
-  expect(ornith.contextLength).toBe(131_072);
 });
 
 // STACK-START-01: the daemon awaited the restore of a persisted coding mode before it listened, so /healthz was silent for the minutes the

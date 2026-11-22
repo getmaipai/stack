@@ -35,7 +35,7 @@ import { OmlxEngineClient } from "@/chat/omlxClient";
 import { CHAT_ENGINE_SETTING, clearChatEngineFailures, FALLBACK_AFTER_FAILURES, markChatEngineFailed, resolveChatEngine, type ChatEngineChoice, type ChatEngineId } from "@/lib/chatEngines";
 import { clearTtsEngineFailures, isVoxcpm2Engine, markTtsEngineFailed, resolveTtsEngine, TTS_ENGINE_SETTING, TTS_ENGINES, type TtsEngineChoice, type TtsEngineId } from "@/speech/ttsEngines";
 import { HELPER_CONTEXT_TOKENS } from "@/lib/helperTools";
-import { STACK_HELPER_MODEL_ID, STACK_CODING_DRAFT_MODEL, voxcpm2PackFor, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
+import { STACK_HELPER_MODEL_ID, STACK_CODING_DRAFT_MODEL, voxcpm2PackFor, STACK_CODING_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS } from "@/lib/modelCatalog";
 import { clearCodingEngineFailures, codingEngineFailure, CODING_ENGINE_SETTING, markCodingEngineFailed, resolveCodingEngine, splashChatMemoryPlan, splashEnv, splashFootprintEstimateBytes, type CodingEngineChoice, type SplashFacts } from "@/lib/splash";
 import { layOutSplashCache, SplashLayoutError, splashDirs, splashLocalModelFor, splashPairFor, splashResidentWeightsBytes, splashMeasuredPeakBytes, codingModeHeavy } from "@/lib/splashStore";
 import { TreeSnapshot, treeMemoryBytes } from "@/lib/processTree";
@@ -961,12 +961,11 @@ export function selectedModel(role: RoleId): ModelRecord | null {
   // decides which records can serve it (a GGUF for llama-server, an MLX
   // directory for mlx-serve), both installed side by side.
   const engine = recordEngineFor(role);
-  const selectable = listModels().filter((model) => servesRole(model, role, engine) && (role !== "coding" || (model.id !== STACK_CODING_HEAVY_MODEL.id || machineTier === "p128")));
+  const selectable = listModels().filter((model) => servesRole(model, role, engine));
   // The session's "load this" first, then the choice Home stored in the setting (it survives a restart).
   const stored = role === "chat" ? String(settingValues()["stack.engines.chat.model"] ?? "") : role === "coding" ? String(settingValues()["stack.engines.coding.model"] ?? "") : "";
   const preferred = preferredModels.get(role) ?? (stored || undefined);
-  const codingPreference = role === "coding" ? preferred : undefined;
-  const candidates = role === "coding" ? selectable.filter((model) => model.id !== STACK_CODING_HEAVY_MODEL.id || (machineTier === "p128" && codingPreference === STACK_CODING_HEAVY_MODEL.id)) : selectable;
+  const candidates = selectable;
   const profileModel = machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.[role] : undefined;
   return candidates.find((model) => model.id === preferred) ?? candidates.find((model) => model.id === profileModel) ?? candidates[0] ?? null;
 }
@@ -978,7 +977,7 @@ export function selectableModels(role: RoleId): Array<{ id: string; name: string
   if (currentHomeMode() === "coding" && ["chat", "judge", "router"].includes(role)) return selectedModel("chat") ? [{ id: codingModeHeavy().pin.id, name: codingModeHeavy().pin.id }] : [];
   const engine = recordEngineFor(role);
   return listModels()
-    .filter((model) => servesRole(model, role, engine) && (role !== "coding" || model.id !== STACK_CODING_HEAVY_MODEL.id || machineTier === "p128"))
+    .filter((model) => servesRole(model, role, engine))
     .map(({ id }) => ({ id, name: id }));
 }
 

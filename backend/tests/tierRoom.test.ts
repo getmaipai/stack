@@ -11,7 +11,7 @@ import { tierCandidateLists, tierCapBytes, TIER_CAP_FRACTIONS, TIER_CANDIDATES }
 
 const GB = 1_000_000_000;
 const LTX_MAX = "ltx-2-5-bf16-distilled-mlx-max";
-const ORNITH = "ornith-1-5-122b-mlx-4bit";
+const FLASH_NEXT = "qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs";
 const WAN = "fastwan2-2-ti2v-5b-mlx-bf16";
 
 beforeEach(() => { __resetGovernorForTests(); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" }); });
@@ -28,7 +28,7 @@ async function loadChatSet(chatPeakBytes = 22_500_000_000): Promise<void> {
 const level = (lists: ReturnType<typeof tierCandidateLists>, tier: "standard" | "boost" | "max") => lists.find((item) => item.tier === tier)!;
 const row = (lists: ReturnType<typeof tierCandidateLists>, tier: "standard" | "boost" | "max", id: string) => level(lists, tier).candidates.find((item) => item.id === id)!;
 
-test("with the Standard chat set resident on p128 the Max room counts what Reduced frees, and LTX-2.5 Max and Ornith fit Max", async () => {
+test("with the Standard chat set resident on p128 the Max room counts what Reduced frees, and LTX-2.5 Max and Flash Next fit Max", async () => {
   await loadChatSet();
   const resident = tierRoomBytes();
   const max = tierRoomBytes("max");
@@ -44,7 +44,7 @@ test("with the Standard chat set resident on p128 the Max room counts what Reduc
   expect(level(video, "max").capBytes).toBe(max);
   expect(row(video, "max", LTX_MAX)).toMatchObject({ peakBytes: 61_500_000_000, fits: true, refusal: null });
   const chat = tierCandidateLists("chat", "p128", resident, reducedRoomBytes());
-  expect(row(chat, "max", ORNITH)).toMatchObject({ peakBytes: 68_700_000_000, fits: true, refusal: null });
+  expect(row(chat, "max", FLASH_NEXT)).toMatchObject({ peakBytes: 75_000_000_000, fits: true, refusal: null });
   // The governor gives the same answer for a household Max job, and a dev job is still sized from the resident room.
   expect(fitsEverForTier({ id: "ltx", role: "video", kind: "generator", requestedBytes: 61_500_000_000, tier: "max" })).toMatchObject({ fits: true, capBytes: max });
   expect(fitsEverForTier({ id: "ltx-dev", role: "video", kind: "generator", requestedBytes: 61_500_000_000, tier: "max", caller: "dev" }).capBytes).toBe(resident);
@@ -79,7 +79,7 @@ test("the candidates route and the capabilities answer are built from the Max ro
   // Video's only Standard candidate (Wan) is above the Standard cap and its Max candidate fits the Max room: Standard false with the need stated, Max true.
   expect(get("video", "standard")).toMatchObject({ fits_ever: false, needs_bytes: 25_400_000_000, model: null });
   expect(get("video", "max")).toMatchObject({ fits_ever: true, needs_bytes: 61_500_000_000, model: LTX_MAX, cap_bytes: Math.round(tierRoomBytes("max")) });
-  expect(get("chat", "max")).toMatchObject({ fits_ever: true, model: ORNITH });
+  expect(get("chat", "max")).toMatchObject({ fits_ever: true, model: FLASH_NEXT });
   for (const category of ["chat", "image", "video", "music", "voice"]) {
     const caps = ["standard", "boost", "max"].map((tier) => get(category, tier).cap_bytes);
     expect(caps[0]!).toBeLessThanOrEqual(caps[1]!);

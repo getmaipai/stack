@@ -16,7 +16,7 @@ import { __resetGovernorForTests } from "@/lib/governor";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
 import { __resetAppleChipForTests, __setAppleChipForTests, parseAppleChip, type HardwareInfo } from "@/lib/hardware";
 import { buildInstallPlan, plannedPinsFor } from "@/lib/installPlan";
-import { QWEN38_27B_DRAFT_REPO, STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
+import { QWEN38_27B_DRAFT_REPO, STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_MODELS } from "@/lib/modelCatalog";
 import { clearModelsForTests, getModel, installCatalogModel, removeModel, upsertModel } from "@/lib/modelStore";
 import { modelsDir } from "@/lib/paths";
 import { PROFILE_TIERS } from "@/profiles";
@@ -190,30 +190,16 @@ test("the draft is a pinned component of the coding model: a directory of two ve
   for (const file of draft.download!.files!) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
   // The coding model names it, so the two install and remove together; no other pin names it.
   expect(STACK_CODING_MODEL.companions).toEqual([draft.id]);
-  expect(STACK_MODELS.filter((pin) => pin.id === STACK_CODING_MODEL.id || pin.id === STACK_CODING_HEAVY_MODEL.id).map((pin) => pin.id)).toEqual([STACK_CODING_MODEL.id, STACK_CODING_HEAVY_MODEL.id]);
+  expect(STACK_MODELS.filter((pin) => pin.id === STACK_CODING_MODEL.id).map((pin) => pin.id)).toEqual([STACK_CODING_MODEL.id]);
   expect(STACK_MODELS.filter((pin) => pin.id === draft.id)).toHaveLength(1);
   // A component is never selected as a model.
   expect(draft.component).toBe("draft");
 });
 
-test("Ornith heavy pins are fully hashed multi-file p128 coding records and stay out of first-run plans", () => {
-  for (const pin of [STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL]) {
-    expect(pin.revision).toMatch(/^[0-9a-f]{40}$/);
-    expect(pin.download!.sha256).toMatch(/^[0-9a-f]{64}$/);
-    const files = pin.download!.files!;
-    expect(new Set(files.map((file) => file.path)).size).toBe(files.length);
-    for (const file of files) expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(pin.download!.approx_bytes).toBe(files.reduce((sum, file) => sum + file.bytes, 0));
-    expect(STACK_MODELS).toContain(pin);
-  }
-  expect(STACK_CODING_HEAVY_MODEL).toMatchObject({ id: "ornith-1-5-122b-mlx-4bit", role: "coding", engine: "splash", license: "MIT", sizing: { profile: "p128", quantization: "MLX-4bit" } });
-  expect(STACK_CODING_HEAVY_DRAFT_MODEL).toMatchObject({ id: "ornith-1-5-122b-dflash2-draft", component: "draft", license: "Apache-2.0" });
-  expect(STACK_CODING_HEAVY_MODEL.companions).toEqual([STACK_CODING_HEAVY_DRAFT_MODEL.id]);
-  for (const tier of PROFILE_TIERS) {
-    const planIds = plannedPinsFor(tier).map(({ pin }) => pin.id);
-    expect(planIds).not.toContain(STACK_CODING_HEAVY_MODEL.id);
-    expect(planIds).not.toContain(STACK_CODING_HEAVY_DRAFT_MODEL.id);
-  }
+test("Ornith is retired: no pin, no first-run plan row, the 27B is the only coding model", () => {
+  expect(STACK_MODELS.filter((pin) => pin.id.startsWith("ornith"))).toEqual([]);
+  expect(STACK_MODELS.filter((pin) => pin.role === "coding" && !pin.component).map((pin) => pin.id)).toEqual([STACK_CODING_MODEL.id]);
+  for (const tier of PROFILE_TIERS) expect(plannedPinsFor(tier).map(({ pin }) => pin.id).filter((id) => id.startsWith("ornith"))).toEqual([]);
 });
 
 test("Splash is a pinned engine build for macOS on Apple silicon, found by name, serving the coding role", () => {
@@ -385,17 +371,17 @@ macTest("the coding model serves both engines: it is still the selected model wh
   expect(selectedModel("coding")?.id).toBe("qwen3.8-27b-ud-q4-k-m");
 });
 
-test("the heavy coding target requires its p128 preference; defaults remain the 27B", () => {
+test("a leftover Ornith record is never selectable, on any tier, and the 27B stays the coding model", () => {
   setMachineTier("p128");
   installCodingRecords();
-  upsertModel({ id: STACK_CODING_HEAVY_MODEL.id, roles: ["coding"], source: "catalog", provenance: {}, revision: STACK_CODING_HEAVY_MODEL.revision!, sha256: STACK_CODING_HEAVY_MODEL.download!.sha256, licence: "MIT", verifiedAt: new Date().toISOString(), modelPath: "/tmp/ornith-heavy" });
+  upsertModel({ id: "ornith-1-5-122b-mlx-4bit", roles: ["coding"], source: "catalog", provenance: {}, revision: "r", sha256: "a".repeat(64), licence: "MIT", verifiedAt: new Date().toISOString(), modelPath: "/tmp/ornith-leftover" });
   expect(selectedModel("coding")?.id).toBe("qwen3.8-27b-ud-q4-k-m");
-  expect(selectableModels("coding").map(({ id }) => id)).toContain(STACK_CODING_HEAVY_MODEL.id);
-  preferModel("coding", STACK_CODING_HEAVY_MODEL.id);
-  expect(selectedModel("coding")?.id).toBe(STACK_CODING_HEAVY_MODEL.id);
+  expect(selectableModels("coding").map(({ id }) => id)).not.toContain("ornith-1-5-122b-mlx-4bit");
+  preferModel("coding", "ornith-1-5-122b-mlx-4bit");
+  expect(selectedModel("coding")?.id).toBe("qwen3.8-27b-ud-q4-k-m");
+  preferModel("coding", null);
   for (const tier of ["p16", "p32", "p64"] as const) {
     setMachineTier(tier);
-    expect(selectableModels("coding").map(({ id }) => id)).not.toContain(STACK_CODING_HEAVY_MODEL.id);
     expect(selectedModel("coding")?.id).toBe("qwen3.8-27b-ud-q4-k-m");
   }
 });
@@ -530,16 +516,6 @@ test("removing the coding model or its draft removes the layout, so the disk is 
   expect(() => layOutSplashCache(getModel)).toThrow(SplashLayoutError);
 });
 
-test("removing either Ornith pin invalidates its Splash layout", () => {
-  mkdirSync(splashRoot(), { recursive: true });
-  writeFileSync(join(splashRoot(), "sentinel"), "x");
-  releaseSplashLayoutFor(STACK_CODING_HEAVY_MODEL.id);
-  expect(existsSync(splashRoot())).toBe(false);
-  mkdirSync(splashRoot(), { recursive: true }); writeFileSync(join(splashRoot(), "sentinel"), "x");
-  releaseSplashLayoutFor(STACK_CODING_HEAVY_DRAFT_MODEL.id);
-  expect(existsSync(splashRoot())).toBe(false);
-});
-
 test("the draft installs through the Stack's own downloader and every file is checked against its pinned hash; a wrong byte is refused", async () => {
   const files = { "config.json": Buffer.from('{"architectures":["DFlash2DraftModel"]}'), "model.safetensors": Buffer.from("draft weights ".repeat(40)) };
   const sha = (name: keyof typeof files) => createHash("sha256").update(files[name]).digest("hex");
@@ -569,12 +545,11 @@ test("the draft installs through the Stack's own downloader and every file is ch
   for (const id of ["draft-test", "draft-test-2", "draft-test-3"]) { removeModel(id); rmSync(join(modelsDir, id), { recursive: true, force: true }); }
 });
 
-// The heavy coding model (Home's coding mode) lays out its own pair; MODE-STACK-01b launched it with the 27B pair and refused ("not installed").
-test("a Splash launch lays out the heavy pair for the heavy model and the 27B pair for every other model", async () => {
+// A Splash launch lays out the 27B pair for every model it is asked for (the retired Ornith pair is gone, 2026-11-21).
+test("a Splash launch lays out the 27B pair for every model it is not given a pair for", async () => {
   const { splashPairFor } = await import("@/lib/splashStore");
-  const { STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL } = await import("@/lib/modelCatalog");
-  expect(splashPairFor(STACK_CODING_HEAVY_MODEL.id)).toEqual({ pin: STACK_CODING_HEAVY_MODEL, draftPin: STACK_CODING_HEAVY_DRAFT_MODEL });
   expect(splashPairFor(STACK_CODING_MODEL.id)).toEqual({ pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL });
+  expect(splashPairFor("ornith-1-5-122b-mlx-4bit")).toEqual({ pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL });
   expect(splashPairFor("anything-else")).toEqual({ pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL });
 });
 

@@ -112,7 +112,7 @@ test("a synthetic catalog pin stays blocked without a ready successor", async ()
 });
 
 test("live model layout protects named folders and active installs; removes only an orphan and stale partial", async () => {
-  const fixtureIds = ["qwen3-8b-instruct-q4-k-m", "qwen3-vl-8b-instruct-mmproj-q8-0", "qwen3.8-27b-dflash2-draft", "z-image-turbo-unet", "ernie-image-turbo-text-encoder", "flux2-klein-4b-transformer", "chatterbox-turbo-fp16-decoder", "pocket-tts-english-tokenizer", "image-tool-background-removal", "qwen3-1.7b-q8-0", "parakeet-tdt-0.6b-v2-int8", "soulx-singer-svc", "htdemucs", "ornith-1-5-122b-dflash2-draft"];
+  const fixtureIds = ["qwen3-8b-instruct-q4-k-m", "qwen3-vl-8b-instruct-mmproj-q8-0", "qwen3.8-27b-dflash2-draft", "z-image-turbo-unet", "ernie-image-turbo-text-encoder", "flux2-klein-4b-transformer", "chatterbox-turbo-fp16-decoder", "pocket-tts-english-tokenizer", "image-tool-background-removal", "qwen3-1.7b-q8-0", "parakeet-tdt-0.6b-v2-int8", "soulx-singer-svc", "htdemucs"];
   const old = new Date(Date.now() - 10 * 24 * 3600_000);
   for (const id of fixtureIds) {
     const dir = join(modelsDir, id); mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, "weights.bin"), "keep"); utimesSync(dir, old, old);

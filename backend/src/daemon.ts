@@ -36,6 +36,7 @@ import { sfxGen } from "@/sound/sfxGen";
 import { stopScoreWorkers } from "@/score/scoreGen";
 import { imageGen } from "@/images/imageEngine";
 import { runSweeps } from "@/lib/sweeps";
+import { retireModels } from "@/lib/retireModels";
 import { sandboxService, startSandboxSweeper } from "@/lib/sandbox";
 import { beginStopping } from "@/lib/lifecycle";
 import { startMemoryWatchdog } from "@/lib/memoryWatchdog";
@@ -77,6 +78,8 @@ async function serve(): Promise<void> {
   logger.installConsoleMirror();
   for (const moved of migrateLegacyEngineTags()) console.log(`Renamed engine ${moved.name} ${moved.from} to ${moved.to}.`);
   applyPendingSettings();
+  // Models the Stack no longer carries (Ornith 1.5 122B, retired 2026-11-21): records dropped, a saved choice that names one reset with a notice, Splash's layout of it removed. Their folders go through Tidy (the start-up sweep below).
+  retireModels();
   // An installed model gets what its pin now declares (picture input) before anything launches.
   for (const id of reconcilePinDeclarations([...STACK_MODELS, ...STACK_STEMS_MODELS, ...STACK_VOICE_CONVERT_MODELS])) console.log(`Updated the record of ${id} to match its pin.`);
   // TIER-ROUTES-01: the Max window swaps chat to Reduced and back by itself.

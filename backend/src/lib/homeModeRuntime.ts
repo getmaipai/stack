@@ -1,4 +1,5 @@
 import { settingValues, updateSettings } from "@/settings";
+import { STACK_CODING_MODEL } from "@/lib/modelCatalog";
 import { codingModeHeavy, splashMeasuredPeakBytes, splashResidentWeightsBytes } from "@/lib/splashStore";
 import { isComponent, listModels } from "@/lib/modelStore";
 import { getGovernorStatus, setCodingModeActive } from "@/lib/governor";
@@ -53,7 +54,9 @@ function checks(): { checks: HomeModeChecks; reason: string | null; memory: Home
   const benchVerdict = testVerdict === "offer" || testVerdict === "offer_with_limits" ? testVerdict : heavyPair.pin.modeVerdict ?? "pending";
   const bench = benchVerdict === "offer" || benchVerdict === "offer_with_limits";
   const result: HomeModeChecks = { engine, pieces, hardware, memory: planned.fits, bench };
-  const reason = !bench ? benchVerdict === "do_not_offer" ? "The large coding model did not pass its measurements on this kind of computer." : "The large coding model has not been measured on this kind of computer yet."
+  // With Flash Next not installed the mode's pick is the everyday 27B, which already does the everyday coding outside the mode: the mode is not offered, and says why.
+  const reason = !bench && heavyPair.pin.id === STACK_CODING_MODEL.id ? "The large coding mode needs the Flash Next model, which is not installed. Qwen3.8 27B keeps doing everyday coding."
+    : !bench ? benchVerdict === "do_not_offer" ? "The large coding model did not pass its measurements on this kind of computer." : "The large coding model has not been measured on this kind of computer yet."
     : !hardware ? "The large coding model needs a p128 Apple silicon Mac with macOS 26.4 or later and an M3 chip or newer."
       : !engine ? "Splash is not installed on this computer."
         : !pieces ? "The large coding model and its draft are not both installed and verified."

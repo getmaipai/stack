@@ -34,8 +34,8 @@ const coding = (t: Truth) => t.roles.find((r) => r.id === "coding")!;
 export const EVAL_SET: EvalCase[] = [
   // The owner's own chat, verbatim.
   { id: "owner-splash-memory", kind: "read", say: "why is splash taking so much memoru", expect: { facts: [["engine"]], gbNear: (t) => t.splashGb, gbTolerance: 1.5, forbid: [/splash is a tier/i, /splash is a model/i] } },
-  { id: "owner-coding-models", kind: "read", say: "what are my coding models", expect: { facts: [["27b"], ["ornith"]] } },
-  { id: "owner-what-about-max", kind: "follow-up", before: ["what are my coding models"], say: "what about max", expect: { facts: [["max"], ["ornith", "no tier", "no separate tier", "does not have", "doesn't have", "only"]] } },
+  { id: "owner-coding-models", kind: "read", say: "what are my coding models", expect: { facts: [["27b"]], forbid: [/ornith/i] } },
+  { id: "owner-what-about-max", kind: "follow-up", before: ["what are my coding models"], say: "what about max", expect: { facts: [["max"], ["flash next", "no tier", "no separate tier", "does not have", "doesn't have", "only"]] } },
   // Words: tiers, engines, roles.
   { id: "what-is-splash", kind: "read", say: "what is splash", expect: { facts: [["engine"]], forbid: [/splash is a tier/i, /splash is a model/i] } },
   { id: "what-is-max-tier", kind: "read", say: "what is the max tier", expect: { facts: [["biggest", "largest", "top", "most"]] } },
@@ -90,7 +90,7 @@ export const EVAL_SET: EvalCase[] = [
  */
 export const HELD_OUT: EvalCase[] = [
   { id: "held-splash-ram", kind: "read", say: "how much ram is splash using?", expect: { gbNear: (t) => t.splashGb, gbTolerance: 1.5 } },
-  { id: "held-coding-models", kind: "read", say: "which models can coding run?", expect: { facts: [["27b"], ["ornith"]] } },
+  { id: "held-coding-models", kind: "read", say: "which models can coding run?", expect: { facts: [["27b"]], forbid: [/ornith/i] } },
   { id: "held-images-after-coding", kind: "follow-up", before: ["which model is chosen for coding"], say: "how about images?", expect: { facts: [["standard", "boost", "max"]] } },
   { id: "held-video-off-polite", kind: "action", say: "could you switch the video feature off for me", expect: { proposal: { action: "set_role_enabled", params: { role: "video", enabled: false } } } },
   { id: "held-disable-music", kind: "action", say: "disable music", expect: { noProposal: true, facts: [["already"]] } },

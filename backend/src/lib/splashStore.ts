@@ -24,7 +24,7 @@ import { dataDir } from "@/lib/paths";
 import { currentEngineBinary, engineBinaryPath, engineDir } from "@/lib/engineInstall";
 import { ENGINE_READY_MARKER, installedEnginePin } from "@/lib/engineCatalog";
 import { getModel, type CatalogModelLike, type ModelRecord } from "@/lib/modelStore";
-import { STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CODING_HEAVY_MODEL, STACK_CODING_HEAVY_DRAFT_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS } from "@/lib/modelCatalog";
+import { STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, STACK_CODING_DRAFT_MODEL, STACK_CODING_MODEL, STACK_CHAT_QWEN38_UNCENSORED_MODEL, SPLASH_LOCAL_CHAT_MODELS } from "@/lib/modelCatalog";
 
 export const splashRoot = (): string => join(dataDir, "splash");
 /** The hub cache Splash reads (HF_HUB_CACHE): the Stack's own layout of the pinned files, not the store's `models/hub`. */
@@ -55,6 +55,13 @@ interface LayoutFile { name: string; sha256: string; bytes: number; source: stri
 interface LayoutRepo { repo: string; revision: string; files: LayoutFile[]; }
 
 const hubFolder = (repo: string): string => join(splashHubDir(), `models--${repo.replace(/^\/+|\/+$/g, "").replaceAll("/", "--")}`);
+/** Removes the hub folder (the hardlinked layout) of a repository the Stack no longer carries; true when one was there. Only at start-up or after the model's own removal, never under a running engine. */
+export function removeSplashHubFolder(repo: string): boolean {
+  const folder = hubFolder(repo);
+  if (!existsSync(folder)) return false;
+  rmSync(folder, { recursive: true, force: true });
+  return true;
+}
 const urlFileName = (url: string): string => basename(new URL(url).pathname);
 
 /** The two repositories the pins describe, resolved against the store's records (`getModel` is the store's lookup, passed in so this file never imports the store at run time). Refuses, in plain words, when a pin is missing, differs from what is installed, or has a file of the wrong size. */
@@ -144,12 +151,12 @@ export function splashResidentWeightsBytes(modelId: string, sizeBytes: number): 
   return Math.max(0, sizeBytes - (splashLocalEntry(modelId)?.ssdBytes ?? 0));
 }
 
-/** The big model Home's coding mode (and so Max chat) loads: Flash Next when it and its draft are installed and verified, else the Ornith pair (today's behavior on a hub that has not installed Flash Next). The one place the mode picks its model. */
+/** The big model Home's coding mode (and so Max chat) loads: Flash Next when it and its draft are installed and verified, else the everyday coding pair (Qwen3.8 27B and its draft; Ornith was retired 2026-11-21). The one place the mode picks its model. */
 export function codingModeHeavy(lookup: (id: string) => ModelRecord | null = getModel): { pin: CatalogModelLike; draftPin: CatalogModelLike } {
   const ready = (id: string) => { const record = lookup(id); return !!record?.modelPath && !!record.verifiedAt; };
   return ready(STACK_CHAT_QWEN38_FLASH_NEXT_MODEL.id) && ready(STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT.id)
     ? { pin: STACK_CHAT_QWEN38_FLASH_NEXT_MODEL, draftPin: STACK_CHAT_QWEN38_FLASH_NEXT_DRAFT }
-    : { pin: STACK_CODING_HEAVY_MODEL, draftPin: STACK_CODING_HEAVY_DRAFT_MODEL };
+    : { pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
 }
 
 /** The measured whole-process peak of a model Splash runs from local files (see SPLASH_LOCAL_CHAT_MODELS), or null: the memory ledger and the coding-mode fit check use it in place of the formula and the Metal budget's headroom, which overstate it. */
@@ -162,7 +169,7 @@ export function splashPairFor(modelId: string): { pin: CatalogModelLike; draftPi
   const local = splashLocalEntry(modelId);
   if (local && local.pin.id === modelId) return { pin: local.pin, draftPin: local.draftPin };
   if (modelId === STACK_CHAT_QWEN38_UNCENSORED_MODEL.id) return { pin: STACK_CHAT_QWEN38_UNCENSORED_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
-  return modelId === STACK_CODING_HEAVY_MODEL.id ? { pin: STACK_CODING_HEAVY_MODEL, draftPin: STACK_CODING_HEAVY_DRAFT_MODEL } : { pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
+  return { pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
 }
 
 /** Lays the pinned target and draft out as Splash's hub cache, creates its state and temporary folders (the temporary one emptied), and returns what the launch needs. Idempotent and cheap: stat calls and a few links. Throws SplashLayoutError, in plain words, when it cannot. */
@@ -285,6 +292,6 @@ export function removePreparedSplashModel(modelId: string): void {
 export function releaseSplashLayoutFor(id: string): void {
   const local = splashLocalEntry(id);
   if (local) { removePreparedSplashModel(local.pin.id); return; }
-  if (![STACK_CODING_MODEL.id, STACK_CODING_DRAFT_MODEL.id, STACK_CODING_HEAVY_MODEL.id, STACK_CODING_HEAVY_DRAFT_MODEL.id, STACK_CHAT_QWEN38_UNCENSORED_MODEL.id].includes(id)) return;
+  if (![STACK_CODING_MODEL.id, STACK_CODING_DRAFT_MODEL.id, STACK_CHAT_QWEN38_UNCENSORED_MODEL.id].includes(id)) return;
   try { rmSync(splashRoot(), { recursive: true, force: true }); } catch { /* a running engine's folder may refuse; the next layout repairs it */ }
 }

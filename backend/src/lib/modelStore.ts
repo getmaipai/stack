@@ -17,6 +17,7 @@ import { readHfFile, writeHfFile } from "@/lib/store/hfCache";
 import { raise } from "@/lib/health";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { releaseSplashLayoutFor } from "@/lib/splashStore";
+import { isRetiredModelId } from "@/lib/retiredModels";
 
 export const ModelSourceSchema = z.enum(["catalog", "huggingface", "lm-studio"]);
 
@@ -260,7 +261,7 @@ export function upgradeMeasuredFiguresFromOlderDefinition(platform: NodeJS.Platf
 upgradeMeasuredFiguresFromOlderDefinition();
 
 export function isModelSelectable(record: ModelRecord | null): boolean {
-  return !!record?.sha256 && !!record.licence && !!record.verifiedAt;
+  return !!record?.sha256 && !!record.licence && !!record.verifiedAt && !isRetiredModelId(record.id);
 }
 
 export function upsertModel(input: ModelRecordInput, now = new Date().toISOString()): ModelRecord {
@@ -324,6 +325,7 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
 }
 
 export function registerCatalogModel(model: CatalogModelLike, now = new Date().toISOString()): ModelRecord {
+  if (isRetiredModelId(model.id)) throw new Error(`Model ${model.id} was retired and is no longer installed by the Stack.`);
   if (!model.revision && !model.download?.url) throw new Error(`Catalog model ${model.id} has no revision`);
   const revision = model.revision ?? new URL(model.download!.url).pathname.match(/\/resolve\/([^/]+)/)?.[1] ?? "catalog";
   const provenance: Record<string, unknown> = { package: `model:${model.id}`, catalogId: model.id };

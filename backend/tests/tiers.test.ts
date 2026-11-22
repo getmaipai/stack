@@ -48,9 +48,9 @@ describe("tier resolver", () => {
     for (const category of ["chat", "pictures", "video", "music", "voice"] as const) {
       expect(resolveLadder(category, "p128", 72 * GB).some((row) => row.resolved !== null)).toBe(true);
     }
-    expect(resolveTier({ category: "chat", tier: "max", profile: "p128", roomBytes: 72 * GB })?.model).toBe("ornith-1-5-122b-mlx-4bit");
-    expect(resolveTier({ category: "chat", tier: "max", profile: "p128", roomBytes: 60 * GB })).toBeNull();
-    expect(resolveTier({ category: "chat", tier: "max", profile: "p128", roomBytes: 60 * GB, reducedFreedBytes: 9 * GB })?.model).toBe("ornith-1-5-122b-mlx-4bit");
+    expect(resolveTier({ category: "chat", tier: "max", profile: "p128", roomBytes: 76 * GB })?.model).toBe("qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs");
+    expect(resolveTier({ category: "chat", tier: "max", profile: "p128", roomBytes: 72 * GB })).toBeNull();
+    expect(resolveTier({ category: "chat", tier: "max", profile: "p128", roomBytes: 67 * GB, reducedFreedBytes: 9 * GB })?.model).toBe("qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs");
   });
 
   test("video Standard needs 0.6 R to hold Wan's measured 25.4 GB and Max lists the LTX profile", () => {

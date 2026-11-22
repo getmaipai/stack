@@ -160,20 +160,24 @@ test("it is optional: offered on p128 only, in its own disk row, never in a tier
   for (const id of ["p16", "p32", "p64"]) expect(row(id)).toBeUndefined();
 });
 
-test("it is a Max chat candidate and never the recommendation: not at Standard, not at Boost, and not at Max while a smaller Max model fits", () => {
+test("it is the Max chat model (Ornith retired 2026-11-21): never at Standard or Boost, and the Max pick only when its 75 GB fit", () => {
   const candidate = TIER_CANDIDATES.find((item) => item.id === FLASH.id)!;
   expect(candidate).toMatchObject({ category: "chat", profiles: ["p128"], tiers: ["max"] });
   expect(candidate.peaks.every((peak) => peak.status === "measured" && peak.peakBytes >= 74 * GB && peak.peakBytes <= 75 * GB)).toBe(true);
   const maxOrder = TIER_CANDIDATES.filter((item) => item.category === "chat" && item.tiers.includes("max")).map((item) => item.id);
   expect(maxOrder.at(-1)).toBe(FLASH.id);
   for (const profile of ["p16", "p32", "p64", "p128"] as const) for (let gb = 1; gb <= 200; gb += 1) {
-    const models = resolveLadder("chat", profile, gb * GB).map((row) => row.resolved?.model);
-    expect(models).not.toContain(FLASH.id);
+    const rows = resolveLadder("chat", profile, gb * GB);
+    for (const row of rows) {
+      const picked = row.resolved?.model === FLASH.id;
+      // Flash Next is the Max chat model on p128 once its 75 GB fit, and nothing anywhere else.
+      expect(picked).toBe(row.tier === "max" && profile === "p128" && gb * GB >= 75_000_000_000);
+    }
   }
   const lists = tierCandidateLists("chat", "p128", 100 * GB);
   expect(lists.find((level) => level.tier === "max")!.candidates.map((item) => item.id)).toContain(FLASH.id);
   expect(lists.find((level) => level.tier === "standard")!.candidates.find((item) => item.id === FLASH.id)!.fits).toBe(false);
-  for (const level of lists) expect(level.recommended).not.toBe(FLASH.id);
+  for (const level of lists) expect(level.recommended === FLASH.id).toBe(level.tier === "max");
   expect(tierCandidateLists("chat", "p64", 60 * GB)[0]!.candidates.map((item) => item.id)).not.toContain(FLASH.id);
   expect(PLANNER_EXCLUDED_CHAT).toContain(FLASH.id);
 });

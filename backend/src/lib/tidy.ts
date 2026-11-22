@@ -16,6 +16,7 @@ import { readModelManifest, listModelManifests } from "@/lib/store/manifests";
 import { listLoras } from "@/video/loras";
 import { selectedModel } from "@/lib/supervisor";
 import { ROLE_IDS } from "@/roles";
+import { isRetiredModelId } from "@/lib/retiredModels";
 
 export type TidyKind = "superseded" | "orphan_folder" | "partial_download";
 export interface TidyItem { id: string; kind: TidyKind; bytes: number; reason: string; blocked: string | null; }
@@ -23,7 +24,8 @@ export interface TidyPlan { reclaimable_bytes: number; items: TidyItem[]; }
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 // These legacy records may remain after an upgrade removes the retired component from the catalog.
-const RETIRED_VIDEO_MODEL_IDS = new Set(["ltx-2-3-distilled-mlx", "video-gemma-3-12b-text-encoder"]);
+// The models retired from the Stack as a whole (retiredModels.ts) are treated the same way.
+const RETIRED_VIDEO_MODEL_IDS = { has: (id: string): boolean => ["ltx-2-3-distilled-mlx", "video-gemma-3-12b-text-encoder"].includes(id) || isRetiredModelId(id) };
 const catalogPins = (): CatalogModelLike[] => [...STACK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_H3_MODELS, ...STACK_IMAGE_KLEIN3_MODELS, ...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS, ...STACK_IMAGE_H3_MODELS, ...componentDefs().flatMap((component) => component.pins)];
 function graceHours(): number { const value = Number(settingValues()["stack.storage.tidy_grace_hours"] ?? 24); return Number.isFinite(value) ? Math.max(0, value) : 24; }
 function pathBytes(path: string): number { try { const s = lstatSync(path); if (s.isSymbolicLink()) return 0; if (!s.isDirectory()) return s.size; return readdirSync(path).reduce((n, name) => n + pathBytes(join(path, name)), 0); } catch { return 0; } }
@@ -83,11 +85,11 @@ function referencedPaths(): Set<string> {
     const snapshot = resolve(modelsDir, "hub", `models--${pin.repo.replaceAll("/", "--")}`, "snapshots", pin.revision, pin.download.hub_file);
     if (existsSync(snapshot)) paths.add(snapshot);
   }
-  for (const manifest of listModelManifests()) for (const blob of manifest.blobs) paths.add(resolve(blob.path));
+  for (const manifest of listModelManifests()) if (!RETIRED_VIDEO_MODEL_IDS.has(manifest.id)) for (const blob of manifest.blobs) paths.add(resolve(blob.path));
   return paths;
 }
 function knownFolderNames(): Set<string> {
-  return new Set([...catalogPins().map((pin) => pin.id), ...listModels().map((model) => model.id).filter((id) => !RETIRED_VIDEO_MODEL_IDS.has(id)), ...listModelManifests().map((manifest) => manifest.id), "hub", "manifests", "store"]);
+  return new Set([...catalogPins().map((pin) => pin.id), ...listModels().map((model) => model.id).filter((id) => !RETIRED_VIDEO_MODEL_IDS.has(id)), ...listModelManifests().map((manifest) => manifest.id).filter((id) => !RETIRED_VIDEO_MODEL_IDS.has(id)), "hub", "manifests", "store"]);
 }
 function activeInputModelIds(): Set<string> {
   const ids = new Set<string>();
@@ -155,11 +157,13 @@ export async function planTidy(now = Date.now()): Promise<TidyPlan> {
 }
 export async function runTidy(dryRun = true, now = Date.now()): Promise<{ dry_run: boolean; removed: TidyItem[]; skipped: TidyItem[] }> {
   const plan = await planTidy(now); const removed: TidyItem[] = []; const skipped: TidyItem[] = [];
-  const orphanFolders = plan.items.filter((item) => item.kind === "orphan_folder" && !item.blocked && !item.reason.includes("removable after"));
+  // A folder named for a retired model (retiredModels.ts) is known by name, so it is outside the limit that guards unknown folders.
+  const isRetiredFolder = (item: TidyItem): boolean => item.kind === "orphan_folder" && isRetiredModelId(basename(item.id));
+  const orphanFolders = plan.items.filter((item) => item.kind === "orphan_folder" && !isRetiredFolder(item) && !item.blocked && !item.reason.includes("removable after"));
   const orphanBytes = orphanFolders.reduce((sum, item) => sum + item.bytes, 0);
   const safetyBlocked = !dryRun && (orphanFolders.length > 3 || orphanBytes > 25 * 1_000_000_000);
   for (const item of plan.items) {
-    if (safetyBlocked && item.kind === "orphan_folder") { skipped.push({ ...item, blocked: "Tidy is blocked because this run exceeds the limit of three orphan folders or 25 GB." }); continue; }
+    if (safetyBlocked && item.kind === "orphan_folder" && !isRetiredFolder(item)) { skipped.push({ ...item, blocked: "Tidy is blocked because this run exceeds the limit of three orphan folders or 25 GB." }); continue; }
     if (item.blocked || item.reason.includes("removable after")) { skipped.push(item); continue; }
     if (dryRun) { skipped.push({ ...item, blocked: "Dry run only; no files were removed." }); continue; }
     try {
