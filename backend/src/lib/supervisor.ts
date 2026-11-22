@@ -1131,6 +1131,14 @@ function declaredLaunchContext(model: ModelRecord): number | null {
   return typeof launch?.contextLength === "number" && launch.contextLength > 0 ? launch.contextLength : null;
 }
 
+/** The window a coding model with its own pinned window (Flash Next, 32,768 measured) launches with: the pin's, or the larger one an admin sets in "Max chat window" once a bigger one has been measured. A model with no pinned window follows the coding setting. */
+export function pinnedCodingWindow(model: ModelRecord, values: Record<string, SettingValue> = settingValues()): number | null {
+  const pinned = declaredLaunchContext(model);
+  if (pinned === null) return null;
+  const asked = values["stack.engines.coding.max_chat_context_length"];
+  return typeof asked === "number" && Number.isFinite(asked) ? Math.max(pinned, Math.floor(asked)) : pinned;
+}
+
 /** The chat-template variables a record's launch pins (a model's
  * reasoning strength), string values only, or null. */
 function declaredChatTemplateKwargs(model: ModelRecord): Record<string, string> | null {
@@ -1502,9 +1510,9 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const codingRole = role === "coding";
   // A record with its own launch (vision) runs one slot, as its args say.
   const slots = role === "helper" || declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
-  const contextLength = capChatWindow(role, resolvedContextLength ?? (codingRole ? declaredLaunchContext(model) ?? codingLaunchSettings().contextLength : role === "helper" ? HELPER_CONTEXT_TOKENS : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role))));
+  const contextLength = capChatWindow(role, resolvedContextLength ?? (codingRole ? pinnedCodingWindow(model) ?? codingLaunchSettings().contextLength : role === "helper" ? HELPER_CONTEXT_TOKENS : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role))));
   if (role === "chat" && engineForRole(role) === "splash") return splashLaunchPlan(model, port, contextLength, "splash-chat");
-  if (codingRole && engineForRole(role) === "splash") return splashLaunchPlan(model, port, resolvedContextLength ?? declaredLaunchContext(model) ?? codingLaunchSettings().contextLength);
+  if (codingRole && engineForRole(role) === "splash") return splashLaunchPlan(model, port, resolvedContextLength ?? pinnedCodingWindow(model) ?? codingLaunchSettings().contextLength);
   if (engineForRole(role) === "omlx") {
     // oMLX (ENGINE-MLX-01): an environment the Stack built, serving the one
     // pinned MLX directory on loopback behind a random key. Offline, with
@@ -1713,7 +1721,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const onChatSplash = role === "chat" && engineForRole(role) === "splash";
   const onSplash = (coding !== null && engineForRole(role) === "splash") || onChatSplash;
   const splashPair = onSplash ? splashPairFor(model.id) : null;
-  const splashContext = onChatSplash ? declaredLaunchContext(model) ?? Math.max(32_768, Math.floor(Number(settingValues()["stack.engines.chat.context_length"] ?? model.measuredContextLength ?? 131_072))) : coding ? declaredLaunchContext(model) ?? coding.contextLength : 0;
+  const splashContext = onChatSplash ? declaredLaunchContext(model) ?? Math.max(32_768, Math.floor(Number(settingValues()["stack.engines.chat.context_length"] ?? model.measuredContextLength ?? 131_072))) : coding ? pinnedCodingWindow(model) ?? coding.contextLength : 0;
   const splashEstimate = onSplash ? splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(model.id, model.sizeBytes ?? 0), draftBytes: getModel(splashPair!.draftPin.id)?.sizeBytes ?? splashPair!.draftPin.download!.approx_bytes, contextTokens: splashContext }) : null;
   const codingWindow = coding ? (onSplash ? { contextLength: splashContext, dryRunPeakBytes: splashEstimate } : await codingContextFor(model, coding.contextLength)) : null;
   const ownContext = coding ? codingWindow!.contextLength : role === "helper" ? HELPER_CONTEXT_TOKENS : declaredLaunchContext(model);

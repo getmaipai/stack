@@ -32,7 +32,8 @@ function memoryPlan(): { memory: HomeModeMemory; fits: boolean } {
   const heavy = models.find((item) => item.id === pin.id);
   const draft = models.find((item) => item.id === draftPin.id);
   // A pinned window (Flash Next's 32K) is the window the launch uses; otherwise the coding setting's.
-  const contextTokens = pin.launch?.contextLength ?? Number(settingValues()["stack.engines.coding.context_length"] ?? 131_072);
+  const asked = Number(settingValues()["stack.engines.coding.max_chat_context_length"]);
+  const contextTokens = pin.launch?.contextLength != null ? Math.max(pin.launch.contextLength, Number.isFinite(asked) ? Math.floor(asked) : 0) : Number(settingValues()["stack.engines.coding.context_length"] ?? 131_072);
   const measuredPeak = splashMeasuredPeakBytes(pin.id);
   const plan = measuredPeak ?? splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(pin.id, heavy?.sizeBytes ?? pin.download!.approx_bytes), draftBytes: draft?.sizeBytes ?? draftPin.download!.approx_bytes, contextTokens });
   // A model with a measured peak is checked by the rule the governor admits it by (the model budget less what stays, and the machine's total less what stays and the working margin: whichever is smaller), because the margin is a reserve against free memory, not a second deduction from the budget. A model without a measurement keeps the stricter formula check.
