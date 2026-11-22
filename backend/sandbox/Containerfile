@@ -2,9 +2,10 @@
 # Built with: container build -t maipai-sandbox:local -f backend/sandbox/Containerfile backend/sandbox
 # TODO-PIN: replace the tag with the base image's sha256 digest before this image is released (pins are exact; see docs/dev.md).
 FROM alpine:3.22
+# libstdc++ and libgcc: the musl OpenCode binary links them dynamically (without them exec exits 127, found in the Home Code end-to-end run).
 # What the lock needs: nftables to load the rules, capsh (libcap-utils) to drop the rights for good, bash for capsh's shell,
 # netcat and curl for the gate probe, git for the agent's work. TODO (CODE-SANDBOX-01b, later slices): ripgrep, jq, Python, Node, Go, Rust.
-RUN apk add --no-cache nftables libcap libcap-utils bash netcat-openbsd curl git \
+RUN apk add --no-cache nftables libcap libcap-utils bash netcat-openbsd curl git libstdc++ libgcc \
  && adduser -D -u 1000 agent \
  && find / -xdev -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null || true
 # OpenCode, pinned to one release and checked against its published sha256 (the build fails on a mismatch). The musl build matches Alpine.
