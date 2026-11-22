@@ -25783,6 +25783,13 @@
                             },
                             "description": "Stack bytes by process name."
                           },
+                          "roles": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "description": "Bytes by engine role (chat, tts, ...): the role's engine process and everything below it. Absent on points recorded before this field existed; a role that shares chat's process is counted under chat."
+                          },
                           "cpu": {
                             "type": "number",
                             "nullable": true,
@@ -25868,13 +25875,34 @@
                           "color_key"
                         ]
                       }
+                    },
+                    "engine_roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "color_key": {
+                            "type": "string",
+                            "description": "A stable palette slot (series-1 to series-8) for this name."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "color_key"
+                        ]
+                      },
+                      "description": "Roles that have a `roles` figure somewhere in these points."
                     }
                   },
                   "required": [
                     "range",
                     "step_seconds",
                     "points",
-                    "roles"
+                    "roles",
+                    "engine_roles"
                   ]
                 }
               }
@@ -25956,6 +25984,13 @@
                             "type": "number"
                           },
                           "description": "Stack bytes by process name."
+                        },
+                        "roles": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "number"
+                          },
+                          "description": "Bytes by engine role (chat, tts, ...): the role's engine process and everything below it. Absent on points recorded before this field existed; a role that shares chat's process is counted under chat."
                         },
                         "cpu": {
                           "type": "number",
@@ -26092,6 +26127,291 @@
                     "current",
                     "last_hour",
                     "roles"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/resources/events": {
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Timeline markers: engines loaded, unloaded, restarted, mode switches, problems",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "24h",
+                "7d",
+                "30d"
+              ],
+              "default": "1h"
+            },
+            "required": false,
+            "name": "range",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Oldest first, kept 30 days, at most 3000. Read only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "range": {
+                      "type": "string",
+                      "enum": [
+                        "1h",
+                        "24h",
+                        "7d",
+                        "30d"
+                      ]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "t": {
+                            "type": "number",
+                            "description": "Milliseconds since the epoch."
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "loaded",
+                              "unloaded",
+                              "restart",
+                              "mode",
+                              "problem"
+                            ]
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string",
+                            "description": "One plain sentence, safe to show as written."
+                          }
+                        },
+                        "required": [
+                          "t",
+                          "kind",
+                          "role",
+                          "text"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "range",
+                    "events"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/resources/engines": {
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "One row per engine process: memory now, peak, uptime, restarts and why it is resident",
+        "responses": {
+          "200": {
+            "description": "Memory comes from the same 5 s sample as the history; peak and mean cover the last 24 h of minute buckets. Read only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sampled_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "budget": {
+                      "type": "object",
+                      "properties": {
+                        "total_bytes": {
+                          "type": "number"
+                        },
+                        "cap_bytes": {
+                          "type": "number"
+                        },
+                        "loaded_bytes": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "total_bytes",
+                        "cap_bytes",
+                        "loaded_bytes"
+                      ]
+                    },
+                    "engines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "serves": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Other roles answered by the same process (judge and router share chat's)."
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "idle",
+                              "loading",
+                              "queued"
+                            ],
+                            "description": "running: a request or session is open; idle: loaded and waiting; loading: starting; queued: waiting in the admission queue for memory."
+                          },
+                          "engine": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "pid": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "model_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "model_bytes": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Size of the model file on disk, when known."
+                          },
+                          "memory_bytes": {
+                            "type": "number",
+                            "description": "Bytes held now by the process and its children, from the latest 5 s sample; 0 when none is read."
+                          },
+                          "peak_bytes_24h": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "mean_bytes_24h": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "started_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "uptime_seconds": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "restarts_24h": {
+                            "type": "number"
+                          },
+                          "restarts_7d": {
+                            "type": "number"
+                          },
+                          "last_used_at": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "The last request or lease, from the memory ledger when it has one, else the last answered request."
+                          },
+                          "idle_seconds": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "residency": {
+                            "type": "string",
+                            "enum": [
+                              "resident",
+                              "jit"
+                            ],
+                            "description": "resident: loaded at start and kept; jit: loaded on the first request and unloaded after its idle time."
+                          },
+                          "memory_class": {
+                            "type": "string"
+                          },
+                          "keep_warm_minutes": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "idle_ttl_seconds": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "pinned": {
+                            "type": "boolean"
+                          },
+                          "priority": {
+                            "type": "number"
+                          },
+                          "active_requests": {
+                            "type": "number"
+                          },
+                          "queue_position": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "tokens_per_second": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Null until the engine keeps a counter: shown as not measured, never guessed."
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "label",
+                          "serves",
+                          "state",
+                          "engine",
+                          "pid",
+                          "model_id",
+                          "model_bytes",
+                          "memory_bytes",
+                          "peak_bytes_24h",
+                          "mean_bytes_24h",
+                          "started_at",
+                          "uptime_seconds",
+                          "restarts_24h",
+                          "restarts_7d",
+                          "last_used_at",
+                          "idle_seconds",
+                          "residency",
+                          "memory_class",
+                          "keep_warm_minutes",
+                          "idle_ttl_seconds",
+                          "pinned",
+                          "priority",
+                          "active_requests",
+                          "queue_position",
+                          "tokens_per_second"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "sampled_at",
+                    "budget",
+                    "engines"
                   ]
                 }
               }

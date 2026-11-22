@@ -2881,3 +2881,22 @@ export function roleSessionActive(requested: RoleId): boolean {
   return !!processRecord && (processRecord.sessions?.size ?? 0) > 0;
 }
 
+
+/** The Resources screen: one row per engine process the Stack runs (or is starting) right now, by process role, with no side effects. */
+export interface EngineProcessRow {
+  role: RoleId; pid: number | null; engine: string | null; modelId: string | null; startedAt: number | null;
+  activeRequests: number; lastRealRequestAt: number | null; starting: boolean; sessions: number; state: RoleStatus["state"];
+}
+export function engineProcessRows(): EngineProcessRow[] {
+  const rows: EngineProcessRow[] = [];
+  for (const [role, current] of runtimes) {
+    const processRecord = current.process;
+    if (!processRecord && !current.starting) continue;
+    rows.push({
+      role, pid: processRecord?.pid ?? null, engine: processRecord?.engine ?? null, modelId: processRecord?.modelId ?? null,
+      startedAt: processRecord ? spawnedAtOf.get(processRecord) ?? null : null, activeRequests: processRecord?.activeRequests ?? 0,
+      lastRealRequestAt: current.lastRealRequestAt, starting: !processRecord && !!current.starting, sessions: processRecord?.sessions?.size ?? 0, state: current.status.state,
+    });
+  }
+  return rows;
+}

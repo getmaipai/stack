@@ -774,11 +774,17 @@ export class MemoryWatchdog {
     } else { this.unaccountedSince = null; if (bytes < 2 * GB && this.unaccountedRaised) { resolveHealth("memory-unaccounted"); this.unaccountedRaised = false; } }
   }
 
-  /** A light view for resource history: Stack process bytes by name, no folder walk. */
-  resourceView(): { stackBytes: number; nonStackBytes: number; procs: Array<{ name: string; bytes: number }> } {
+  /** A light view for resource history: Stack process bytes by name, no folder walk. `rolePids` names the engine process each role runs, so its bytes (the process and everything below it) can be told apart by role. */
+  resourceView(rolePids: Array<{ role: string; pid: number }> = []): { stackBytes: number; nonStackBytes: number; procs: Array<{ name: string; bytes: number }>; roles: Record<string, number> } {
     const tree = descendantsOf(this.rows, liveStackRoots(this.rows, this.ownPid));
     const own = this.rows.filter((row) => row.pid === this.ownPid || tree.has(row.pid));
-    return { stackBytes: own.reduce((t, r) => t + r.rssBytes, 0), nonStackBytes: this.rows.filter((r) => !tree.has(r.pid) && r.pid !== this.ownPid).reduce((t, r) => t + r.rssBytes, 0), procs: own.map((r) => ({ name: r.name, bytes: r.rssBytes })) };
+    const roles: Record<string, number> = {};
+    for (const { role, pid } of rolePids) {
+      const members = descendantsOf(this.rows, [pid]);
+      const bytes = this.rows.filter((row) => members.has(row.pid)).reduce((t, r) => t + r.rssBytes, 0);
+      if (bytes > 0) roles[role] = (roles[role] ?? 0) + bytes;
+    }
+    return { stackBytes: own.reduce((t, r) => t + r.rssBytes, 0), nonStackBytes: this.rows.filter((r) => !tree.has(r.pid) && r.pid !== this.ownPid).reduce((t, r) => t + r.rssBytes, 0), procs: own.map((r) => ({ name: r.name, bytes: r.rssBytes })), roles };
   }
 
   report(): MemoryReport {

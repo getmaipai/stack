@@ -1,47 +1,48 @@
-import { useEffect, useMemo, useState } from "react";
-import { StatTile } from "./kit";
-import { Cpu, HardDrive, Layers, MemoryStick } from "lucide-react";
-import { Area, AreaChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, Cpu, Gauge, HardDrive, MemoryStick, Zap } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@maipai/ui/src/ui/alert";
 import { Badge } from "@maipai/ui/src/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@maipai/ui/src/ui/card";
-import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@maipai/ui/src/ui/chart";
-import type { ChartConfig } from "@maipai/ui/src/ui/chart";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maipai/ui/src/ui/collapsible";
 import { Skeleton } from "@maipai/ui/src/ui/skeleton";
 import { StatusIndicator } from "@maipai/ui/src/ui/status";
 import { ToggleGroup, ToggleGroupItem } from "@maipai/ui/src/ui/toggle-group";
 import { ApiError, api } from "./api";
 import { bytes } from "./format";
-import { RANGES, budgetSegments, chartRoles, hasValues, lineRows, memoryRows, pressureWord, seriesColor, timeLabel } from "./resourceData";
-import type { History, Range, Summary } from "./resourceData";
+import { Live, Meter, StatTile } from "./kit";
+import { EngineDetail, EngineTable } from "./ResourceEngines";
+import { LineCard, MemoryStack, Empty, ChartCard } from "./ResourceCharts";
+import { resourceApi } from "./resourceApi";
+import { RANGES, hasRoleHistory, historyRoles, loadRows, memoryRows, chartRoles, nowSegments, pressureWord, roleHistoryRows, stateWord } from "./resourceData";
+import type { Engines, History, Marker, Range, Summary } from "./resourceData";
 
 const REFRESH_MS = 5000; // the Stack samples every 5 s, so this is as live as the data gets
-
-function Empty({ children }: { children: string }) {
-  return <p className="flex h-40 items-center justify-center text-center text-sm text-muted-foreground">{children}</p>;
-}
-
-function ChartCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
-  return (
-    <Card>
-      <CardHeader><CardTitle className="text-base">{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
-  );
-}
+const GB = 1024 ** 3;
+const pct = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+const shareText = (n: number, total: number) => (total > 0 && n / total < 0.1 ? `${((n / total) * 100).toFixed(1)}%` : `${pct(n, total)}%`);
+const NOT_MEASURED = "Not measured";
 
 export function Resources({ changed }: { changed: unknown }) {
   const [range, setRange] = useState<Range>("1h");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [history, setHistory] = useState<History | null>(null);
+  const [engines, setEngines] = useState<Engines | null>(null);
+  const [markers, setMarkers] = useState<Marker[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
+
+  useEffect(() => { void resourceApi.modelNames().then(setNames).catch(() => { /* ids are shown as they are */ }); }, []);
 
   useEffect(() => {
     let alive = true;
     const load = async () => {
       try {
-        const [s, h] = await Promise.all([api.resourcesSummary(), api.resourcesHistory(range)]);
-        if (alive) { setSummary(s); setHistory(h); setError(null); }
+        const [s, h, e, m] = await Promise.all([api.resourcesSummary(), api.resourcesHistory(range), resourceApi.engines().catch(() => null), resourceApi.events(range).catch(() => null)]);
+        if (!alive) return;
+        setSummary(s); setHistory(h); setError(null);
+        if (e) setEngines(e);
+        if (m) setMarkers(m.events);
       } catch (e) {
         if (alive) setError(e instanceof ApiError ? e.message : "The Stack did not answer. It may be restarting; this page keeps trying.");
       }
@@ -51,137 +52,140 @@ export function Resources({ changed }: { changed: unknown }) {
     return () => { alive = false; clearInterval(timer); };
   }, [range, changed]);
 
-  const kept = useMemo(() => (history ? chartRoles(history) : []), [history]);
-  const memory = useMemo(() => (history ? memoryRows(history, kept) : []), [history, kept]);
-  const lines = useMemo(() => (history ? lineRows(history) : []), [history]);
-  const config = useMemo<ChartConfig>(() => {
-    const c: ChartConfig = { other: { label: "Everything else", color: "var(--muted-foreground)" }, cpu: { label: "CPU", color: "var(--chart-1)" }, swap: { label: "Swap", color: "var(--chart-2)" }, queue: { label: "Waiting requests", color: "var(--chart-1)" }, tps: { label: "Tokens per second", color: "var(--chart-1)" } };
-    for (const r of kept) c[r.id] = { label: r.id, color: seriesColor(r.color_key) };
-    return c;
-  }, [kept]);
+  const modelName = useCallback((id: string | null) => (id ? names[id] ?? null : null), [names]);
+  const rows = engines?.engines ?? [];
+  const perRole = useMemo(() => (history ? hasRoleHistory(history) : false), [history]);
+  const keepRoles = useMemo(() => (history ? historyRoles(history) : []), [history]);
+  const labels = useMemo(() => Object.fromEntries(rows.map((r) => [r.role, r.label])), [rows]);
+  const stack = useMemo(() => {
+    if (!history) return { rows: [] as Record<string, number>[], keep: [] as string[], labels: {} as Record<string, string> };
+    if (perRole) return { rows: roleHistoryRows(history, keepRoles), keep: keepRoles, labels };
+    // Points recorded before the per-feature figure existed carry process names only.
+    const procs = chartRoles(history).map((r) => r.id);
+    return { rows: memoryRows(history, procs.map((id) => ({ id }))), keep: procs, labels: {} as Record<string, string> };
+  }, [history, perRole, keepRoles, labels]);
+  const load = useMemo(() => (history ? loadRows(history) : []), [history]);
+  const speed = useMemo(() => (history ? history.points.map((p) => ({ t: p.t, tps: p.tps ? Object.values(p.tps).reduce((a, b) => a + b, 0) : null })) : []), [history]);
+  const memPct = useMemo(() => (history ? history.points.map((p) => (p.total > 0 ? (p.used / p.total) * 100 : 0)) : []), [history]);
+  const swap = useMemo(() => (history ? history.points.map((p) => ({ t: p.t, swap: p.swap / GB })) : []), [history]);
+  const queue = useMemo(() => (history ? history.points.map((p) => ({ t: p.t, queue: p.queue })) : []), [history]);
 
   if (!summary || !history) {
     if (error) return <Alert variant="destructive" role="alert"><AlertTitle>The Stack is not answering</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
-    return <div className="grid gap-4" aria-busy="true" aria-label="Loading"><Skeleton className="h-40" /><Skeleton className="h-64" /></div>;
+    return <div className="grid gap-4" aria-busy="true" aria-label="Loading"><Skeleton className="h-56" /><Skeleton className="h-32" /><Skeleton className="h-64" /></div>;
   }
 
   const cur = summary.current;
   const pressure = pressureWord(cur?.pressure);
-  const segments = budgetSegments(summary);
-  const xTick = (t: number) => timeLabel(t, range);
-  const axis = <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} tickFormatter={xTick} tickLine={false} axisLine={false} minTickGap={48} />;
+  const segments = nowSegments(cur, rows, modelName);
+  const total = cur?.total ?? 0;
+  const used = cur?.used ?? 0;
+  const heldByStack = rows.reduce((n, r) => n + r.memory_bytes, 0);
+  const cap = engines?.budget.cap_bytes ?? 0;
+  const selected = rows.find((r) => r.role === open) ?? null;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       {error && <Alert variant="destructive" role="alert"><AlertTitle>The Stack is not answering</AlertTitle><AlertDescription>{error} Showing the last numbers it gave.</AlertDescription></Alert>}
 
-      <Card>
-        <CardHeader>
-          <CardDescription>Memory budget</CardDescription>
-          <CardTitle className="flex flex-wrap items-center gap-2 text-2xl">
-            {cur ? `${bytes(cur.used)} of ${bytes(cur.total)}` : "No reading yet"}
+      <section aria-labelledby="now-h" className="flex flex-col gap-4">
+        <h2 id="now-h" className="sr-only">Right now</h2>
+        <div className="glass flex flex-col gap-5 p-5 sm:p-6">
+          <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+            <div>
+              <p className="text-sm text-muted-foreground">Memory in use right now</p>
+              <p className="text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">{cur ? <Live>{`${bytes(used)} of ${bytes(total)}`}</Live> : "No reading yet"}</p>
+            </div>
             <Badge variant="secondary" className="gap-1.5"><StatusIndicator status={pressure.kind} ping={false} />{pressure.word}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+          </div>
           {cur ? (
             <>
-              <div className="flex h-4 w-full overflow-hidden rounded-full bg-muted" role="img" aria-label={`Memory split: ${segments.map((s) => `${s.label} ${bytes(s.bytes)}`).join(", ")}`}>
-                {segments.map((s) => <div key={s.id} title={`${s.label}: ${bytes(s.bytes)}`} className="h-full border-e border-card last:border-e-0 transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${s.percent}%`, background: s.color }} />)}
-              </div>
-              <ul className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2 xl:grid-cols-3" aria-label="Memory by owner">
+              <div className="flex h-5 w-full overflow-hidden rounded-full bg-[var(--fill-2)]" role="img" aria-label={`Memory split: ${segments.map((s) => `${s.label} ${bytes(s.bytes)}`).join(", ")}`}>
                 {segments.map((s) => (
-                  <li key={s.id} className="flex items-center gap-2">
-                    <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
-                    <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                    <span className="text-muted-foreground tabular-nums">{bytes(s.bytes)}</span>
-                  </li>
+                  <button key={s.id} type="button" disabled={s.kind !== "role"} onClick={() => setOpen(s.id)} title={`${s.label}: ${bytes(s.bytes)}, ${shareText(s.bytes, total)}`} aria-label={`${s.label}, ${bytes(s.bytes)}`}
+                    className="h-full cursor-default border-e border-card outline-none transition-[width] duration-500 last:border-e-0 enabled:cursor-pointer focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none" style={{ width: `${s.percent}%`, background: s.color }} />
                 ))}
+              </div>
+              <ul className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm lg:grid-cols-2" aria-label="Where memory is going">
+                {segments.filter((s) => s.bytes > 0).map((s) => {
+                  const row = rows.find((r) => r.role === s.id);
+                  const inner = (
+                    <>
+                      <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
+                      <span className="min-w-0 flex-1 truncate">{s.label}{s.detail && <span className="text-muted-foreground"> · {s.detail}</span>}{row && <span className="text-muted-foreground"> · {stateWord(row.state).toLowerCase()}</span>}</span>
+                      <span className="tabular-nums">{bytes(s.bytes)}</span>
+                      <span className="w-12 text-end text-muted-foreground tabular-nums">{shareText(s.bytes, total)}</span>
+                    </>
+                  );
+                  return <li key={s.id}>{row ? <button type="button" onClick={() => setOpen(s.id)} className="flex min-h-9 w-full items-center gap-2 rounded-md text-start outline-none hover:bg-[var(--fill-1)] focus-visible:ring-2 focus-visible:ring-ring">{inner}</button> : <div className="flex min-h-9 items-center gap-2">{inner}</div>}</li>;
+                })}
               </ul>
-              <p className="text-sm text-muted-foreground">Last hour: used {bytes(summary.last_hour.memory_used_mean_bytes)} on average, {bytes(summary.last_hour.memory_used_peak_bytes)} at most.</p>
+              {cap > 0 && (
+                <div className="flex flex-col gap-2">
+                  <Meter value={heldByStack / cap} tone={heldByStack / cap > 0.9 ? "warn" : "primary"} label="Share of the AI budget in use" />
+                  <p className="text-xs text-muted-foreground">The Stack's engines hold {bytes(heldByStack)} of their {bytes(cap)} budget. The budget is the most memory the Stack lets itself use, so there is always room left for everything else.</p>
+                </div>
+              )}
+              {rows.length === 0 && engines && <p className="text-sm text-muted-foreground">No engine is loaded right now, so the Stack itself holds almost nothing. A feature loads its engine the first time it is used.</p>}
             </>
           ) : <p className="text-sm text-muted-foreground">The Stack has not taken its first memory reading yet. It samples every 5 seconds, so this fills in on its own.</p>}
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatTile Icon={Cpu} tone="ok" label="Processor" value={cur?.cpu == null ? "No reading" : `${Math.round(cur.cpu)}%`} series={lines.map((r) => r.cpu ?? 0)} max={100} hint={summary.last_hour.cpu_peak == null ? "Needs a second sample." : `Peak ${Math.round(summary.last_hour.cpu_peak)}% in the last hour.`} />
-        <StatTile Icon={MemoryStick} tone="warn" label="Swap" value={cur ? bytes(cur.swap) : "No reading"} series={lines.map((r) => r.swap)} hint="Memory pushed to disk. Lower is better." />
-        <StatTile Icon={Layers} label="Waiting requests" value={cur ? String(cur.queue) : "No reading"} series={lines.map((r) => r.queue)} hint={`Most at once in the last hour: ${summary.last_hour.queue_peak}.`} />
-        <StatTile Icon={HardDrive} tone="muted" label="Models on disk" value={cur?.disk == null ? "No reading" : bytes(cur.disk)} meter={cur?.disk ? Math.min(1, cur.disk / (200 * 1024 ** 3)) : 0} hint="Space used by installed models and engines." />
-      </div>
-
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">History</h2>
-        <ToggleGroup type="single" variant="outline" size="sm" value={range} onValueChange={(v) => { if (v) setRange(v as Range); }} aria-label="Time range">
-          {RANGES.map((r) => <ToggleGroupItem key={r.id} value={r.id}>{r.label}</ToggleGroupItem>)}
-        </ToggleGroup>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="lg:col-span-2">
-          <ChartCard title="Memory by engine" description="Gigabytes held by the biggest processes, and by everything else.">
-            {memory.length < 2 ? <Empty>Not enough history yet. This chart fills in as the Stack keeps sampling.</Empty> : (
-              <ChartContainer config={config} className="aspect-auto h-64 w-full">
-                <AreaChart data={memory} margin={{ left: 0, right: 8 }}>
-                  <CartesianGrid vertical={false} />
-                  {axis}
-                  <YAxis width={52} tickCount={4} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${Math.round(v)} GB`} />
-                  <ChartTooltip content={<ChartTooltipContent labelFormatter={(_, p) => (p?.[0] ? timeLabel(Number(p[0].payload.t), range) : "")} formatter={(v, name) => <span className="flex w-full justify-between gap-4"><span>{config[String(name)]?.label ?? name}</span><span className="tabular-nums">{bytes(Number(v) * 1024 ** 3)}</span></span>} />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  {[...kept.map((r) => r.id), "other"].map((id) => <Area key={id} dataKey={id} type="monotone" stackId="mem" stroke={`var(--color-${id})`} fill={`var(--color-${id})`} fillOpacity={0.55} isAnimationActive={false} />)}
-                </AreaChart>
-              </ChartContainer>
-            )}
-          </ChartCard>
         </div>
-        <LineCard title="CPU" description="Percent of the whole computer in use." rows={lines} k="cpu" range={range} config={config} format={(v) => `${Math.round(v)}%`} axisFormat={(v) => `${Math.round(v)}%`} none="No CPU readings in this range yet." />
-        <LineCard title="Tokens per second" description="How fast chat engines are writing, added up." rows={lines} k="tps" range={range} config={config} format={(v) => `${v.toFixed(1)} tokens/s`} axisFormat={(v) => `${Math.round(v)}`} none="No engine reports a speed yet. It appears once an engine keeps a counter and answers a request." />
-        <LineCard title="Swap" description="Memory the system pushed out to disk, in gigabytes." rows={lines} k="swap" range={range} config={config} format={(v) => bytes(v * 1024 ** 3)} axisFormat={(v) => `${v.toFixed(1)}`} none="No swap readings in this range yet." />
-        <LineCard title="Waiting requests" description="How many requests are queued for memory or an engine." rows={lines} k="queue" range={range} config={config} format={(v) => String(Math.round(v))} axisFormat={(v) => `${Math.round(v)}`} none="No queue readings in this range yet." />
-      </div>
 
-      <section aria-labelledby="engines-h" className="flex flex-col gap-3">
-        <h2 id="engines-h" className="text-lg font-semibold">Engine memory, last hour</h2>
-        {summary.roles.length === 0 ? <Card><CardContent className="text-sm text-muted-foreground">No engine process has run yet. Rows appear here when a feature starts one.</CardContent></Card> : (
-          <Card>
-            <CardContent>
-              <ul className="divide-y" aria-label="Engine memory">
-                {[...summary.roles].sort((a, b) => b.peak_bytes - a.peak_bytes).slice(0, 8).map((r) => (
-                  <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0">
-                    <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: seriesColor(r.color_key) }} />
-                    <span className="min-w-0 flex-1 truncate font-medium">{r.id}</span>
-                    <span className="text-sm text-muted-foreground tabular-nums">{r.current_bytes > 0 ? `${bytes(r.current_bytes)} now` : "Not running"}</span>
-                    <span className="text-sm text-muted-foreground tabular-nums">peak {bytes(r.peak_bytes)}, average {bytes(r.mean_bytes)}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <StatTile Icon={MemoryStick} tone={pressure.kind === "online" ? "ok" : pressure.kind === "degraded" ? "warn" : "bad"} label="Memory" value={cur ? `${pct(used, total)}%` : "No reading"} series={memPct} max={100} hint={cur ? `${pressure.word}. Last hour: ${bytes(summary.last_hour.memory_used_mean_bytes)} on average, ${bytes(summary.last_hour.memory_used_peak_bytes)} at most.` : undefined} />
+          <StatTile Icon={Cpu} tone="primary" label="Processor" value={cur?.cpu == null ? "No reading" : `${Math.round(cur.cpu)}%`} series={load.map((r) => r.cpu ?? 0)} max={100} hint={summary.last_hour.cpu_peak == null ? "Needs a second sample." : `Peak ${Math.round(summary.last_hour.cpu_peak)}% in the last hour.`} />
+          <StatTile Icon={HardDrive} tone="muted" label="Models on disk" value={cur?.disk == null ? "No reading" : bytes(cur.disk)} meter={cur?.disk ? Math.min(1, cur.disk / (200 * GB)) : 0} hint="Space used by installed models and engines." />
+        </div>
+
+        <Collapsible open={more} onOpenChange={setMore}>
+          <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-xl px-1 py-2 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+            <span>More measurements: graphics, speed, swap and waiting requests</span>
+            <ChevronDown className={`size-4 transition-transform motion-reduce:transition-none ${more ? "rotate-180" : ""}`} aria-hidden="true" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="grid grid-cols-2 gap-3 pt-2 xl:grid-cols-4">
+              <StatTile Icon={Gauge} tone="primary" label="Graphics" value={cur?.gpu == null ? NOT_MEASURED : `${Math.round(cur.gpu)}%`} hint={cur?.gpu == null ? "This computer gives no cheap graphics reading, so none is shown." : "Share of the graphics chip in use."} />
+              <StatTile Icon={Zap} tone="primary" label="Speed" value={speedNow(cur?.tps) ?? NOT_MEASURED} hint={cur?.tps ? "Tokens per second, all engines added up." : "Appears once an engine keeps a counter and answers a request."} />
+              <StatTile Icon={MemoryStick} tone="warn" label="Swap" value={cur ? bytes(cur.swap) : "No reading"} hint="Memory pushed to disk. Lower is better." />
+              <StatTile Icon={Cpu} tone="muted" label="Waiting requests" value={cur ? String(cur.queue) : "No reading"} hint={`Most at once in the last hour: ${summary.last_hour.queue_peak}.`} />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </section>
+
+      <section aria-labelledby="hist-h" className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="hist-h" className="text-lg font-semibold">Over time</h2>
+          <ToggleGroup type="single" variant="outline" size="sm" value={range} onValueChange={(v) => { if (v) setRange(v as Range); }} aria-label="Time range">
+            {RANGES.map((r) => <ToggleGroupItem key={r.id} value={r.id}>{r.label}</ToggleGroupItem>)}
+          </ToggleGroup>
+        </div>
+        <ChartCard title="Memory by feature" description={perRole ? "What each feature's engine holds, with loads, unloads, restarts and mode switches marked." : "Memory by process. Per-feature figures appear as the Stack keeps sampling."}>
+          {stack.rows.length < 2 ? <Empty>Not enough history yet. This chart fills in as the Stack keeps sampling.</Empty> : <MemoryStack rows={stack.rows} keep={stack.keep} labels={stack.labels} range={range} markers={markers} />}
+        </ChartCard>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <LineCard title="Processor and graphics" description="Percent of the whole computer in use." rows={load} series={[{ key: "cpu", label: "Processor", color: "var(--chart-1)" }, { key: "gpu", label: "Graphics", color: "var(--chart-4)" }]} range={range} format={(v) => `${Math.round(v)}%`} axisFormat={(v) => `${Math.round(v)}%`} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} none="No processor readings in this range yet." />
+          <LineCard title="Speed" description="Tokens per second the engines are writing, added up." rows={speed} series={[{ key: "tps", label: "Tokens per second", color: "var(--chart-1)" }]} range={range} format={(v) => `${v.toFixed(1)} tokens/s`} axisFormat={(v) => `${Math.round(v)}`} none="Not measured yet. It appears once an engine keeps a counter and answers a request." />
+          <LineCard title="Swap" description="Memory the system pushed out to disk, in gigabytes." rows={swap} series={[{ key: "swap", label: "Swap", color: "var(--chart-2)" }]} range={range} format={(v) => bytes(v * GB)} axisFormat={(v) => `${v.toFixed(1)}`} none="No swap readings in this range yet." />
+          <LineCard title="Waiting requests" description="Requests queued for memory or an engine." rows={queue} series={[{ key: "queue", label: "Waiting", color: "var(--chart-1)" }]} range={range} format={(v) => String(Math.round(v))} axisFormat={(v) => `${Math.round(v)}`} none="No queue readings in this range yet." />
+        </div>
+      </section>
+
+      <section aria-labelledby="eng-h" className="flex flex-col gap-3">
+        <div>
+          <h2 id="eng-h" className="text-lg font-semibold">Engines</h2>
+          <p className="text-sm text-muted-foreground">Every engine the Stack runs, what it holds and why. Tap a row for detail.</p>
+        </div>
+        <EngineTable rows={rows} total={total} modelName={modelName} />
+      </section>
+
+      <EngineDetail row={selected} total={total} modelName={modelName} onClose={() => setOpen(null)} />
     </div>
   );
 }
 
-function LineCard({ title, description, rows, k, range, config, format, axisFormat, none }: {
-  title: string; description: string; rows: ReturnType<typeof lineRows>; k: "cpu" | "tps" | "swap" | "queue"; range: Range; config: ChartConfig;
-  format: (v: number) => string; axisFormat: (v: number) => string; none: string;
-}) {
-  const ok = rows.length >= 2 && hasValues(rows, k);
-  return (
-    <ChartCard title={title} description={description}>
-      {!ok ? <Empty>{none}</Empty> : (
-        <ChartContainer config={config} className="aspect-auto h-44 w-full">
-          <LineChart data={rows} margin={{ left: 0, right: 8 }}>
-            <CartesianGrid vertical={false} />
-            <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(t: number) => timeLabel(t, range)} tickLine={false} axisLine={false} minTickGap={48} />
-            <YAxis width={40} tickCount={4} tickLine={false} axisLine={false} tickFormatter={axisFormat} allowDecimals={false} domain={k === "cpu" ? [0, 100] : [0, "auto"]} />
-            <ChartTooltip content={<ChartTooltipContent labelFormatter={(_, p) => (p?.[0] ? timeLabel(Number(p[0].payload.t), range) : "")} formatter={(v) => <span className="tabular-nums">{format(Number(v))}</span>} />} />
-            <Line dataKey={k} type="monotone" stroke={`var(--color-${k})`} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
-          </LineChart>
-        </ChartContainer>
-      )}
-    </ChartCard>
-  );
+function speedNow(tps: Record<string, number> | null | undefined): string | null {
+  if (!tps) return null;
+  const total = Object.values(tps).reduce((a, b) => a + b, 0);
+  return `${total.toFixed(1)} tokens/s`;
 }

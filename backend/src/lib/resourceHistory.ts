@@ -13,6 +13,7 @@ import { dataDir, modelsDir } from "@/lib/paths";
 import { engineRoot } from "@/lib/store/layout";
 import { folderBytes } from "@/lib/sweeps";
 import { getGovernorStatus } from "@/lib/governor";
+import { startResourceEvents } from "@/lib/resourceEvents";
 import { memoryWatchdog, onMemorySample } from "@/lib/memoryWatchdog";
 import type { SystemSample } from "@/lib/memory/system";
 
@@ -34,6 +35,8 @@ export interface Point {
   used: number; used_max: number;
   stack: number; stack_max: number; other: number;
   procs: Record<string, number>;
+  /** Bytes by engine role (chat, tts, ...): the role's process and its children. Absent on points recorded before 2026-11-21. */
+  roles?: Record<string, number>;
   cpu: number | null; cpu_max: number | null;
   stack_cpu: number | null; stack_cpu_max: number | null;
   gpu: number | null;
@@ -65,6 +68,8 @@ export function aggregate(points: Point[], t: number): Point {
   }
   const names = new Set(points.flatMap((p) => Object.keys(p.procs)));
   for (const name of names) out.procs[name] = mean(points.reduce((s, p) => s + (p.procs[name] ?? 0) * p.n, 0), n);
+  const roleNames = new Set(points.flatMap((p) => Object.keys(p.roles ?? {})));
+  if (roleNames.size) { out.roles = {}; for (const name of roleNames) out.roles[name] = mean(points.reduce((s, p) => s + (p.roles?.[name] ?? 0) * p.n, 0), n); }
   const tpsNames = new Set(points.flatMap((p) => Object.keys(p.tps ?? {})));
   if (tpsNames.size) {
     out.tps = {};
@@ -207,12 +212,27 @@ export class ResourceHistory {
     return [...hrFiltered, ...minFiltered, ...raw].sort((a, b) => a.t - b.t);
   }
 
-  query(range: Range, requestedStep: number | "auto" = "auto"): { range: Range; step_seconds: number; points: Point[]; roles: Array<{ id: string; color_key: string }> } {
+  query(range: Range, requestedStep: number | "auto" = "auto"): { range: Range; step_seconds: number; points: Point[]; roles: Array<{ id: string; color_key: string }>; engine_roles: Array<{ id: string; color_key: string }> } {
     const now = this.now();
     const step = chooseStep(range, requestedStep);
     const points = bin(this.collect(now - RANGE_MS[range], now), step * SEC).slice(-MAX_POINTS);
     const names = [...new Set(points.flatMap((p) => Object.keys(p.procs)))].sort();
-    return { range, step_seconds: step, points, roles: names.map((id) => ({ id, color_key: colorKey(id) })) };
+    const engineNames = [...new Set(points.flatMap((p) => Object.keys(p.roles ?? {})))].sort();
+    return { range, step_seconds: step, points, roles: names.map((id) => ({ id, color_key: colorKey(id) })), engine_roles: engineNames.map((id) => ({ id, color_key: colorKey(id) })) };
+  }
+
+  private statsCache: { at: number; value: Record<string, { peak: number; mean: number }> } | null = null;
+  /** Memory by engine role over the last 24 h: the peak of each role's bucket maxima is not kept, so the peak is the largest bucket mean; cached for 30 s because it reads a day of samples. */
+  roleStats(): Record<string, { peak: number; mean: number }> {
+    const now = this.now();
+    if (this.statsCache && now - this.statsCache.at < 30_000) return this.statsCache.value;
+    const pts = bin(this.collect(now - DAY, now), 60_000);
+    const names = new Set(pts.flatMap((p) => Object.keys(p.roles ?? {})));
+    const total = pts.reduce((s, p) => s + p.n, 0);
+    const value: Record<string, { peak: number; mean: number }> = {};
+    for (const name of names) value[name] = { peak: pts.reduce((m, p) => Math.max(m, p.roles?.[name] ?? 0), 0), mean: mean(pts.reduce((s, p) => s + (p.roles?.[name] ?? 0) * p.n, 0), total) };
+    this.statsCache = { at: now, value };
+    return value;
   }
 
   /** Current numbers plus last-hour peak and mean, per role and overall. */
@@ -260,7 +280,9 @@ export interface CollectorDeps {
   /** The Stack's own CPU seconds so far and the core count. */
   ownCpuSeconds?: () => number;
   coreCount?: () => number;
-  view?: () => { stackBytes: number; nonStackBytes: number; procs: Array<{ name: string; bytes: number }> };
+  view?: (rolePids: Array<{ role: string; pid: number }>) => { stackBytes: number; nonStackBytes: number; procs: Array<{ name: string; bytes: number }>; roles?: Record<string, number> };
+  /** The engine process behind each role; the app registers the supervisor's list with `setRolePidProvider`. */
+  rolePids?: () => Array<{ role: string; pid: number }>;
   diskBytes?: () => number;
   queueDepth?: () => number;
   /** macOS gives no cheap GPU figure, so the default is null and nothing is spawned. */
@@ -269,12 +291,17 @@ export interface CollectorDeps {
   tokensPerSecond?: () => Record<string, number> | null;
 }
 
+let rolePidProvider: () => Array<{ role: string; pid: number }> = () => [];
+/** The supervisor's engine processes, registered once by the resources route so this file imports no supervisor. */
+export function setRolePidProvider(provider: () => Array<{ role: string; pid: number }>): void { rolePidProvider = provider; }
+
 export function createCollector(deps: CollectorDeps = {}): (sample: SystemSample) => Point {
   const now = deps.now ?? Date.now;
   const cpuTimes = deps.cpuTimes ?? (() => { let idle = 0, total = 0; for (const c of cpus()) { const t = c.times; idle += t.idle; total += t.user + t.nice + t.sys + t.idle + t.irq; } return { idle, total }; });
   const ownCpu = deps.ownCpuSeconds ?? (() => { const u = process.cpuUsage(); return (u.user + u.system) / 1e6; });
   const cores = deps.coreCount ?? (() => Math.max(1, cpus().length));
-  const view = deps.view ?? (() => memoryWatchdog().resourceView());
+  const view = deps.view ?? ((rolePids) => memoryWatchdog().resourceView(rolePids));
+  const rolePids = deps.rolePids ?? (() => rolePidProvider());
   const disk = deps.diskBytes ?? cachedDiskBytes();
   const queue = deps.queueDepth ?? (() => getGovernorStatus().queue.length);
   let prevCpu: { idle: number; total: number } | null = null;
@@ -289,7 +316,7 @@ export function createCollector(deps: CollectorDeps = {}): (sample: SystemSample
     let stackCpu: number | null = null;
     if (prevOwn && at > prevOwn.at) stackCpu = Math.min(100, Math.max(0, ((own - prevOwn.seconds) / ((at - prevOwn.at) / SEC) / cores()) * 100));
     prevOwn = { at, seconds: own };
-    const v = view();
+    const v = view(rolePids());
     const procs: Record<string, number> = {};
     for (const p of v.procs) procs[p.name] = (procs[p.name] ?? 0) + p.bytes;
     const used = Math.max(0, sample.totalBytes - sample.availableBytes);
@@ -297,7 +324,7 @@ export function createCollector(deps: CollectorDeps = {}): (sample: SystemSample
       t: at, n: 1,
       total: sample.totalBytes, avail: sample.availableBytes, wired: sample.wiredBytes, compressed: sample.compressorBytes, swap: sample.swapUsedBytes,
       pressure: sample.pressureLevel, used, used_max: used,
-      stack: v.stackBytes, stack_max: v.stackBytes, other: v.nonStackBytes, procs,
+      stack: v.stackBytes, stack_max: v.stackBytes, other: v.nonStackBytes, procs, roles: v.roles ?? {},
       cpu, cpu_max: cpu, stack_cpu: stackCpu, stack_cpu_max: stackCpu,
       gpu: deps.gpu ? deps.gpu() : null,
       disk: disk(),
@@ -323,5 +350,7 @@ export function __setResourceHistoryForTests(next: ResourceHistory | null): void
 export function startResourceHistory(collector: (sample: SystemSample) => Point = createCollector()): () => void {
   const history = resourceHistory();
   history.maintain();
-  return onMemorySample((sample) => { try { history.record(collector(sample)); } catch { /* history must never disturb the watchdog */ } });
+  const stopSamples = onMemorySample((sample) => { try { history.record(collector(sample)); } catch { /* history must never disturb the watchdog */ } });
+  const stopEvents = startResourceEvents();
+  return () => { stopSamples(); stopEvents(); };
 }
