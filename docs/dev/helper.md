@@ -22,9 +22,11 @@ Installing the model uses the ordinary `POST /stack/v1/models` with the row from
 
 ## What it can do
 
-Read tools run at once: health, roles, memory, hardware, updates, settings and logs (redacted). Every write is parked as a pending approval and runs only on Approve, through the same in-process routes the page uses: switch a role on or off, change a setting, restart an engine or the Stack, check, apply or roll back an update. Each approved change is logged as `admin.action.helper.approved`, source `helper`, approved by admin.
+Read tools run at once: health, roles, which model serves a role (`get_role_model`, from the roles route), memory, hardware, updates, settings and logs (redacted). Every write is parked as a pending approval and runs only on Approve, through the same in-process routes the page uses: switch a role on or off, change a setting, restart an engine or the Stack, check, apply or roll back an update. Each approved change is logged as `admin.action.helper.approved`, source `helper`, approved by admin.
 
 It cannot reboot the computer, edit files, run commands, change `stack.admin.*` or secret settings (refused even after a click), or reach the network. The wording of an ask is fixed by the Stack, not by the model.
+
+A failed read tool is never shown to the admin: the model gets a plain "could not read" note, and the reply is cleaned of tool names, raw errors and any typed "Looked at" line. The page adds its own "Looked at" footer from the tools that succeeded.
 
 ## Safety
 

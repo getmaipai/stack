@@ -79,7 +79,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
   const problems = snap.health?.length ?? 0;
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
-      <nav aria-label="Main" className="hidden w-56 shrink-0 flex-col gap-1 border-e bg-sidebar p-3 text-sidebar-foreground md:flex">
+      <nav aria-label="Main" className="hidden w-56 shrink-0 flex-col gap-1 overflow-y-auto border-e bg-sidebar p-3 text-sidebar-foreground md:sticky md:top-0 md:flex md:h-dvh md:self-start">
         <p className="px-3 py-2 text-base font-semibold">MaiPai Stack</p>
         {NAV.map(({ id, label, Icon }) => (
           <Button key={id} variant={screen === id ? "secondary" : "ghost"} className="justify-start" aria-current={screen === id ? "page" : undefined} onClick={() => go(id)}>

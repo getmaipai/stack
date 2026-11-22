@@ -104,7 +104,7 @@ export function Helper({ notify }: { notify: Notify }) {
         {messages.map((m, i) => (
           <div key={`${m.at}-${i}`} className={m.role === "user" ? "ms-auto max-w-[85%] rounded-2xl bg-primary px-3 py-2 text-sm text-primary-foreground" : "me-auto max-w-[90%] rounded-2xl bg-muted px-3 py-2 text-sm text-foreground"}>
             <p className="whitespace-pre-wrap break-words">{m.content}</p>
-            {m.tools && m.tools.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Looked at: {[...new Set(m.tools)].map((t) => t.replace(/^get_/, "")).join(", ")}</p>}
+            {m.tools && m.tools.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Looked at: {[...new Set(m.tools)].map((t) => t.replace(/^get_/, "").replace(/_/g, " ")).join(", ")}</p>}
           </div>
         ))}
         {pending.map((p) => (

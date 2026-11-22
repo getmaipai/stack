@@ -67,7 +67,30 @@ const SECRET_SETTING = /token|secret|password|key$|_key|cookie/i;
 function settingsText(prefix: string): string {
   const values = settingValues();
   const lines = SETTINGS.filter((s) => s.key.startsWith(prefix) && !SECRET_SETTING.test(s.key)).map((s) => `${s.key}=${String(values[s.key] ?? s.default)}`);
-  return lines.length > 0 ? lines.join("\n") : `No setting starts with "${prefix}".`;
+  if (lines.length > 0) return lines.join("\n");
+  const prefixes = [...new Set(SETTINGS.filter((x) => !SECRET_SETTING.test(x.key)).map((x) => x.key.split(".").slice(0, 3).join(".")))].slice(0, 40);
+  return `No setting starts with "${prefix}". Real prefixes: ${prefixes.join(", ")}.`;
+}
+
+/** The one role's model, from the roles route, never from the model's memory. */
+function roleModelText(json: unknown, role: string): ToolOutcome {
+  const roles = (json as { roles?: Array<Record<string, any>> })?.roles;
+  const r = Array.isArray(roles) ? roles.find((x) => x.id === role) : undefined;
+  if (!r) return { ok: false, text: `There is no role called "${role}". Real roles: ${ROLE_IDS.join(", ")}.` };
+  const on = r.enabled ? "on" : "off";
+  const state = r.state?.state ?? "unknown";
+  const model = r.model?.id ? `the model is ${r.model.id}` : "no model is installed for it";
+  return { ok: true, text: `Role ${role} is ${on}, state ${state}; ${model}.` };
+}
+
+const LEAK = /\b(get_[a-z_]+|set_[a-z_]+|restart_[a-z]+|function|tool)\b|does not exist|The Stack answered \d{3}|No setting starts/i;
+/** Removes what must never reach the admin: a tool's raw error, tool names, a "Looked at" line the model typed itself. */
+export function cleanReply(raw: string, hadFailure: boolean, hadSuccess: boolean): string {
+  let text = raw.replace(/\s*Looked at:[\s\S]*$/i, "").trim();
+  const sentences = text.split(/(?<=[.!?])\s+|\n+/).filter((x) => x.trim() && !LEAK.test(x));
+  text = sentences.join(" ").trim();
+  if (!text || (hadFailure && !hadSuccess)) return "I could not read that just now. Try again, or look on the Models or Settings screen.";
+  return text;
 }
 
 /** The plain sentence the Approve button shows. */
@@ -127,6 +150,7 @@ export async function runTool(tool: HelperTool, args: Record<string, unknown>): 
   switch (tool.name) {
     case "get_health": return done(await route("GET", "/stack/v1/health"));
     case "get_roles": { const r = await route("GET", "/stack/v1/roles"); return done({ ...r, json: slimRoles(r.json) }); }
+    case "get_role_model": { const r = await route("GET", "/stack/v1/roles"); return r.status >= 400 ? done(r) : roleModelText(r.json, String(args.role ?? "")); }
     case "get_memory": return done(await route("GET", "/stack/v1/memory"));
     case "get_hardware": return done(await route("GET", "/stack/v1/hardware"));
     case "get_updates": return done(await route("GET", "/stack/v1/updates"));
@@ -197,6 +221,8 @@ export async function chat(text: string): Promise<ChatResult> {
     ...history.filter((m) => !isNotice(m)).slice(-12).map((m) => ({ role: m.role, content: m.content })),
   ];
   const used: string[] = [];
+  let failed = false;
+  let succeeded = false;
   const parked: Pending[] = [];
   const started = Date.now();
   let wakeMs = 0;
@@ -205,15 +231,19 @@ export async function chat(text: string): Promise<ChatResult> {
     const answer = await model({ model: "helper", temperature: 0, max_tokens: 400, messages, tools: helperToolSpecs() });
     if (round === 0) wakeMs = Date.now() - started;
     const calls = answer.message.tool_calls ?? [];
-    if (calls.length === 0) { reply = (answer.message.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim(); break; }
+    if (calls.length === 0) { reply = cleanReply((answer.message.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, ""), failed, succeeded); break; }
     messages.push({ role: "assistant", content: answer.message.content ?? "", tool_calls: calls.map((c, i) => ({ id: c.id ?? `call_${round}_${i}`, type: "function", function: { name: c.function.name, arguments: typeof c.function.arguments === "string" ? c.function.arguments : JSON.stringify(c.function.arguments) } })) });
     for (const [i, call] of calls.entries()) {
       const id = call.id ?? `call_${round}_${i}`;
       const tool = helperTool(call.function.name);
       const args = parseArgs(call.function.arguments);
       let result: string;
-      if (!tool) result = `There is no tool called ${call.function.name}.`;
-      else if (tool.kind === "read") { used.push(tool.name); result = (await runTool(tool, args)).text; }
+      if (!tool) { failed = true; result = `There is no tool called ${call.function.name}.`; }
+      else if (tool.kind === "read") {
+        const outcome = await runTool(tool, args);
+        if (outcome.ok) { used.push(tool.name); succeeded = true; result = outcome.text; }
+        else { failed = true; result = `COULD NOT READ (${outcome.text.slice(0, 300)}). Try get_role_model or get_roles once, otherwise tell the admin plainly you could not read it. Do not repeat this text.`; }
+      }
       else {
         const refusal = refuseWrite(tool.name, args);
         if (refusal) result = refusal;

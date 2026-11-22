@@ -179,3 +179,48 @@ test("the page's own notices are not fed back to the model", async () => {
   expect(sent).toContain("restart");
   expect(sent).not.toContain("I need your approval");
 });
+
+// Regression (2026-11-21): "what's my coding model" answered with an invented key,
+// a raw tool error, "Looked at: roles. for max" and a guessed model name.
+test("a role-model question is answered from the roles route, with the real model id", async () => {
+  setHelperRouteForTests(async (method, path) => { routeCalls.push([method, path, undefined]); return { status: 200, json: { roles: [{ id: "coding", enabled: true, state: { state: "installed" }, model: { id: "real-coding-model" } }] } }; });
+  let toolText = "";
+  const model: ModelCall = async (body) => {
+    const msgs = body.messages as Array<{ role: string; content: string }>;
+    const last = msgs[msgs.length - 1]!;
+    if (last.role === "tool") { toolText = last.content; return text("Your coding model is real-coding-model.") as never; }
+    return call("get_role_model", { role: "coding" }) as never;
+  };
+  setHelperModelForTests(model);
+  const body = await (await say("what's my coding model", await adminHeaders())).json() as { reply: string; tools: string[] };
+  expect(toolText).toContain("real-coding-model");
+  expect(routeCalls[0]![1]).toBe("/stack/v1/roles");
+  expect(body.reply).toBe("Your coding model is real-coding-model.");
+  expect(body.tools).toEqual(["get_role_model"]);
+});
+
+test("get_settings with an invented prefix lists the real ones instead of inviting a guess", async () => {
+  expect(HELPER_TOOLS.find((t) => t.name === "get_settings")!.parameters.properties.prefix!.description).not.toContain("stack.engines.coding");
+  let toolText = "";
+  setHelperModelForTests(async (body) => {
+    const last = (body.messages as Array<{ role: string; content: string }>).at(-1)!;
+    if (last.role === "tool") { toolText = last.content; return text("Could not tell.") as never; }
+    return call("get_settings", { prefix: "stack.nonsense.zzz" }) as never;
+  });
+  await say("x", await adminHeaders());
+  expect(toolText).toContain("Real prefixes: stack.");
+});
+
+test("a tool error and a typed Looked at line never reach the answer", async () => {
+  setHelperRouteForTests(async () => ({ status: 500, json: { error: "boom" } }));
+  setHelperModelForTests(scripted(call("get_roles", {}), text('The coding model is "qwen". Looked at: roles. for max  The setting "stack.engines.coding" does not exist. Use the get_settings function to view available settings.')));
+  const body = await (await say("what's my coding model", await adminHeaders())).json() as { reply: string; tools: string[] };
+  expect(body.reply).toBe("I could not read that just now. Try again, or look on the Models or Settings screen.");
+  expect(body.tools).toEqual([]);
+});
+
+test("a clean answer after a successful read drops leaked sentences and the footer text", async () => {
+  setHelperModelForTests(scripted(call("get_roles", {}), text("Chat is ready. Looked at: roles. Use the get_settings function.")));
+  const body = await (await say("status", await adminHeaders())).json() as { reply: string };
+  expect(body.reply).toBe("Chat is ready.");
+});
