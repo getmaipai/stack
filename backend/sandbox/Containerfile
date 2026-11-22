@@ -3,10 +3,25 @@
 # TODO-PIN: replace the tag with the base image's sha256 digest before this image is released (pins are exact; see docs/dev.md).
 FROM alpine:3.22
 # What the lock needs: nftables to load the rules, capsh (libcap-utils) to drop the rights for good, bash for capsh's shell,
-# netcat and curl for the gate probe. TODO (CODE-SANDBOX-01b, later slices): git, ripgrep, jq, Python, Node, Go, Rust, OpenCode.
-RUN apk add --no-cache nftables libcap libcap-utils bash netcat-openbsd curl \
+# netcat and curl for the gate probe, git for the agent's work. TODO (CODE-SANDBOX-01b, later slices): ripgrep, jq, Python, Node, Go, Rust.
+RUN apk add --no-cache nftables libcap libcap-utils bash netcat-openbsd curl git \
  && adduser -D -u 1000 agent \
  && find / -xdev -perm /6000 -type f -exec chmod a-s {} + 2>/dev/null || true
+# OpenCode, pinned to one release and checked against its published sha256 (the build fails on a mismatch). The musl build matches Alpine.
+ARG TARGETARCH
+ARG OPENCODE_VERSION=1.19.6
+ARG OPENCODE_SHA256_ARM64=45407388777dfc1894591c9727c169f202ad92c75757038950630a0fbb12ca97
+ARG OPENCODE_SHA256_AMD64=bc6b0d702163d859161ee8e43ea3f16d1bd43b305ac7ce17742eb01ba72489f3
+RUN set -eu; \
+    case "${TARGETARCH:-$(uname -m)}" in \
+      arm64|aarch64) asset=opencode-linux-arm64-musl.tar.gz; sum="$OPENCODE_SHA256_ARM64" ;; \
+      amd64|x86_64) asset=opencode-linux-x64-baseline-musl.tar.gz; sum="$OPENCODE_SHA256_AMD64" ;; \
+      *) echo "unsupported architecture" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/opencode.tgz "https://github.com/sst/opencode/releases/download/v${OPENCODE_VERSION}/${asset}"; \
+    echo "${sum}  /tmp/opencode.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/opencode.tgz -C /usr/local/bin opencode; \
+    chmod 0755 /usr/local/bin/opencode; rm -f /tmp/opencode.tgz
 COPY sandbox-entry.sh /usr/local/sbin/sandbox-entry
 COPY gate-probe.sh /usr/local/sbin/gate-probe
 RUN chmod 0755 /usr/local/sbin/sandbox-entry /usr/local/sbin/gate-probe

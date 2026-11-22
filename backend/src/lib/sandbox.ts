@@ -4,9 +4,11 @@
 // start (backend/sandbox/sandbox-entry.sh, CODE-SANDBOX-02). A start whose lock does not load is a failed start.
 //
 // TODO (CODE-SANDBOX-02, egress proxy slice): the allowlist proxy and `network.policy = "hosts"`.
-// TODO (CODE-SANDBOX-01b, later slices): governor memory admission, snapshots, disk and process limits, OpenCode in the image.
-import { existsSync, realpathSync, statSync } from "node:fs";
-import { isAbsolute, join, sep } from "node:path";
+// TODO (CODE-SANDBOX-01b, later slices): governor memory admission, disk and process limits.
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { isAbsolute, join, posix, sep } from "node:path";
+import { randomBytes } from "node:crypto";
 
 export const SANDBOX_NETWORK = "maipai-sandbox-net";
 export const MACHINE_PREFIX = "maipai-sbx-";
@@ -21,8 +23,8 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9-]{5,39}$/;
 const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/;
 const RESERVED_ENV = /^SANDBOX_/;
 
-export type SandboxErrorCode = "invalid_id" | "invalid_request" | "bad_workspace" | "exists" | "not_found" | "lock_failed" | "start_failed" | "runtime_unavailable" | "network_unavailable";
-const STATUS: Record<SandboxErrorCode, 400 | 404 | 409 | 500 | 503> = { invalid_id: 400, invalid_request: 400, bad_workspace: 400, exists: 409, not_found: 404, lock_failed: 500, start_failed: 500, runtime_unavailable: 503, network_unavailable: 503 };
+export type SandboxErrorCode = "invalid_id" | "invalid_request" | "bad_workspace" | "exists" | "not_found" | "lock_failed" | "start_failed" | "runtime_unavailable" | "network_unavailable" | "not_running" | "snapshot_failed";
+const STATUS: Record<SandboxErrorCode, 400 | 404 | 409 | 500 | 503> = { not_running: 409, snapshot_failed: 500, invalid_id: 400, invalid_request: 400, bad_workspace: 400, exists: 409, not_found: 404, lock_failed: 500, start_failed: 500, runtime_unavailable: 503, network_unavailable: 503 };
 
 /** A typed failure; `message` is plain words that say what went wrong and what to do. */
 export class SandboxError extends Error {
@@ -33,6 +35,15 @@ export class SandboxError extends Error {
 export interface RunResult { code: number; stdout: string; stderr: string }
 /** The one place the `container` program is called. Tests pass a fake. */
 export type ContainerRunner = (args: string[], options?: { timeoutMs?: number }) => Promise<RunResult>;
+
+export type ExecChunk = { stream: "stdout" | "stderr"; text: string } | { exit: number };
+/** Runs one `container` call and streams its output; ends with {exit}. Aborting the signal kills the whole process group. Tests pass a fake. */
+export type ContainerStreamer = (args: string[], signal: AbortSignal) => AsyncIterable<ExecChunk>;
+export interface ExecRequest { argv: string[]; cwd?: string; env?: Record<string, string> }
+export interface SnapshotInfo { id: string; files: number }
+export const LOCK_MARKER = "/run/sandbox-lock-ok";
+const SNAPSHOT_ID = /^snap-[a-z0-9-]{8,60}$/;
+const LABEL = /^[\w .:-]{0,80}$/;
 
 export interface SandboxConfig {
   /** Every workspace must sit under this folder. */
@@ -47,6 +58,8 @@ export interface SandboxConfig {
   /** How long a start may take before the lock is judged not loaded. */
   startTimeoutMs: number;
   pollMs: number;
+  /** Where snapshots live; on the same volume as the workspaces so a clone is instant. Defaults to `<codingRoot>/.snapshots`. */
+  snapshotRoot?: string;
 }
 
 export interface CreateRequest {
@@ -104,6 +117,27 @@ export const realRunner: ContainerRunner = async (args, options) => {
   }
 };
 
+/** The real streamer: the process leads its own group so an abort ends it and anything it started. The caller's variables ride in the argument list of this one process only; nothing here stores or logs them. */
+export const realStreamer: ContainerStreamer = async function* (args, signal) {
+  const bin = process.env.STACK_CONTAINER_BIN ?? "/opt/homebrew/bin/container";
+  const child = spawn(bin, args, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  const queue: ExecChunk[] = []; let wake: (() => void) | undefined; let done = false;
+  const push = (chunk: ExecChunk) => { queue.push(chunk); wake?.(); };
+  const decoder = (stream: "stdout" | "stderr") => { const d = new TextDecoder(); return (data: Buffer) => { const text = d.decode(data, { stream: true }); if (text) push({ stream, text }); }; };
+  child.stdout.on("data", decoder("stdout")); child.stderr.on("data", decoder("stderr"));
+  child.on("error", (error) => { push({ stream: "stderr", text: error.message }); push({ exit: 127 }); done = true; });
+  child.on("close", (code, sig) => { if (!done) { push({ exit: code ?? (sig ? 137 : 1) }); done = true; } });
+  const kill = () => { try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch { /* already gone */ } } };
+  if (signal.aborted) kill(); else signal.addEventListener("abort", kill, { once: true });
+  try {
+    for (;;) {
+      while (queue.length) { const chunk = queue.shift()!; yield chunk; if ("exit" in chunk) return; }
+      if (done) return;
+      await new Promise<void>((resolve) => { wake = resolve; if (queue.length || done) resolve(); });
+    }
+  } finally { signal.removeEventListener("abort", kill); if (!done) kill(); }
+};
+
 /** Finds a value by key name in parsed JSON, depth first. */
 function findKey(value: unknown, match: (key: string) => boolean): unknown {
   if (Array.isArray(value)) { for (const item of value) { const found = findKey(item, match); if (found !== undefined) return found; } return undefined; }
@@ -121,7 +155,7 @@ export class SandboxService {
   private networkReady = false;
   private gateway: string | undefined;
 
-  constructor(private readonly run: ContainerRunner, readonly config: SandboxConfig, private readonly now: () => number = Date.now) { this.gateway = config.gatewayAddress; }
+  constructor(private readonly run: ContainerRunner, readonly config: SandboxConfig, private readonly now: () => number = Date.now, private readonly stream: ContainerStreamer = realStreamer) { this.gateway = config.gatewayAddress; }
 
   /** The workspace after every check: absolute, an existing folder, strictly inside the coding root (links resolved), no characters that
    * could add options to the mount. Throws `bad_workspace`. */
@@ -261,6 +295,74 @@ export class SandboxService {
     const entry = this.need(id);
     await this.discard(entry.machine);
     this.entries.delete(id);
+  }
+
+  /** Nothing runs unless this machine is running and its lock marker is there. Same fail-closed rule as the start. */
+  private async needLocked(id: string): Promise<Entry> {
+    const entry = this.need(id);
+    if (entry.state !== "running" || (await this.machineState(entry.machine)) !== "running") throw new SandboxError("not_running", "This sandbox is stopped. Start a new one for the session and try again.");
+    const marker = await this.run(["exec", entry.machine, "test", "-f", LOCK_MARKER]);
+    if (marker.code !== 0) throw new SandboxError("lock_failed", "The sandbox's network lock is not in place, so nothing was run. Remove the sandbox and start a new one.");
+    entry.last_active_at = new Date(this.now()).toISOString();
+    return entry;
+  }
+
+  /** Runs one command in the machine as the unprivileged user. Checks happen before the first byte, so a refusal is a plain error; the
+   * returned stream ends with {exit}. `env` reaches only this process and is never stored or logged. Aborting kills the process group. */
+  async exec(id: string, request: ExecRequest, signal: AbortSignal): Promise<AsyncIterable<ExecChunk>> {
+    const { argv } = request;
+    if (!Array.isArray(argv) || argv.length === 0 || argv.length > 500 || argv.some((a) => typeof a !== "string" || a.includes("\0") || a.length > 100_000)) throw new SandboxError("invalid_request", "The command must be a list of 1 to 500 text arguments with no NUL characters.");
+    for (const [key, value] of Object.entries(request.env ?? {})) {
+      if (!ENV_NAME.test(key) || RESERVED_ENV.test(key)) throw new SandboxError("invalid_request", `The variable name ${key.slice(0, 40)} is not allowed. Use capital letters, digits and underscores, and not a name starting with SANDBOX_.`);
+      if (typeof value !== "string" || value.length > 20_000 || value.includes("\0")) throw new SandboxError("invalid_request", `The value of ${key} is too long or has a NUL character.`);
+    }
+    let cwd = WORKSPACE_MOUNT;
+    if (request.cwd !== undefined) {
+      const clean = typeof request.cwd === "string" && request.cwd.startsWith("/") && !request.cwd.includes("\0") ? posix.normalize(request.cwd) : "";
+      if (clean !== WORKSPACE_MOUNT && !clean.startsWith(`${WORKSPACE_MOUNT}/`)) throw new SandboxError("invalid_request", "The working folder must be /workspace or a folder inside it.");
+      cwd = clean.replace(/\/+$/, "") || WORKSPACE_MOUNT;
+    }
+    const entry = await this.needLocked(id);
+    const args = ["exec", "--user", "agent", "--workdir", cwd, ...Object.entries(request.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]), entry.machine, ...argv];
+    const stream = this.stream;
+    const touch = () => { try { this.touch(id); } catch { /* removed mid-run */ } };
+    return (async function* () { for await (const chunk of stream(args, signal)) { touch(); yield chunk; } })();
+  }
+
+  private snapshotRoot(): string { return this.config.snapshotRoot ?? join(this.config.codingRoot, ".snapshots"); }
+  private snapshotDir(id: string, snapshot: string): string { return join(this.snapshotRoot(), id, snapshot); }
+  private async copyTree(from: string, to: string): Promise<void> {
+    // `cp -c` makes an APFS clone (copy on write, instant); a volume without clones falls back to a plain copy.
+    for (const flags of [["-cR"], ["-R"]]) {
+      const child = Bun.spawn(["/bin/cp", ...flags, `${from}${sep}.`, to], { stdout: "ignore", stderr: "pipe" });
+      if ((await child.exited) === 0) return;
+    }
+    throw new SandboxError("snapshot_failed", "The workspace could not be copied. Check the free disk space and try again.");
+  }
+  private countFiles(dir: string): number {
+    let n = 0;
+    for (const e of readdirSync(dir, { withFileTypes: true })) n += e.isDirectory() ? this.countFiles(join(dir, e.name)) : 1;
+    return n;
+  }
+
+  /** A copy-on-write clone of the workspace. The label is kept only in the snapshot's folder name's log line, never executed. */
+  async snapshot(id: string, label: string): Promise<SnapshotInfo> {
+    if (typeof label !== "string" || !LABEL.test(label)) throw new SandboxError("invalid_request", "The label must be up to 80 letters, digits, spaces or . : _ -.");
+    const entry = await this.needLocked(id);
+    const snapshot = `snap-${Date.now().toString(36)}-${randomBytes(4).toString("hex")}`;
+    const dir = this.snapshotDir(id, snapshot);
+    try { mkdirSync(dir, { recursive: true }); await this.copyTree(entry.workspace, dir); return { id: snapshot, files: this.countFiles(dir) }; }
+    catch (error) { rmSync(dir, { recursive: true, force: true }); throw error instanceof SandboxError ? error : new SandboxError("snapshot_failed", "The snapshot could not be made. Check the free disk space and try again."); }
+  }
+
+  /** Puts the workspace back to a snapshot. The workspace folder itself stays (the machine has it mounted); its contents are replaced. */
+  async restore(id: string, snapshot: string): Promise<void> {
+    if (!SNAPSHOT_ID.test(snapshot)) throw new SandboxError("invalid_request", "That is not a snapshot id.");
+    const entry = await this.needLocked(id);
+    const dir = this.snapshotDir(id, snapshot);
+    if (!existsSync(dir)) throw new SandboxError("not_found", "No snapshot has this id for this sandbox.");
+    try { for (const name of readdirSync(entry.workspace)) rmSync(join(entry.workspace, name), { recursive: true, force: true }); await this.copyTree(dir, entry.workspace); }
+    catch (error) { throw error instanceof SandboxError ? error : new SandboxError("snapshot_failed", "The workspace could not be restored. Try again."); }
   }
 
   /** Reads what the machine printed (the lock test reads the probe's lines). */

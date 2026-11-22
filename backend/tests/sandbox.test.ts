@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app } from "@/app";
-import { MACHINE_PREFIX, SANDBOX_NETWORK, SandboxError, SandboxService, clamp, machineName, setSandboxServiceForTests, type ContainerRunner, type SandboxConfig } from "@/lib/sandbox";
+import { MACHINE_PREFIX, SANDBOX_NETWORK, SandboxError, SandboxService, clamp, machineName, setSandboxServiceForTests, type ContainerRunner, type ContainerStreamer, type ExecChunk, type SandboxConfig } from "@/lib/sandbox";
 
+let streamed: string[][]; let streamAborted: boolean;
+const fakeStream: ContainerStreamer = async function* (args, signal) {
+  streamed.push(args);
+  signal.addEventListener("abort", () => { streamAborted = true; });
+  yield { stream: "stdout", text: "hi\n" } as ExecChunk;
+  yield { stream: "stderr", text: "oops\n" } as ExecChunk;
+  if (args.includes("hang")) await new Promise((resolve) => signal.addEventListener("abort", resolve));
+  yield { exit: signal.aborted ? 137 : 0 } as ExecChunk;
+};
 let root: string; let work: string; let calls: string[][]; let machines: Map<string, string>; let lockOk: boolean; let now: number; let networks: string[];
 
 const fake: ContainerRunner = async (args) => {
@@ -21,11 +30,11 @@ const fake: ContainerRunner = async (args) => {
   return { code: 0, stdout: "", stderr: "" };
 };
 const config = (): SandboxConfig => ({ codingRoot: root, image: "maipai-sandbox:test", allowedPorts: [8790], gatewayAddress: "192.0.2.1", idleMs: 60_000, startTimeoutMs: 200, pollMs: 1 });
-const make = () => new SandboxService(fake, config(), () => now);
+const make = () => new SandboxService(fake, config(), () => now, fakeStream);
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "sbx-root-")); work = join(root, "person", "session", "work"); mkdirSync(work, { recursive: true });
-  calls = []; machines = new Map(); lockOk = true; now = 1_000_000; networks = [];
+  streamed = []; streamAborted = false; calls = []; machines = new Map(); lockOk = true; now = 1_000_000; networks = [];
 });
 afterEach(() => { rmSync(root, { recursive: true, force: true }); setSandboxServiceForTests(undefined); });
 
@@ -143,4 +152,90 @@ test("the routes create, get, list, stop and delete, and refuse a bad path with 
   expect((await send("/sess-route1/stop", "POST")).status).toBe(200);
   expect((await send("/sess-route1", "DELETE")).status).toBe(200);
   expect((await send("/sess-route1", "GET")).status).toBe(404);
+});
+
+const api = (path: string, method: string, body?: unknown, signal?: AbortSignal) => app.request(`http://127.0.0.1/stack/v1/sandboxes${path}`, { method, signal, headers: { "content-type": "application/json", host: "127.0.0.1" }, body: body ? JSON.stringify(body) : undefined });
+
+test("exec streams ndjson lines then the exit, as the unprivileged user, env only as that process's arguments", async () => {
+  setSandboxServiceForTests(make());
+  await api("", "POST", { id: "sess-exec01", workspace: work });
+  const res = await api("/sess-exec01/exec", "POST", { argv: ["echo", "a b"], cwd: "/workspace/sub/../src", env: { TOKEN: "s3cret" } });
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-type")).toBe("application/x-ndjson");
+  const lines = (await res.text()).trim().split("\n").map((l) => JSON.parse(l));
+  expect(lines).toEqual([{ stream: "stdout", text: "hi\n" }, { stream: "stderr", text: "oops\n" }, { exit: 0 }]);
+  expect(streamed[0]).toEqual(["exec", "--user", "agent", "--workdir", "/workspace/src", "-e", "TOKEN=s3cret", "maipai-sbx-sess-exec01", "echo", "a b"]);
+  // The value is in no other container call and in no create/list record.
+  expect(JSON.stringify(calls)).not.toContain("s3cret");
+  expect(JSON.stringify(await (await api("/sess-exec01", "GET")).json())).not.toContain("s3cret");
+});
+
+test("exec refuses a bad command, folder or variable name before running anything", async () => {
+  setSandboxServiceForTests(make());
+  await api("", "POST", { id: "sess-exec02", workspace: work });
+  expect((await api("/sess-exec02/exec", "POST", { argv: [] })).status).toBe(400);
+  expect((await api("/sess-exec02/exec", "POST", { argv: ["ls"], cwd: "/etc" })).status).toBe(400);
+  expect((await api("/sess-exec02/exec", "POST", { argv: ["ls"], cwd: "/workspace/../etc" })).status).toBe(400);
+  expect((await api("/sess-exec02/exec", "POST", { argv: ["ls"], env: { SANDBOX_USER: "root" } })).status).toBe(400);
+  expect((await api("/sess-nope001/exec", "POST", { argv: ["ls"] })).status).toBe(404);
+  expect(streamed).toEqual([]);
+});
+
+test("exec runs nothing when the lock marker is missing or the machine is stopped", async () => {
+  const service = make(); setSandboxServiceForTests(service);
+  await api("", "POST", { id: "sess-exec03", workspace: work });
+  lockOk = false;
+  const noLock = await api("/sess-exec03/exec", "POST", { argv: ["ls"] });
+  expect(noLock.status).toBe(500);
+  expect(((await noLock.json()) as { error: string }).error).toContain("lock");
+  lockOk = true;
+  await service.stop("sess-exec03");
+  expect((await api("/sess-exec03/exec", "POST", { argv: ["ls"] })).status).toBe(409);
+  expect(streamed).toEqual([]);
+});
+
+test("aborting the request reaches the streamer's signal (which kills the process group)", async () => {
+  setSandboxServiceForTests(make());
+  await api("", "POST", { id: "sess-exec04", workspace: work });
+  const controller = new AbortController();
+  const res = await api("/sess-exec04/exec", "POST", { argv: ["hang"] }, controller.signal);
+  const reader = res.body!.getReader();
+  await reader.read();
+  controller.abort();
+  await reader.read().catch(() => undefined);
+  await Bun.sleep(20);
+  expect(streamAborted).toBe(true);
+});
+
+test("snapshot clones the workspace, restore puts it back, and both need the lock", async () => {
+  setSandboxServiceForTests(make());
+  await api("", "POST", { id: "sess-snap01", workspace: work });
+  mkdirSync(join(work, "src")); writeFileSync(join(work, "src", "a.txt"), "one"); writeFileSync(join(work, "b.txt"), "b");
+  const made = await api("/sess-snap01/snapshots", "POST", { label: "before edit" });
+  expect(made.status).toBe(201);
+  const snap = (await made.json()) as { id: string; files: number };
+  expect(snap.files).toBe(2);
+  writeFileSync(join(work, "src", "a.txt"), "two"); writeFileSync(join(work, "extra.txt"), "x");
+  const restored = await api(`/sess-snap01/snapshots/${snap.id}/restore`, "POST");
+  expect(restored.status).toBe(200);
+  expect(await restored.json()).toEqual({ ok: true });
+  expect(readFileSync(join(work, "src", "a.txt"), "utf8")).toBe("one");
+  expect(existsSync(join(work, "extra.txt"))).toBe(false);
+  expect((await api("/sess-snap01/snapshots/snap-unknown-0000/restore", "POST")).status).toBe(404);
+  expect((await api("/sess-snap01/snapshots/..%2Fx/restore", "POST")).status).toBe(400);
+  expect((await api("/sess-snap01/snapshots", "POST", { label: "bad;label$(x)" })).status).toBe(400);
+  lockOk = false;
+  expect((await api("/sess-snap01/snapshots", "POST", { label: "x" })).status).toBe(500);
+  expect((await api(`/sess-snap01/snapshots/${snap.id}/restore`, "POST")).status).toBe(500);
+});
+
+// Real machine: opt-in only (STACK_REAL_SANDBOX_TESTS=1 with the container system running and the image built).
+test.skipIf(process.env.STACK_REAL_SANDBOX_TESTS !== "1")("real machine: exec prints and exits", async () => {
+  const { realRunner, realStreamer, defaultConfig } = await import("@/lib/sandbox");
+  const service = new SandboxService(realRunner, { ...defaultConfig(root), startTimeoutMs: 20_000 }, Date.now, realStreamer);
+  await service.create({ id: "sess-real001", workspace: work });
+  try {
+    const out: ExecChunk[] = []; for await (const chunk of await service.exec("sess-real001", { argv: ["sh", "-c", "echo hi; exit 3"] }, new AbortController().signal)) out.push(chunk);
+    expect(out).toEqual([{ stream: "stdout", text: "hi\n" }, { exit: 3 }]);
+  } finally { await service.remove("sess-real001"); }
 });
