@@ -41,7 +41,7 @@ function grade(c: EvalCase, t: Truth, turn: Turn): { pass: boolean; why: string[
   const why: string[] = [];
   const reply = turn.reply.toLowerCase();
   const e = c.expect;
-  for (const group of e.facts ?? []) if (!group.some((w) => reply.includes(w.toLowerCase()))) why.push(`missing one of: ${group.join(" | ")}`);
+  for (const group of typeof e.facts === "function" ? e.facts(t) : (e.facts ?? [])) if (!group.some((w) => reply.includes(w.toLowerCase()))) why.push(`missing one of: ${group.join(" | ")}`);
   if (e.gbNear) {
     const want = e.gbNear(t);
     if (want === null) { /* nothing to compare when the thing is not running */ } else {

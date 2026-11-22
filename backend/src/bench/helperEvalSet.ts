@@ -13,7 +13,7 @@ export interface Truth {
 }
 export interface Expect {
   /** Every inner list is "one of these words"; the reply must contain one word from each list (case-insensitive). */
-  facts?: string[][];
+  facts?: string[][] | ((t: Truth) => string[][]);
   /** The reply must state a size in GB within 0.6 of this (a moving figure is read when the case runs). */
   gbNear?: (t: Truth) => number | null;
   gbTolerance?: number;
@@ -29,6 +29,8 @@ export interface Expect {
 export interface EvalCase { id: string; kind: "read" | "follow-up" | "action" | "ambiguous" | "impossible"; before?: string[]; say: string; expect: Expect }
 
 const label = (t: Truth, id: string, key: string): string => String(t.roles.find((r) => r.id === id)?.[key] ?? "");
+/** Names the seeded Max-tier picture model can be called, read from the truth, so no model name is typed here (rule E8). */
+const maxPictureNames = (t: Truth): string[] => (t.tiersPictures.levels.find((l) => l.tier === "max")?.candidates ?? []).flatMap((c) => { const head = c.label.split(" ")[0] ?? c.label; return [c.id, c.label, head, head.replace("-", " ")]; });
 const coding = (t: Truth) => t.roles.find((r) => r.id === "coding")!;
 
 export const EVAL_SET: EvalCase[] = [
@@ -44,7 +46,7 @@ export const EVAL_SET: EvalCase[] = [
   { id: "what-is-boost", kind: "read", say: "what does boost mean", expect: { facts: [["bigger", "better", "more memory"]] } },
   { id: "what-is-priority", kind: "read", say: "what does priority mean here", expect: { facts: [["lower"], ["first", "served"]] } },
   { id: "tiers-for-chat", kind: "read", say: "what are the tiers for chat", expect: { facts: [["standard"], ["boost"], ["max"]] } },
-  { id: "max-for-pictures", kind: "read", say: "what is the max tier for pictures", expect: { facts: [["max"], ["qwen-image", "qwen image"]] } },
+  { id: "max-for-pictures", kind: "read", say: "what is the max tier for pictures", expect: { facts: (t) => [["max"], maxPictureNames(t)] } },
   { id: "chat-models", kind: "read", say: "which model does chat use", expect: { facts: [["not installed", "none", "no model", "isn't installed", "is not set up", "not set up"]] } },
   { id: "helper-model", kind: "read", say: "which model does the helper use", expect: { facts: [["qwen3 4b", "qwen3-4b"]] } },
   { id: "coding-engine", kind: "read", say: "what engine does coding use", expect: { facts: [["llama-server", "llama server"]] } },
