@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { app } from "@/app";
-import { listVoices } from "@/speech/voiceList";
+import { isBuiltInVoice, listVoices } from "@/speech/voiceList";
 import { POCKET_TTS_PRESET_VOICES } from "@/speech/voices";
  import { Voice } from "@/wire/voice";
  import { resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests } from "@/lib/supervisor";
@@ -12,7 +12,10 @@ describe("VoxCPM2 voice list (VOICE-VOXCPM2-01)", () => {
     expect(voices[0]!.engine).toBe(engine);
     expect(voices[0]!.tts?.engine).toBe(engine);
     expect(Voice.safeParse(voices[0]).success).toBe(true);
+    // The preview route must not treat the built-in voice as a Pocket preset name (it answered 400 voice-not-pinnable).
+    expect(isBuiltInVoice(voices[0]!)).toBe(true);
   });
+  test("a Pocket preset is not a built-in voice", () => { expect(isBuiltInVoice(listVoices("pocket")[0]!)).toBe(false); });
 });
 
 describe("GET /stack/v1/voices (STACK-101a)", () => {

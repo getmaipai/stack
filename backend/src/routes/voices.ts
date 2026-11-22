@@ -9,7 +9,7 @@ import type { AppEnv } from "@/types";
 import { dataDir } from "@/lib/paths";
 import { identityHeaders } from "@/lib/identity";
 import { POCKET_TTS_VERSION } from "@/speech/pocketTts";
-import { CHATTERBOX_DEFAULT_VOICE_ID, listVoices } from "@/speech/voiceList";
+import { isBuiltInVoice, listVoices } from "@/speech/voiceList";
 import { MLX_AUDIO_VERSION } from "@/speech/mlxAudio";
  import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
  import { speakRole, speechForm } from "@/lib/supervisor";
@@ -21,7 +21,7 @@ const PreviewSentence = "Hello, this is my voice.";
 const previewDir = join(dataDir, "voice-previews");
 
 function previewPath(voiceId: string): string {
-  return join(previewDir, `${voiceId}__${voiceId === CHATTERBOX_DEFAULT_VOICE_ID ? `mlx-audio-${MLX_AUDIO_VERSION}` : POCKET_TTS_VERSION}.wav`);
+  return join(previewDir, `${voiceId}__${voiceId.startsWith("pocket-tts-voice-") ? POCKET_TTS_VERSION : `mlx-audio-${MLX_AUDIO_VERSION}`}.wav`);
 }
 
 const listRoute = createRoute({
@@ -69,7 +69,8 @@ voicesRoutes.openapi(previewRoute, async (c) => {
   }
   try {
     await fs.mkdir(previewDir, { recursive: true });
-    const mlxVoice = id === CHATTERBOX_DEFAULT_VOICE_ID;
+    // Every non-Pocket engine (Chatterbox, VoxCPM2) speaks its one built-in voice; only Pocket presets are named files that are pinned.
+    const mlxVoice = isBuiltInVoice(voice);
     const voiceUrl = id.replace(/^pocket-tts-voice-/, "");
     const prepared = mlxVoice ? undefined : await prepareVoice(voiceUrl, {});
     if (!mlxVoice && voiceNeedsCloning(prepared)) {
