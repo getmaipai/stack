@@ -44,7 +44,7 @@ beforeEach(() => {
 afterEach(() => { __setChoicesDepsForTests(null); __setProfileDepsForTests(null); __resetSettingsForTests(); __resetChoicesForTests(); __resetPartChoicesForTests(); });
 
 const call = (method: string, path: string, body?: unknown) => app.request(`/stack/v1/choices${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
-type Level = { tier: string; chosen: string | null; chosen_by: string; problem: string | null; customization: unknown; options: Array<{ model: string; fits: boolean; refusal: string | null }>; recommended: { model: string | null; why: string } };
+type Level = { tier: string; chosen_state: string | null; chosen: string | null; chosen_by: string; problem: string | null; customization: unknown; options: Array<{ model: string; fits: boolean; refusal: string | null }>; recommended: { model: string | null; why: string } };
 type Cat = { id: CategoryId; order: string[]; disabled: string[]; available: boolean; role_enabled: boolean | null; tiers: Level[]; candidates: Array<Record<string, unknown> & { id: string; state: string; kind: string; label: string; summary: string }>; profiles: Array<{ profile: string; current: boolean; assignments: Array<{ tier: string; model: string }> }> };
 const read = async () => (await (await call("GET", "")).json()) as { profile: string | null; categories: Cat[]; unused: { count: number; total_bytes: number }; migration: { done: boolean; accepted: number; refused: number } };
 const cat = async (id: CategoryId) => (await read()).categories.find((item) => item.id === id)!;
@@ -368,8 +368,14 @@ test("Coding has a Max level that is the Max chat model: it reads what Chat Max 
   // Switching Chat Max off switches Coding Max off with it: one choice, not two.
   await call("PUT", "/chat/max", { model: "off" });
   expect(await level("coding", "max")).toMatchObject({ chosen: null, chosen_by: "off" });
-  // Coding Max has no pick of its own: the answer says where to change it.
-  const refused = await call("PUT", "/coding/max", { model: "qwen3.8-27b-ud-q4-k-m", install: false });
-  expect(refused.status).toBe(409);
-  expect(await refused.json()).toMatchObject({ code: "follows_chat_max", error: expect.stringContaining("Chat") });
+  // Changing Coding Max changes Chat Max: one choice with two doors.
+  const FLASH = "qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs";
+  const picked = await call("PUT", "/coding/max", { model: FLASH, install: false });
+  expect(picked.status).toBe(200);
+  expect((await level("chat", "max")).chosen).toBe(FLASH);
+  expect((await level("coding", "max")).chosen).toBe(FLASH);
+  // The Coding card lists the big model, so its Max row can show a size and a state.
+  const after = (await read()).categories.find((item) => item.id === "coding")!;
+  expect(after.candidates.map((candidate) => candidate.id)).toContain(FLASH);
+  expect(after.tiers.find((row) => row.tier === "max")!.chosen_state).not.toBeNull();
 });

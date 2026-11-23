@@ -106,6 +106,11 @@ function poolOf(state: State, def: CategoryDef): PoolEntry[] {
     }
   } else for (const id of def.partIds ?? []) if (state.parts.has(id)) out.push({ id, kind: "shipped", family: null, vetting: null, row: null, added: null });
   if (def.id === "chat") for (const added of Object.values(state.added)) out.push({ id: added.id, kind: "added", family: null, vetting: null, row: null, added });
+  // A level that follows another category lists that category's installed models too, so its row shows a size and a state. They are options for that level only: offeredAt uses def.partIds for the other levels.
+  for (const from of Object.values(def.follows ?? {})) {
+    const source = defOf(from!);
+    if (source) for (const entry of poolOf(state, source)) if (!out.some((item) => item.id === entry.id) && entry.kind === "shipped" && state.parts.has(entry.id)) out.push(entry);
+  }
   return out;
 }
 
@@ -188,8 +193,9 @@ interface LevelOptions { options: TierRow["options"]; capBytes: number | null; r
 const addedFit = (added: AddedModel, tier: ChoiceTier, state: State): { fits: boolean; refusal: string | null } => addedFits(added, tier, state);
 
 function levelOptions(state: State, def: CategoryDef, pool: PoolEntry[], tier: ChoiceTier): LevelOptions {
-  // Coding Max has no pick of its own: it offers exactly what Chat Max offers (choiceResolver.ts decides the same).
-  if (def.id === "coding" && tier === "max") { const chat = defOf("chat"); if (chat) return levelOptions(state, chat, poolOf(state, chat), "max"); }
+  // A level that follows another category offers exactly what that category does (choiceResolver.ts decides the same).
+  const source = def.follows?.[tier] ? defOf(def.follows[tier]!) : undefined;
+  if (source) return levelOptions(state, source, poolOf(state, source), tier);
   const profile = state.profile!;
   const ids = new Set(pool.map((entry) => entry.id));
   const peaks = new Map<string, number>();
@@ -378,13 +384,14 @@ type Judged = { ok: true; def: CategoryDef; tier: ChoiceTier; profile: ChoicePro
 
 /** The checks a pick passes before anything is stored: known category and level, a candidate of the category, offered for the level on the profile, fits (this computer's own profile), and not unsupported. */
 function judgePick(state: State, input: PickInput, system: boolean): Judged {
+  // A level that follows another category has no pick of its own: it is judged and stored as that category's pick (one choice, two doors; choiceResolver.ts decides the same).
+  { const followed = defOf(resolveCategoryId(input.category) ?? "")?.follows?.[input.tier as ChoiceTier]; if (followed) input = { ...input, category: followed }; }
   const category = resolveCategoryId(input.category);
   const def = category ? defOf(category) : undefined;
   if (!def) return refuse(404, "unknown_category", `The Stack has no category called ${input.category.slice(0, 40)}. Use one of: ${CATEGORY_IDS.join(", ")}.`);
   if (!(CHOICE_TIERS as readonly string[]).includes(input.tier)) return refuse(404, "unknown_level", `${input.tier.slice(0, 40)} is not a level. Use reduced, standard, boost or max.`);
   const tier = input.tier as ChoiceTier;
   if (!def.levels.includes(tier)) return refuse(404, "no_such_level", `${def.label} has no ${levelName(tier)} level.${def.levels.length === 1 ? " It has one model choice, at standard." : ""}`);
-  if (def.id === "coding" && tier === "max") return refuse(409, "follows_chat_max", "Coding Max runs the Max chat model. Change it under Chat, Max.");
   const own = input.profile === undefined || input.profile === state.profile?.id;
   const profile = input.profile ?? state.profile?.id;
   if (!profile) return refuse(409, "computer_too_small", "This computer's memory is below 16 GB, the least the Stack can run chat and voice on, so there is no profile to save a choice for. Name a profile to save one for another computer.");
@@ -398,9 +405,10 @@ function judgePick(state: State, input: PickInput, system: boolean): Judged {
   const offeredElsewhere = entry.kind === "added" || (candidateRow ? candidateRow.profiles.includes(profile) && (tier === "reduced" ? candidateRow.tiers.includes("reduced") : candidateRow.tiers.some((item) => item !== "reduced")) : def.role === null || !profileTier.notAvailable.includes(def.role));
   if (!offeredElsewhere) return refuse(409, "not_offered_here", `${labelOf(state, entry.id)} is not offered for ${levelName(tier)} on a ${profileTier.minUnifiedGb} GB computer.`);
   // Boost and Max chat run through the coding role (Max through coding mode, which starts Qwen3.8 27B or Flash Next): a model the Stack cannot start there is refused, never saved as a choice that changes nothing.
-  if (def.id === "chat" && (tier === "boost" || tier === "max")) {
-    const runnable = tier === "max" ? [STACK_CODING_MODEL.id, STACK_CHAT_QWEN38_FLASH_NEXT_MODEL.id] : [STACK_CODING_MODEL.id];
-    if (!runnable.includes(entry.id)) return refuse(409, "not_runnable_at_level", `${levelName(tier)} chat runs through ${tier === "max" ? "coding mode, which starts Qwen3.8 27B or Qwen3.8 Flash Next" : "the coding model, Qwen3.8 27B"}. ${labelOf(state, entry.id)} cannot run there. Choose ${tier === "max" ? "one of those" : "that model"} for ${levelName(tier)}, or use Standard for this one.`);
+  const runnable = def.heavyAt?.[tier];
+  if (runnable && !runnable.includes(entry.id)) {
+    const names = runnable.map((id) => labelOf(state, id));
+    return refuse(409, "not_runnable_at_level", `${levelName(tier)} ${def.label.toLowerCase()} runs through coding mode, which starts ${names.join(" or ")}. ${labelOf(state, entry.id)} cannot run there. Choose ${runnable.length > 1 ? "one of those" : "that model"} for ${levelName(tier)}, or use Standard for this one.`);
   }
   if (input.options) {
     const known = new Set(candidateRow?.peaks.flatMap((peak) => Object.keys(peak.options)) ?? []);
@@ -440,7 +448,7 @@ async function applyPick(def: CategoryDef, tier: ChoiceTier, entry: PoolEntry, i
     return { applied: true, pending_restart: false, note: null };
   }
   if (!installed) return { applied: false, pending_restart: false, note: `The choice is saved. ${def.label} switches to it once it is installed and checked; ${def.id === "chat" ? "chat" : "the model that answers now"} keeps answering until then.` };
-  if (def.id === "chat" || def.role === "stt" || def.role === "embed" || def.role === "vision" || def.id === "coding") {
+  if (def.process) {
     const role = def.role!;
     if (def.id === "chat") updateSettings({ "stack.engines.chat.model": entry.id });
     const supervisor = await import("@/lib/supervisor");

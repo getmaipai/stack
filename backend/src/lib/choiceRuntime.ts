@@ -54,7 +54,7 @@ export function runningFor(env: ResolverEnv, def: CategoryDef, tier: ChoiceTier,
     if (tier === "reduced") return none(false, "The Stack does not switch to a smaller voice for Reduced; the voice you chose for Standard keeps speaking.");
     return voiceRunning(env, wanted);
   }
-  if (def.id === "chat" || def.id === "coding" || def.role === "stt" || def.role === "embed" || def.role === "vision") return processRunning(env, def, tier, intended);
+  if (def.process) return processRunning(env, def, tier, intended);
   if (def.tierCategory || def.id === "stems") {
     const { model, chosenInstalled } = jobModelFor(def, tier, intended);
     if (!wanted) return { active: true, model, answering: false, reason: null };
@@ -68,7 +68,8 @@ export function runningFor(env: ResolverEnv, def: CategoryDef, tier: ChoiceTier,
 /** The level a process role is serving right now: chat is Standard, Reduced while the swap is on, Max while coding mode is on. */
 export function activeLevelOf(role: RoleId): ChoiceTier {
   if (role === "chat" || role === "judge" || role === "router") return reducedChatForcesLight() ? "reduced" : currentHomeMode() === "coding" ? "max" : "standard";
-  if (role === "coding") return currentHomeMode() === "coding" ? "max" : "standard";
+  const own = categoryOfRole(role);
+  if (own?.follows?.max || own?.heavyAt?.max) return currentHomeMode() === "coding" ? "max" : "standard";
   return "standard";
 }
 
@@ -81,7 +82,7 @@ function processRunning(env: ResolverEnv, def: CategoryDef, tier: ChoiceTier, in
   const next = selectedModel(role)?.id ?? null;
   const serving = loaded ?? next;
   if (!wanted) return { active, model: serving, answering: false, reason: null };
-  if (tier === "max" && (def.id === "chat" || def.id === "coding")) {
+  if (def.heavyAt?.[tier] || def.follows?.[tier]) {
     const heavy = codingModeHeavy().pin.id;
     const answering = heavy === wanted;
     return { active, model: heavy, answering, reason: answering ? null : `Coding mode runs ${name(heavy, env)}: ${name(wanted, env)} is chosen for Max but cannot start (it is not installed with its draft, or coding mode cannot run it).` };
