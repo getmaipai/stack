@@ -12,7 +12,6 @@
   "backend/src/images/loras.ts": 2,
   "backend/src/images/models.ts": 28,
   "backend/src/lib/chatEngineAssets.ts": 3,
-  "backend/src/lib/choiceResolver.ts": 10,
   "backend/src/lib/choiceRuntime.ts": 14,
   "backend/src/lib/choices.ts": 21,
   "backend/src/lib/choicesSchema.ts": 14,

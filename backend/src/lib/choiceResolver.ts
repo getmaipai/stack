@@ -17,8 +17,7 @@ import { TIER_CANDIDATES, tierCandidateLists, tierCapBytes, type ProfileId } fro
 import { readPartChoices, type Choices } from "@/lib/partChoices";
 import { partDef } from "@/lib/partDefs";
 import { pickFor, readAddedModels, readPicks, withPick, writePicks, type AddedModel, type ChoiceTier, type Pick as StoredPick, type Picks } from "@/lib/choicesStore";
-import { defOf, levelName, type CategoryDef } from "@/lib/choiceCategories";
-import { TTS_ENGINE_SETTING } from "@/speech/ttsEngines";
+import { CATEGORY_DEFS, defOf, levelName, type CategoryDef } from "@/lib/choiceCategories";
 import { onSettingWritten, settingIntent } from "@/settings";
 
 const GB = 1_000_000_000;
@@ -47,7 +46,7 @@ export function notifyChoicesChanged(): void { for (const listener of changeList
 export function machineProfile(): ProfileId | undefined { return profileProvider(); }
 
 /** The settings Home's older builds write, as last set (a voice engine change waits for a restart, but the choice is made). */
-export function liveSettings(): Record<string, unknown> { return Object.fromEntries(Object.keys(MIRRORED).map((key) => [key, settingIntent(key)])); }
+export function liveSettings(): Record<string, unknown> { const keys = CATEGORY_DEFS.flatMap((def) => def.legacySetting ? [def.legacySetting.key] : []); return Object.fromEntries(keys.map((key) => [key, settingIntent(key)])); }
 
 export function liveEnv(profile: ProfileId | undefined = profileProvider()): ResolverEnv | null {
   if (!profile) return null;
@@ -80,19 +79,17 @@ export function offeredAt(env: ResolverEnv, def: CategoryDef, tier: ChoiceTier):
     const unavailable = def.role !== null && !!profile?.notAvailable.includes(def.role);
     for (const id of def.partIds ?? []) out.push({ id, fits: !unavailable, refusal: unavailable ? `${def.label} is not available on a ${profile!.minUnifiedGb} GB computer.` : null, kind: "shipped" });
   }
-  if (def.id === "chat") for (const added of Object.values(env.added)) { const fit = addedFits(added, tier, env); out.push({ id: added.id, fits: fit.fits, refusal: fit.refusal, kind: "added" }); }
+  if (def.addedModels) for (const added of Object.values(env.added)) { const fit = addedFits(added, tier, env); out.push({ id: added.id, fits: fit.fits, refusal: fit.refusal, kind: "added" }); }
   return out;
 }
 
 /** The model a legacy setting names for a category's Standard level, or null (`auto`, empty, or not a candidate). */
 function legacySettingModel(env: ResolverEnv, def: CategoryDef): string | null {
-  if (def.id === "chat") { const value = env.settings["stack.engines.chat.model"]; return typeof value === "string" && value ? value : null; }
-  if (def.id === "voice") {
-    const value = env.settings[TTS_ENGINE_SETTING];
-    if (typeof value !== "string" || value === "auto" || !value) return null;
-    return TIER_CANDIDATES.find((row) => row.category === "voice" && row.engine === value && row.profiles.includes(env.profile))?.id ?? null;
-  }
-  return null;
+  if (!def.legacySetting) return null;
+  if (def.legacySetting.by === "model") { const value = env.settings[def.legacySetting.key]; return typeof value === "string" && value ? value : null; }
+  const value = env.settings[def.legacySetting.key];
+  if (typeof value !== "string" || value === "auto" || !value) return null;
+  return TIER_CANDIDATES.find((row) => row.category === def.tierCategory && row.engine === value && row.profiles.includes(env.profile))?.id ?? null;
 }
 
 const none = (def: CategoryDef, tier: ChoiceTier): Intended => ({ category: def.id, tier, model: null, options: null, by: "none", fits: true, refusal: null, problem: null });
@@ -156,27 +153,20 @@ export function disabledIn(partCategory: string): string[] { return readPartChoi
 
 // ---- the legacy settings and the pick are one value ----
 
-const MIRRORED: Record<string, { category: string }> = {
-  "stack.engines.chat.model": { category: "chat" },
-  [TTS_ENGINE_SETTING]: { category: "voice" },
-};
-
 /**
  * Home's older builds push a choice by writing a setting (`PUT /settings`, a chat model load, `profiles/apply`). The same moment, the
  * Standard pick takes that value, so there is one choice and the page shows what Home chose. A value that names no candidate here, or
  * an empty one (`auto`, "the recommended model"), clears the pick instead, so an older pick never shadows what Home just chose.
  */
 export function mirrorSettingToPick(key: string, value: unknown): void {
-  const target = MIRRORED[key];
+  const def = CATEGORY_DEFS.find((d) => d.legacySetting?.key === key);
   const profile = profileProvider();
-  if (!target || !profile) return;
-  const def = defOf(target.category);
-  if (!def) return;
+  if (!def?.legacySetting || !profile) return;
   const text = typeof value === "string" ? value : "";
   let model: string | null = null;
   if (text && text !== "auto") {
-    if (def.id === "voice") model = TIER_CANDIDATES.find((row) => row.category === "voice" && row.engine === text && row.profiles.includes(profile) && row.tiers.includes("standard"))?.id ?? null;
-    else if (def.id === "chat") model = TIER_CANDIDATES.some((row) => row.category === "chat" && row.id === text && row.profiles.includes(profile)) || readAddedModels()[text] ? text : null;
+    if (def.legacySetting.by === "engine") model = TIER_CANDIDATES.find((row) => row.category === def.tierCategory && row.engine === text && row.profiles.includes(profile) && row.tiers.includes("standard"))?.id ?? null;
+    else if (def.legacySetting.by === "model") model = TIER_CANDIDATES.some((row) => row.category === def.tierCategory && row.id === text && row.profiles.includes(profile)) || readAddedModels()[text] ? text : null;
     else model = def.partIds?.includes(text) ? text : null;
   }
   const picks = readPicks();
@@ -185,4 +175,4 @@ export function mirrorSettingToPick(key: string, value: unknown): void {
   if (current?.model === model) return;
   writePicks(withPick(picks, profile, def.id, "standard", { model }));
 }
-onSettingWritten((key, value) => { if (key in MIRRORED) { mirrorSettingToPick(key, value); notifyChoicesChanged(); } });
+onSettingWritten((key, value) => { if (CATEGORY_DEFS.some((def) => def.legacySetting?.key === key)) { mirrorSettingToPick(key, value); notifyChoicesChanged(); } });
