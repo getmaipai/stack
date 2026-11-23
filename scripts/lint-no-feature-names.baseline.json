@@ -20,7 +20,7 @@
   "backend/src/lib/components.ts": 160,
   "backend/src/lib/componentsDoc.ts": 16,
   "backend/src/lib/dailyResources.ts": 1,
-  "backend/src/lib/diskPlan.ts": 74,
+  "backend/src/lib/diskPlan.ts": 59,
   "backend/src/lib/engineCatalog.ts": 26,
   "backend/src/lib/engineIdle.ts": 2,
   "backend/src/lib/fitPlan.ts": 2,

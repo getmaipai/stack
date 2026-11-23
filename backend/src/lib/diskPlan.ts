@@ -8,6 +8,7 @@
 // the installer, the wizard and Settings show cannot drift from the pins.
 // Pure: the install plan route supplies nothing but the tier.
 import measured from "@/lib/diskPlanMeasured.json";
+import diskRoleRowsJson from "@/rows/diskRoleRows.json";
 import { partDef, partLabel } from "@/lib/partDefs";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
@@ -77,6 +78,10 @@ export interface DiskPlan {
   /** The ids a fresh install selects: required and recommended. */
   default_selected: string[];
 }
+
+/** One plain-role install-plan row from rows/diskRoleRows.json: the part whose partLabel is the label, the need, the engines, and a fixed note only when the note is not the part's own description. */
+interface DiskRoleRow { id: string; role: string; part: string; need: DiskNeed; engines: string[]; note?: string }
+const DISK_ROLE_ROWS = diskRoleRowsJson as DiskRoleRow[];
 
 type PinSizes = Record<string, { download_bytes: number; installed_bytes: number }>;
 type EngineSizes = Record<string, { installed_bytes: number; download_bytes: number; peak_temp_bytes: number; basis: DiskBasis }>;
@@ -174,18 +179,13 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   for (const entry of SPLASH_LOCAL_CHAT_MODELS) if (entry.profiles.includes(tier.id)) rows.push(modelRow({ id: entry.row, label: partLabel(entry.pin.id), note: "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.", need: "optional", engines: [] }, [entry.pin, entry.draftPin]));
   const reads = plannedWhere((pin) => projectors.has(pin.id) && pin.role !== "vision");
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: partLabel("qwen3-vl-8b-instruct-q4-k-m"), note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));
-  // The picture reader and its projector checks finished clips and pictures for safety when chat cannot read pictures (AIMODELS-VISION-01).
-  const vision = plannedWhere((pin) => pin.role === "vision");
-  if (vision.length) rows.push(modelRow({ id: "vision", label: partLabel("qwen3-vl-4b-instruct-q4-k-m"), note: partDef("qwen3-vl-4b-instruct-q4-k-m")!.description, need: "recommended", engines: [] }, vision));
-  const judge = plannedWhere((pin) => pin.role === "judge");
-  if (judge.length) rows.push(modelRow({ id: "judge", label: partLabel("qwen3-4b-q4-k-m"), note: "A second, smaller AI that double-checks answers.", need: "required", engines: [] }, judge));
-  // The coding model rides the recommended setup but an admin can leave it out or remove it later (CODE-STACK-01).
-  const coding = plannedWhere((pin) => pin.role === "coding");
-  if (coding.length) rows.push(modelRow({ id: "coding", label: partLabel("qwen3.8-27b-ud-q4-k-m"), note: partDef("qwen3.8-27b-ud-q4-k-m")!.description, need: "recommended", engines: [] }, coding));
-  const embed = plannedWhere((pin) => pin.role === "embed");
-  if (embed.length) rows.push(modelRow({ id: "embed", label: partLabel("nomic-embed-text-v1-5-q4-k-m"), note: partDef("nomic-embed-text-v1-5-q4-k-m")!.description, need: "required", engines: [] }, embed));
-  const stt = plannedWhere((pin) => pin.role === "stt");
-  if (stt.length) rows.push(modelRow({ id: "stt", label: partLabel("moonshine-tiny-en-int8"), note: partDef("moonshine-tiny-en-int8")!.description, need: "required", engines: [] }, stt));
+  // The plain-role rows (the picture reader that checks finished clips and pictures for safety when chat cannot read
+  // pictures, AIMODELS-VISION-01; the judge; the coding model, which rides the recommended setup but an admin can leave
+  // out or remove it later, CODE-STACK-01; the memory helper; speech-to-text) come from rows/diskRoleRows.json.
+  for (const entry of DISK_ROLE_ROWS) {
+    const pins = plannedWhere((pin) => pin.role === entry.role);
+    if (pins.length) rows.push(modelRow({ id: entry.id, label: partLabel(entry.part), note: entry.note ?? partDef(entry.part)!.description, need: entry.need, engines: entry.engines }, pins));
+  }
   const voice = plannedWhere((pin) => pin.role === "tts" && !chatterbox.has(pin.id));
   if (voice.length) rows.push(modelRow({ id: "voice", label: partLabel("pocket-tts-english"), note: partDef("pocket-tts-english")!.description, need: "required", engines: ["engine:voice", "engine:python"] }, voice));
   const better = plannedWhere((pin) => chatterbox.has(pin.id));

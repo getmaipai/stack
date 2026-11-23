@@ -1,0 +1,7 @@
+[
+  { "id": "vision", "role": "vision", "part": "qwen3-vl-4b-instruct-q4-k-m", "need": "recommended", "engines": [] },
+  { "id": "judge", "role": "judge", "part": "qwen3-4b-q4-k-m", "need": "required", "engines": [], "note": "A second, smaller AI that double-checks answers." },
+  { "id": "coding", "role": "coding", "part": "qwen3.8-27b-ud-q4-k-m", "need": "recommended", "engines": [] },
+  { "id": "embed", "role": "embed", "part": "nomic-embed-text-v1-5-q4-k-m", "need": "required", "engines": [] },
+  { "id": "stt", "role": "stt", "part": "moonshine-tiny-en-int8", "need": "required", "engines": [] }
+]
