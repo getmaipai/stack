@@ -1,3 +1,4 @@
+import rows from "@/rows/templateRows.json";
 import type { HardwareInfo } from "@/lib/hardware";
 import { sizingMemory, type MemorySource } from "@/lib/hardware";
 import type { RoleId } from "@/roles";
@@ -17,59 +18,8 @@ export interface ProfileTier {
   speedRange: { min: number; max: number };
 }
 
-export const PROFILE_TIERS: ProfileTier[] = [
-  {
-    id: "p16",
-    level: "minimal",
-    label: "This computer can run chat and voice, with embeddings when needed. Images, video, and music are not available.",
-    minUnifiedGb: 16,
-    minVramGb: 16,
-    resident: ["chat", "judge", "router", "stt", "tts"],
-    onDemand: ["embed"],
-    installedOnly: ["wakeword"],
-    // vision stays here: measured 2026-10-06 on a 24 GB machine, it does
-    // not fit beside the 8B chat under the governor's margin (docs/dev.md,
-    // "The vision role").
-    notAvailable: ["coding", "rerank", "vision", "image", "video", "music"],
-    speedRange: { min: 15, max: 80 },
-  },
-  {
-    id: "p32",
-    level: "moderate",
-    label: "This computer can run chat, voice, and embeddings, with the judge when needed. Generators are not available.",
-    minUnifiedGb: 32,
-    minVramGb: 32,
-    resident: ["chat", "judge", "router", "embed", "stt", "tts"],
-    onDemand: ["rerank"],
-    installedOnly: ["wakeword"],
-    notAvailable: ["coding", "vision", "image", "video", "music"],
-    speedRange: { min: 25, max: 140 },
-  },
-  {
-    id: "p64",
-    level: "recommended",
-    label: "This computer can run chat, voice, and embeddings, plus one image or music job at a time. Video is not available.",
-    minUnifiedGb: 64,
-    minVramGb: 64,
-    resident: ["chat", "judge", "router", "embed", "rerank", "stt", "tts"],
-    onDemand: ["coding", "image", "music"],
-    installedOnly: ["wakeword"],
-    notAvailable: ["vision", "video"],
-    speedRange: { min: 35, max: 220 },
-  },
-  {
-    id: "p128",
-    level: "recommended",
-    label: "This computer can run chat, voice, embeddings, coding, and one image, video, or music job at a time.",
-    minUnifiedGb: 128,
-    minVramGb: 128,
-    resident: ["chat", "judge", "router", "embed", "rerank", "stt", "tts"],
-    onDemand: ["coding", "vision", "image", "video", "music"],
-    installedOnly: ["wakeword"],
-    notAvailable: [],
-    speedRange: { min: 45, max: 320 },
-  },
-];
+// Rows live in rows/templateRows.json. Vision is not available on p16: measured 2026-10-06 on a 24 GB machine, it does not fit beside the 8B chat under the governor margin (docs/dev.md, "The vision role").
+export const PROFILE_TIERS: ProfileTier[] = rows as unknown as ProfileTier[];
 
 let currentBudgetPercent = 100;
 export function setBudgetPercent(percent: number): void {
