@@ -21,3 +21,8 @@ test("no other row has a legacy setting", () => {
   const others = CATEGORY_DEFS.filter((def) => def.id !== "chat" && def.id !== "voice");
   expect(others.every((def) => def.legacySetting === undefined)).toBe(true);
 });
+
+test("the resolver names no feature id: it reads row fields", async () => {
+  const text = await Bun.file(new URL("../src/lib/choiceResolver.ts", import.meta.url)).text();
+  expect(/["'](chat|voice)["']/.test(text)).toBe(false);
+});
