@@ -833,6 +833,12 @@
           "label": {
             "type": "string"
           },
+          "icon": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
           "role": {
             "type": "string",
             "nullable": true
@@ -966,6 +972,8 @@
         "required": [
           "id",
           "label",
+          "icon",
+          "description",
           "role",
           "role_enabled",
           "role_priority",
