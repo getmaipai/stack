@@ -51,7 +51,7 @@ import { AdmissionRefusedError, governorPeak, waitForAdmission, waitingReason } 
 import { emit } from "@/lib/events";
 import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
-import { ROLES, ROLE_IDS, MODE_FOLLOWER_ROLES, type RoleId, type RoleState } from "@/roles";
+import { ROLES, ROLE_IDS, MODE_FOLLOWER_ROLES, rolesWith, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
 import { metalHostFault } from "@/lib/hostProbe";
 import { classifyCrash, describeStartFailure, stderrEvidence, type CrashVerdict } from "@/lib/crashClassifier";
@@ -158,22 +158,22 @@ export class EngineDoesNotFitError extends EngineUnavailableError {
 // post-load check sends. Roles that share chat's model run on chat's
 // process; embed has its own model and its own launch flag.
 const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === "chat");
-const SPAWNABLE_ROLES: RoleId[] = ["chat", "coding", "judge", "embed", "vision", "stt", "tts", "image", "helper"];
+const SPAWNABLE_ROLES: RoleId[] = rolesWith("spawnable");
 /** The roles the speech worker serves: their runtime ships with the
  * Stack (sherpa-onnx-node in package.json), never as an engine build. */
-const SPEECH_ROLES: RoleId[] = ["stt"];
+const SPEECH_ROLES: RoleId[] = rolesWith("speechWorker");
 /** The roles a managed Python engine serves (Pocket TTS, STACK-94c;
  * ComfyUI, STACK-13b). */
-const MANAGED_ROLES: RoleId[] = ["tts", "image"];
+const MANAGED_ROLES: RoleId[] = rolesWith("managedEngine");
 /** The generator roles: their process is admitted as `jit` (evicted
  * when idle) and each render is a job the queue admits on top. */
-const GENERATOR_ROLES: RoleId[] = ["image"];
+const GENERATOR_ROLES: RoleId[] = rolesWith("generator");
 /** The roles loaded on a request and evicted when idle (VISION-01b; the
  * coding role joined with CODE-STACK-01 S2 and adds a lease, a keep-warm
  * limit of its own and yielding to generator jobs): the
  * governor admits them as `jit`, they yield to a resident role's start,
  * and an admission never evicts or shrinks a resident. */
-const JIT_ROLES: RoleId[] = ["vision", "coding", "helper"];
+const JIT_ROLES: RoleId[] = rolesWith("jitAdmitted");
 export const SPEECH_PATH = "/tts";
 
 /** The role whose process serves this role: `coding`, `judge` and

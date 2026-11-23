@@ -49,6 +49,16 @@ export interface RoleDefinition {
   // True on the roles that share chat's model, move with Home mode coding,
   // and take the Reduced chat swap. Collected into MODE_FOLLOWER_ROLES.
   followsHomeMode?: true;
+  /** The role's process can be spawned by the supervisor (SPAWNABLE_ROLES). */
+  spawnable?: true;
+  /** The speech worker serves this role (SPEECH_ROLES). */
+  speechWorker?: true;
+  /** A managed Python engine serves this role (MANAGED_ROLES). */
+  managedEngine?: true;
+  /** The role is a generator: admitted as `jit`, each render is a job (GENERATOR_ROLES). */
+  generator?: true;
+  /** The governor admits this role as `jit`, evicted when idle (JIT_ROLES). */
+  jitAdmitted?: true;
 }
 
 export const ROLES = {
@@ -60,6 +70,7 @@ export const ROLES = {
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
     followsHomeMode: true,
+    spawnable: true,
   },
   // CODE-STACK-01: its own model (Qwen3.8-27B, bound on p64 and p128),
   // loaded only while someone is coding and never chat's process. S2: the
@@ -74,6 +85,8 @@ export const ROLES = {
     memoryClass: "warm",
     endpoints: ["/v1/chat/completions", "/v1/messages", "/v1/messages/count_tokens", "/v1/responses"],
     quality: ["fast", "everyday", "best"],
+    spawnable: true,
+    jitAdmitted: true,
   },
   judge: {
     label: "Judge",
@@ -84,6 +97,7 @@ export const ROLES = {
     quality: [],
     sharesModelWith: "chat",
     followsHomeMode: true,
+    spawnable: true,
   },
   router: {
     label: "Router",
@@ -102,6 +116,7 @@ export const ROLES = {
     memoryClass: "reserved",
     endpoints: ["/v1/embeddings"],
     quality: [],
+    spawnable: true,
   },
   rerank: {
     label: "Re-rank",
@@ -121,6 +136,8 @@ export const ROLES = {
     memoryClass: "warm",
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
+    spawnable: true,
+    jitAdmitted: true,
   },
   stt: {
     label: "Voice in",
@@ -129,6 +146,8 @@ export const ROLES = {
     memoryClass: "reserved",
     endpoints: ["/v1/audio/transcriptions", "/v1/audio/speaker-embedding", "/v1/audio/mouth-timings"],
     quality: [],
+    spawnable: true,
+    speechWorker: true,
   },
   tts: {
     label: "Voice out",
@@ -137,6 +156,8 @@ export const ROLES = {
     memoryClass: "reserved",
     endpoints: ["/v1/audio/speech"],
     quality: [],
+    spawnable: true,
+    managedEngine: true,
   },
   wakeword: {
     label: "Wake word",
@@ -153,6 +174,9 @@ export const ROLES = {
     memoryClass: "warm",
     endpoints: ["/v1/images/generations"],
     quality: ["fast", "everyday", "best"],
+    spawnable: true,
+    managedEngine: true,
+    generator: true,
   },
   video: {
     label: "Video",
@@ -181,12 +205,22 @@ export const ROLES = {
     memoryClass: "warm",
     endpoints: [],
     quality: [],
+    spawnable: true,
+    jitAdmitted: true,
   },
 } satisfies Record<RoleId, RoleDefinition>;
 
 // The roles that follow Home's mode: they share chat's model, move with
 // coding mode, and take the Reduced chat swap. Order: chat, judge, router.
 export const MODE_FOLLOWER_ROLES: RoleId[] = ROLE_IDS.filter((role) => (ROLES[role] as RoleDefinition).followsHomeMode);
+/** The role-group flags declared on the rows above; the supervisor derives
+ * its role lists from these instead of hard-coding them. */
+export type RoleFlag = "spawnable" | "speechWorker" | "managedEngine" | "generator" | "jitAdmitted";
+
+/** The role ids carrying this flag, in ROLE_IDS order. */
+export function rolesWith(flag: RoleFlag): RoleId[] {
+  return ROLE_IDS.filter((role) => (ROLES[role] as RoleDefinition)[flag] === true);
+}
 
 /** DEV-CHECKOUT-01 (2026-11-12): every Stack job has one of three classes, defined here and nowhere else.
  *  essential:   small always-on helpers (chat, judge, router, picture reader, speech, search): always admitted on real free memory.
@@ -207,6 +241,11 @@ export const RoleDefinitionSchema = z.object({
   endpoints: z.array(z.string()),
   quality: z.array(QualitySchema),
   sharesModelWith: RoleIdSchema.optional(),
+  spawnable: z.literal(true).optional(),
+  speechWorker: z.literal(true).optional(),
+  managedEngine: z.literal(true).optional(),
+  generator: z.literal(true).optional(),
+  jitAdmitted: z.literal(true).optional(),
 });
 
 export const RoleRecordSchema = RoleDefinitionSchema.extend({
