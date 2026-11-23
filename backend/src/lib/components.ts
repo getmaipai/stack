@@ -10,6 +10,7 @@
 import { existsSync, lstatSync, readdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import { lastUsedOf } from "@/lib/componentUse";
+import roleUnitRows from "@/rows/roleUnits.json";
 import { partDef, partLabel, registerPartUnits } from "@/lib/parts";
 import { detectHardware, knownAppleChip, type HardwareInfo } from "@/lib/hardware";
 import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/lib/jobs";
@@ -244,12 +245,9 @@ export function componentDefs(): UnitDef[] {
   };
   for (const pin of STACK_MODELS) {
     if (pin.component || projectorIds.has(pin.id)) continue;
-    if (pin.role === "chat") units.push(generic(pin, "chat", "chat", ["Chat"]));
-    else if (pin.role === "judge") units.push(generic(pin, "chat", "judge", ["Quick checks"]));
-    else if (pin.role === "coding") units.push(generic(pin, "chat", "coding", ["Coding"]));
-    else if (pin.role === "vision") units.push(generic(pin, "chat", "vision", ["Describing pictures"]));
-    else if (pin.role === "embed") units.push(generic(pin, "chat", "embed", ["Memory and search"]));
-    else if (pin.role === "stt") units.push(generic(pin, "voice", "stt", ["Listening"]));
+    // The six ordinary role units read their group, serves and usedBy text from rows/roleUnits.json (model ids and feature words are data, not logic).
+    const roleRow = roleUnitRows.find((row) => row.role === pin.role);
+    if (roleRow) units.push(generic(pin, roleRow.group as ComponentGroup, roleRow.serves, roleRow.usedBy));
     else if (pin.role === "tts") {
       const unit = generic(pin, "voice", "tts", ["Speaking"], pin.engine === "pocket-tts" ? envPocket : pin.engine === "chatterbox-turbo" ? envMlxAudio : pin.engine === VOXCPM2_ENGINE || pin.engine === VOXCPM2_REDUCED_ENGINE ? envVoxcpm2 : undefined);
       // Either voxcpm2 size brings the clip speech-to-text it reads a recording's words with (the pins are shared; removal keeps them while the other size is installed).

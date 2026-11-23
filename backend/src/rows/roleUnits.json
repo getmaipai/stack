@@ -1,0 +1,8 @@
+[
+  { "role": "chat", "group": "chat", "serves": "chat", "usedBy": ["Chat"] },
+  { "role": "judge", "group": "chat", "serves": "judge", "usedBy": ["Quick checks"] },
+  { "role": "coding", "group": "chat", "serves": "coding", "usedBy": ["Coding"] },
+  { "role": "vision", "group": "chat", "serves": "vision", "usedBy": ["Describing pictures"] },
+  { "role": "embed", "group": "chat", "serves": "embed", "usedBy": ["Memory and search"] },
+  { "role": "stt", "group": "voice", "serves": "stt", "usedBy": ["Listening"] }
+]
