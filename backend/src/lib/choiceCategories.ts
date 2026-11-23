@@ -23,6 +23,8 @@ export interface CategoryDef {
   addedModels?: true;
   /** The older setting that mirrors this feature's Standard pick; `by: "model"` holds a model id, `by: "engine"` names an engine. */
   legacySetting?: { key: string; by: "model" | "engine" };
+  /** How this category's models are launched and checked on disk: "family" for picture families, "quality" for video quality tiers. */
+  launchKind?: "family" | "quality";
 }
 export const CATEGORY_DEFS: readonly CategoryDef[] = rows as unknown as readonly CategoryDef[];
 export const defOf = (id: string): CategoryDef | undefined => CATEGORY_DEFS.find((def) => def.id === id);

@@ -32,8 +32,8 @@ const name = (id: string | null | undefined, env: ResolverEnv): string => !id ? 
 
 /** Whether a job category's model is on disk. */
 function jobInstalled(def: CategoryDef, id: string): boolean {
-  if (def.id === "pictures") return isFamilyId(id) && familyInstalled(id);
-  if (def.id === "video") { const quality = qualityOfModelName(id); return quality !== null && videoGen.hasModels(quality); }
+  if (def.launchKind === "family") return isFamilyId(id) && familyInstalled(id);
+  if (def.launchKind === "quality") { const quality = qualityOfModelName(id); return quality !== null && videoGen.hasModels(quality); }
   return componentInstalledNow(id) === true;
 }
 
@@ -41,8 +41,8 @@ function jobInstalled(def: CategoryDef, id: string): boolean {
 export function jobModelFor(def: CategoryDef, tier: ChoiceTier, intended: Intended): { model: string | null; chosenInstalled: boolean } {
   const chosenInstalled = intended.model !== null && jobInstalled(def, intended.model);
   if (intended.model && chosenInstalled && intended.fits) return { model: intended.model, chosenInstalled };
-  if (def.id === "pictures") return { model: familyInstalled(DEFAULT_FAMILY) ? DEFAULT_FAMILY : installedFamilies()[0] ?? null, chosenInstalled };
-  if (def.id === "video") return { model: videoGen.hasModels("quick") ? VIDEO_SPECS.quick.modelId : null, chosenInstalled };
+  if (def.launchKind === "family") return { model: familyInstalled(DEFAULT_FAMILY) ? DEFAULT_FAMILY : installedFamilies()[0] ?? null, chosenInstalled };
+  if (def.launchKind === "quality") return { model: videoGen.hasModels("quick") ? VIDEO_SPECS.quick.modelId : null, chosenInstalled };
   return { model: null, chosenInstalled };
 }
 
