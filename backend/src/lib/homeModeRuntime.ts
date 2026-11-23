@@ -1,4 +1,5 @@
 import { settingValues, updateSettings } from "@/settings";
+import { MODE_FOLLOWER_ROLES } from "@/roles";
 import { STACK_CODING_MODEL } from "@/lib/modelCatalog";
 import { codingModeHeavy, splashMeasuredPeakBytes, splashResidentWeightsBytes } from "@/lib/splashStore";
 import { isComponent, listModels } from "@/lib/modelStore";
@@ -9,7 +10,6 @@ import { configureHomeMode, homeModeFailure, initializeHomeMode, switchHomeMode,
 import { codingModeHardwareEligible, emitHomeModeReady, emitHomeModeTransition, getProcess, getRoleStatus, processRoleFor, splashInstalledForHomeMode, unloadRole, type EngineClient } from "@/lib/supervisor";
 
 const GIB = 1_073_741_824;
-const HEAVY_ROLES = ["chat", "judge", "router"] as const;
 const STAYING_ROLES = ["embed", "stt", "tts"] as const;
 
 export function homeModeStayingResidentBytes(loaded: Array<{ id: string; peakBytes: number }>): number {
@@ -105,7 +105,7 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
   const adapter: HomeModeRuntime = {
     inspect: () => { const result = checks(); return { ...result, available: Object.values(result.checks).every(Boolean), reason: result.reason }; },
     stopResidents: async () => {
-      for (const role of HEAVY_ROLES) {
+      for (const role of MODE_FOLLOWER_ROLES) {
         const owner = processRoleFor(role);
         if (role === owner || (role === "judge" && owner === "judge")) await unloadRole(owner, "Home is changing modes.", "home-mode-change");
       }

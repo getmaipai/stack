@@ -87,6 +87,7 @@ export const ALLOWED_FILES = [
   "backend/src/lib/choiceCategories.ts",
   "backend/src/profiles.ts",
   // Data tables, not logic: the part catalog (pins with download urls and hashes), the helper's knowledge text, its eval set, a pack's pins, and test files beside source.
+  "backend/src/roles.ts",
   "backend/src/lib/modelCatalog.ts",
   "backend/src/lib/helperKnowledge.ts",
   "backend/src/bench/helperEvalSet.ts",

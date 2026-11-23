@@ -51,7 +51,7 @@ import { AdmissionRefusedError, governorPeak, waitForAdmission, waitingReason } 
 import { emit } from "@/lib/events";
 import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
-import { ROLES, ROLE_IDS, type RoleId, type RoleState } from "@/roles";
+import { ROLES, ROLE_IDS, MODE_FOLLOWER_ROLES, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
 import { metalHostFault } from "@/lib/hostProbe";
 import { classifyCrash, describeStartFailure, stderrEvidence, type CrashVerdict } from "@/lib/crashClassifier";
@@ -179,7 +179,7 @@ export const SPEECH_PATH = "/tts";
 /** The role whose process serves this role: `coding`, `judge` and
  * `router` share chat's model and process unless bound elsewhere. */
 export function processRoleFor(role: RoleId): RoleId {
-  if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && ["chat", "judge", "router"].includes(role)) return "coding";
+  if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && MODE_FOLLOWER_ROLES.includes(role)) return "coding";
   const definition = ROLES[role] as { sharesModelWith?: RoleId };
   if (role === "judge" && machineTier && PROFILE_MODEL_BINDINGS[machineTier]?.judge) return role;
   if (role === "judge" && !machineTier) return "chat";
@@ -199,14 +199,14 @@ function reducedLightModel(): ModelRecord | null {
 
 /** The existing role.state feed is also Home's mode transition signal. */
 export function emitHomeModeTransition(): void {
-  for (const role of ["chat", "judge", "router"] as const) emitRoleState(role, "loaded", undefined, "mode_change");
+  for (const role of MODE_FOLLOWER_ROLES) emitRoleState(role, "loaded", undefined, "mode_change");
 }
 export function emitHomeModeReady(): void {
-  for (const role of ["chat", "judge", "router"] as const) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "mode_change");
+  for (const role of MODE_FOLLOWER_ROLES) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "mode_change");
 }
 
 export function emitReducedChatReady(): void {
-  for (const role of ["chat", "judge", "router"] as const) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "tier_reduced");
+  for (const role of MODE_FOLLOWER_ROLES) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "tier_reduced");
 }
 
 let reducedSwapRunning = false;
@@ -222,7 +222,7 @@ async function enterReducedChatInner(): Promise<{ ok: true; swapMs: number } | {
   if (getReducedChatState() !== "off") return { ok: false, reason: "A Reduced chat change is already in progress." };
   const light = reducedLightModel();
   if (!light) return { ok: false, reason: "The smaller chat model is not installed and selectable." };
-  const roles = [...new Set(["chat", "judge", "router"].map((role) => processRoleFor(role as RoleId)))];
+  const roles = [...new Set(MODE_FOLLOWER_ROLES.map((role) => processRoleFor(role)))];
   if (roles.some((role) => (runtime(role).process?.activeRequests ?? 0) > 0)) return { ok: false, waiting: true };
   if (reducedSwapRunning) return { ok: false, reason: "A Reduced chat change is already in progress." };
   reducedSwapRunning = true;
@@ -247,7 +247,7 @@ async function enterReducedChatInner(): Promise<{ ok: true; swapMs: number } | {
 export function leaveReducedChat(): Promise<{ ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string }> { return reducedSwapContext.run(true, leaveReducedChatInner); }
 async function leaveReducedChatInner(): Promise<{ ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string }> {
   if (getReducedChatState() !== "reduced") return { ok: false, reason: "Chat is not in the Reduced state." };
-  const roles = [...new Set(["chat", "judge", "router"].map((role) => processRoleFor(role as RoleId)))];
+  const roles = [...new Set(MODE_FOLLOWER_ROLES.map((role) => processRoleFor(role)))];
   if (roles.some((role) => (runtime(role).process?.activeRequests ?? 0) > 0)) return { ok: false, waiting: true };
   if (reducedSwapRunning) return { ok: false, reason: "A Reduced chat change is already in progress." };
   reducedSwapRunning = true;
@@ -263,7 +263,7 @@ async function leaveReducedChatInner(): Promise<{ ok: true; swapMs: number } | {
   } catch {
     setReducedChatState("reduced");
     try { for (const role of roles) { await recycleRole(role, "tier-reduced-rollback"); await getProcess(role, workingModels.get(role) || selectedModel(role)?.id); } } catch { /* Existing self-heal owns a failed rollback start. */ }
-    for (const role of ["chat", "judge", "router"] as const) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "tier_reduced");
+    for (const role of MODE_FOLLOWER_ROLES) if (getRoleStatus(role).state === "ready") emitRoleState(role, "ready", undefined, "tier_reduced");
     return { ok: false, reason: "Chat could not return to its standard model, so it stayed on the smaller one." };
   } finally { reducedSwapRunning = false; }
 }
@@ -963,7 +963,7 @@ export function selectedModel(role: RoleId): ModelRecord | null {
     const pinned = getModel(STACK_HELPER_MODEL_ID);
     return pinned && isModelSelectable(pinned) && !!pinned.modelPath ? pinned : null;
   }
-  if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && ["chat", "judge", "router"].includes(role)) {
+  if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && MODE_FOLLOWER_ROLES.includes(role)) {
     const heavy = getModel(codingModeHeavy().pin.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
   }
@@ -971,7 +971,7 @@ export function selectedModel(role: RoleId): ModelRecord | null {
     const heavy = getModel(codingModeHeavy().pin.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
   }
-  if (reducedChatForcesLight() && ["chat", "judge", "router"].includes(role)) {
+  if (reducedChatForcesLight() && MODE_FOLLOWER_ROLES.includes(role)) {
     return reducedLightModel();
   }
   if (role === "judge" && (!machineTier || !PROFILE_MODEL_BINDINGS[machineTier]?.judge)) return selectedModel("chat");
@@ -998,7 +998,7 @@ export function selectedModel(role: RoleId): ModelRecord | null {
  * Kept beside selection so the API and dispatcher share the same
  * provenance, file and engine-compatibility rules. */
 export function selectableModels(role: RoleId): Array<{ id: string; name: string }> {
-  if (currentHomeMode() === "coding" && ["chat", "judge", "router"].includes(role)) return selectedModel("chat") ? [{ id: codingModeHeavy().pin.id, name: codingModeHeavy().pin.id }] : [];
+  if (currentHomeMode() === "coding" && MODE_FOLLOWER_ROLES.includes(role)) return selectedModel("chat") ? [{ id: codingModeHeavy().pin.id, name: codingModeHeavy().pin.id }] : [];
   const engine = recordEngineFor(role);
   return listModels()
     .filter((model) => servesRole(model, role, engine))
@@ -1007,7 +1007,7 @@ export function selectableModels(role: RoleId): Array<{ id: string; name: string
 
 /** The model a start may use. While Reduced forces the light model onto chat, judge and router, that model is catalogued for `judge` only, so the role check below would refuse it for `chat` ("No verified and installed chat model"): the forced pick is the answer, after the same selectable and file checks `selectedModel` applies. */
 export function selectableModel(role: RoleId, modelId: string): ModelRecord | null {
-  if (reducedChatForcesLight() && ["chat", "judge", "router"].includes(role)) { const forced = selectedModel(role); if (forced?.id === modelId) return forced; }
+  if (reducedChatForcesLight() && MODE_FOLLOWER_ROLES.includes(role)) { const forced = selectedModel(role); if (forced?.id === modelId) return forced; }
   // The mode's big model may be a chat-role record (Flash Next): the mode starts it for coding, as selectedModel names it.
   if (role === "coding" && modelId === codingModeHeavy().pin.id) { const heavy = getModel(modelId); return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null; }
   const engine = recordEngineFor(role);
@@ -2071,7 +2071,7 @@ async function startVoiceWithFallback(modelId?: string): Promise<RoleProcess> {
 export async function getProcess(requested: RoleId, modelId?: string): Promise<RoleProcess> {
   const role = processRoleFor(requested);
   const swapWaitUntil = Date.now() + 5 * 60_000;
-  while (reducedSwapRunning && Date.now() < swapWaitUntil && !reducedSwapContext.getStore() && ["chat", "judge", "router"].includes(requested)) await new Promise((resolve) => setTimeout(resolve, 10));
+  while (reducedSwapRunning && Date.now() < swapWaitUntil && !reducedSwapContext.getStore() && MODE_FOLLOWER_ROLES.includes(requested)) await new Promise((resolve) => setTimeout(resolve, 10));
   if (getRunState() !== "running") throw new EngineUnavailableError("The Stack is paused.");
   const switchedOff = roleDisabledReason(requested) ?? roleDisabledReason(role);
   if (switchedOff) throw new EngineUnavailableError(switchedOff);

@@ -46,6 +46,9 @@ export interface RoleDefinition {
   endpoints: string[];
   quality: Quality[];
   sharesModelWith?: RoleId;
+  // True on the roles that share chat's model, move with Home mode coding,
+  // and take the Reduced chat swap. Collected into MODE_FOLLOWER_ROLES.
+  followsHomeMode?: true;
 }
 
 export const ROLES = {
@@ -56,6 +59,7 @@ export const ROLES = {
     memoryClass: "reserved",
     endpoints: ["/v1/chat/completions"],
     quality: ["fast", "everyday", "best"],
+    followsHomeMode: true,
   },
   // CODE-STACK-01: its own model (Qwen3.8-27B, bound on p64 and p128),
   // loaded only while someone is coding and never chat's process. S2: the
@@ -79,6 +83,7 @@ export const ROLES = {
     endpoints: ["/v1/chat/completions"],
     quality: [],
     sharesModelWith: "chat",
+    followsHomeMode: true,
   },
   router: {
     label: "Router",
@@ -88,6 +93,7 @@ export const ROLES = {
     endpoints: ["/v1/chat/completions"],
     quality: [],
     sharesModelWith: "chat",
+    followsHomeMode: true,
   },
   embed: {
     label: "Embeddings",
@@ -177,6 +183,10 @@ export const ROLES = {
     quality: [],
   },
 } satisfies Record<RoleId, RoleDefinition>;
+
+// The roles that follow Home's mode: they share chat's model, move with
+// coding mode, and take the Reduced chat swap. Order: chat, judge, router.
+export const MODE_FOLLOWER_ROLES: RoleId[] = ROLE_IDS.filter((role) => (ROLES[role] as RoleDefinition).followsHomeMode);
 
 /** DEV-CHECKOUT-01 (2026-11-12): every Stack job has one of three classes, defined here and nowhere else.
  *  essential:   small always-on helpers (chat, judge, router, picture reader, speech, search): always admitted on real free memory.
