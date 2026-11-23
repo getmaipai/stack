@@ -62,7 +62,7 @@ export function findSites(file: string, text: string): Site[] {
   const sites: Site[] = [];
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i];
+    const raw = lines[i] ?? "";
     const trimmed = raw.replace(/^\s+/, "");
     // Skip comment lines.
     if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
