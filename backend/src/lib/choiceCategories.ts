@@ -15,6 +15,10 @@ export interface CategoryDef {
   heavyAt?: Partial<Record<ChoiceTier, readonly string[]>>;
   /** True when a model process serves this category (a live load, swap and "answering" state) instead of a job. */
   process?: true;
+  /** The household may add its own models to this feature. */
+  addedModels?: true;
+  /** The older setting that mirrors this feature's Standard pick; `by: "model"` holds a model id, `by: "engine"` names an engine. */
+  legacySetting?: { key: string; by: "model" | "engine" };
 }
 export const CATEGORY_DEFS: readonly CategoryDef[] = rows as unknown as readonly CategoryDef[];
 export const defOf = (id: string): CategoryDef | undefined => CATEGORY_DEFS.find((def) => def.id === id);
