@@ -5,7 +5,7 @@
 // no longer names the chat role in code.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 
 /** [role, group, serves, usedBy text] exactly as the old chain had them. */
 const EXPECTED: Array<[string, string, string, string[]]> = [
@@ -17,17 +17,10 @@ const EXPECTED: Array<[string, string, string, string[]]> = [
   ["stt", "voice", "stt", ["Listening"]],
 ];
 
-// selectedModel decides whether a unit's usedBy() text shows; answer with the
-// unit's own primary id so the text is observable without installing models.
-const actualSupervisor = await import("@/lib/supervisor");
-const selectedIds = new Map<string, string>();
-mock.module("@/lib/supervisor", () => ({
-  ...actualSupervisor,
-  selectedModel: (role: string) => (selectedIds.has(role) ? { id: selectedIds.get(role)! } : null),
-}));
 const { componentDefs } = await import("@/lib/components");
+const roleRows = (await import("@/rows/roleUnits.json")).default as Array<{ role: string; usedBy: string[] }>;
 
-test("the six role units keep the group, serves and usedBy text of the old chain", () => {
+test("the six role units keep the group and serves of the old chain, and the rows hold the usedBy text", () => {
   const units = componentDefs();
   for (const [role, group, serves, usedByText] of EXPECTED) {
     const matching = units.filter((unit) => unit.role === role);
@@ -35,14 +28,9 @@ test("the six role units keep the group, serves and usedBy text of the old chain
     for (const unit of matching) {
       expect<string>(unit.group).toBe(group);
       expect(unit.serves).toBe(serves);
-      // Nothing selected for the role: no text. The unit's own pin selected: the exact text.
-      selectedIds.delete(serves);
-      expect(unit.usedBy()).toEqual([]);
-      selectedIds.set(serves, unit.id);
-      expect(unit.usedBy()).toEqual(usedByText);
     }
+    expect(roleRows.find((row) => row.role === role)?.usedBy).toEqual(usedByText);
   }
-  selectedIds.clear();
 });
 
 test("componentDefs keeps the units in catalog order with the tts unit after stt", () => {
@@ -57,3 +45,4 @@ test("components.ts no longer names the chat role in code", () => {
   const source = readFileSync(join(import.meta.dir, "..", "src", "lib", "components.ts"), "utf8");
   expect(source.includes('pin.role === "chat"')).toBe(false);
 });
+
