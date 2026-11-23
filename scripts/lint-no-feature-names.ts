@@ -74,7 +74,7 @@ export function findSites(file: string, text: string): Site[] {
     const re = /"([^"\n]*)"|'([^'\n]*)'/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(code)) !== null) {
-      const literal = m[1] !== undefined ? m[1] : m[2];
+      const literal = m[1] ?? m[2] ?? "";
       const kind = classify(literal);
       if (kind) sites.push({ file, line: i + 1, literal, kind });
     }
@@ -151,7 +151,7 @@ function runCli(): void {
     }
   }
   for (const file of Object.keys(baseline)) {
-    if (!found.has(file) && baseline[file] > 0) shrunk = true;
+    if (!found.has(file) && (baseline[file] ?? 0) > 0) shrunk = true;
   }
   if (shrunk) console.log("shrunk: update the baseline");
   if (failed) process.exit(1);
