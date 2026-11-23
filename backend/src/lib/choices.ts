@@ -188,6 +188,8 @@ interface LevelOptions { options: TierRow["options"]; capBytes: number | null; r
 const addedFit = (added: AddedModel, tier: ChoiceTier, state: State): { fits: boolean; refusal: string | null } => addedFits(added, tier, state);
 
 function levelOptions(state: State, def: CategoryDef, pool: PoolEntry[], tier: ChoiceTier): LevelOptions {
+  // Coding Max has no pick of its own: it offers exactly what Chat Max offers (choiceResolver.ts decides the same).
+  if (def.id === "coding" && tier === "max") { const chat = defOf("chat"); if (chat) return levelOptions(state, chat, poolOf(state, chat), "max"); }
   const profile = state.profile!;
   const ids = new Set(pool.map((entry) => entry.id));
   const peaks = new Map<string, number>();
@@ -382,6 +384,7 @@ function judgePick(state: State, input: PickInput, system: boolean): Judged {
   if (!(CHOICE_TIERS as readonly string[]).includes(input.tier)) return refuse(404, "unknown_level", `${input.tier.slice(0, 40)} is not a level. Use reduced, standard, boost or max.`);
   const tier = input.tier as ChoiceTier;
   if (!def.levels.includes(tier)) return refuse(404, "no_such_level", `${def.label} has no ${levelName(tier)} level.${def.levels.length === 1 ? " It has one model choice, at standard." : ""}`);
+  if (def.id === "coding" && tier === "max") return refuse(409, "follows_chat_max", "Coding Max runs the Max chat model. Change it under Chat, Max.");
   const own = input.profile === undefined || input.profile === state.profile?.id;
   const profile = input.profile ?? state.profile?.id;
   if (!profile) return refuse(409, "computer_too_small", "This computer's memory is below 16 GB, the least the Stack can run chat and voice on, so there is no profile to save a choice for. Name a profile to save one for another computer.");

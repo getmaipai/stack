@@ -62,6 +62,7 @@ export function addedFits(added: AddedModel, tier: ChoiceTier, env: { room: numb
 
 /** Every model a level may offer on this profile, tier-table order first, with whether it fits (the tier table's decision). */
 export function offeredAt(env: ResolverEnv, def: CategoryDef, tier: ChoiceTier): Offered[] {
+  if (def.id === "coding" && tier === "max") { const chat = defOf("chat"); if (chat) return offeredAt(env, chat, "max"); }
   const out: Offered[] = [];
   if (def.tierCategory && tier === "reduced") {
     const cap = env.room + env.reducedFreed;
@@ -98,6 +99,7 @@ const none = (def: CategoryDef, tier: ChoiceTier): Intended => ({ category: def.
 export function decide(env: ResolverEnv, categoryId: string, tier: ChoiceTier): Intended {
   const def = defOf(categoryId);
   if (!def || !def.levels.includes(tier)) return { category: categoryId, tier, model: null, options: null, by: "none", fits: true, refusal: null, problem: null };
+  if (def.id === "coding" && tier === "max") return { ...decide(env, "chat", "max"), category: "coding", tier: "max" };
   const offered = offeredAt(env, def, tier);
   const disabled = env.partChoices[def.partCategory]?.off ?? [];
   const live = (id: string): Offered | undefined => offered.find((item) => item.id === id && !disabled.includes(id));

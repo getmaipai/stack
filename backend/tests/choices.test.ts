@@ -356,3 +356,20 @@ test("migrate accepts or refuses each value on its own, returns the refused ones
   expect(second).toMatchObject({ already_done: true, results: [] });
   expect((await level("chat", "standard")).chosen).toBe("added-home-record-12345678");
 });
+
+test("Coding has a Max level that is the Max chat model: it reads what Chat Max reads and cannot be set on its own", async () => {
+  const view = await read();
+  const coding = view.categories.find((item) => item.id === "coding")!;
+  expect(coding.tiers.map((row) => row.tier)).toEqual(["standard", "max"]);
+  const chatMax = await level("chat", "max");
+  const codingMax = await level("coding", "max");
+  expect(codingMax.chosen).toBe(chatMax.chosen);
+  expect(codingMax.options.map((option) => option.model)).toEqual(chatMax.options.map((option) => option.model));
+  // Switching Chat Max off switches Coding Max off with it: one choice, not two.
+  await call("PUT", "/chat/max", { model: "off" });
+  expect(await level("coding", "max")).toMatchObject({ chosen: null, chosen_by: "off" });
+  // Coding Max has no pick of its own: the answer says where to change it.
+  const refused = await call("PUT", "/coding/max", { model: "qwen3.8-27b-ud-q4-k-m", install: false });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ code: "follows_chat_max", error: expect.stringContaining("Chat") });
+});

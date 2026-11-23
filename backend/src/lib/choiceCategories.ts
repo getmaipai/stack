@@ -12,7 +12,7 @@ export interface CategoryDef {
 const STANDARD_ONLY: readonly ChoiceTier[] = ["standard"];
 export const CATEGORY_DEFS: readonly CategoryDef[] = [
   { id: "chat", label: "Chat", role: "chat", partCategory: "chat", tierCategory: "chat", levels: ["reduced", "standard", "boost", "max"] },
-  { id: "coding", label: "Coding", role: "coding", partCategory: "coding", partIds: ["qwen3.8-27b-ud-q4-k-m"], levels: STANDARD_ONLY },
+  { id: "coding", label: "Coding", role: "coding", partCategory: "coding", partIds: ["qwen3.8-27b-ud-q4-k-m"], levels: ["standard", "max"] },
   { id: "pictures", label: "Pictures", role: "image", partCategory: "pictures", tierCategory: "pictures", levels: ["standard", "boost", "max"] },
   { id: "video", label: "Video", role: "video", partCategory: "video", tierCategory: "video", levels: ["standard", "boost", "max"] },
   { id: "music", label: "Music", role: "music", partCategory: "music", tierCategory: "music", levels: ["standard", "boost", "max"] },
