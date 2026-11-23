@@ -86,6 +86,12 @@ export function findSites(file: string, text: string): Site[] {
 export const ALLOWED_FILES = [
   "backend/src/lib/choiceCategories.ts",
   "backend/src/profiles.ts",
+  // Data tables, not logic: the part catalog (pins with download urls and hashes), the helper's knowledge text, its eval set, a pack's pins, and test files beside source.
+  "backend/src/lib/modelCatalog.ts",
+  "backend/src/lib/helperKnowledge.ts",
+  "backend/src/bench/helperEvalSet.ts",
+  "backend/src/packs/h3/h3Pins.ts",
+  "backend/src/packs/loader.test.ts",
 ];
 
 const ROOT = resolve(import.meta.dir, "..");

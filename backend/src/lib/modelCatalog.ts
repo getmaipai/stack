@@ -2,6 +2,7 @@ import { hfUrl } from "@/lib/hf";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { H3_PINNED_FILES } from "@/packs/h3/h3Pins";
 import { H3_IMAGE_FILES, H3_IMAGE_PRIMARY, ERNIE_IMAGE_TURBO_FILES, ERNIE_IMAGE_TURBO_PRIMARY, ERNIE_IMAGE_TURBO_REPO, ERNIE_IMAGE_TURBO_REVISION, KLEIN_4B_FILES, KLEIN_4B_PRIMARY, QWEN_IMAGE_FILES, QWEN_IMAGE_PRIMARY, QWEN_IMAGE_REPO, QWEN_IMAGE_REVISION, SEEDVR2_FILES, SEEDVR2_PRIMARY, SEEDVR2_REPO, SEEDVR2_REVISION, KLEIN_4B_REPO, KLEIN_4B_REVISION, KLEIN3_FILES, KLEIN3_PRIMARY, KLEIN3_REPO, KLEIN3_REVISION, ZIMAGE_TURBO_FILES, ZIMAGE_TURBO_PRIMARY, ZIMAGE_TURBO_REPO, ZIMAGE_TURBO_REVISION, type ImagePinFile } from "@/images/pins";
+import data from "@/rows/modelCatalog.json";
 
 // The household's Standard chat model on every profile, copied from Home's verified pin.
 export const STACK_CHAT_8B_MODEL: CatalogModelLike = {
@@ -421,99 +422,21 @@ export const STACK_CHAT_VL_8B_MODEL: CatalogModelLike = {
 // The archive extracts to a directory of ONNX files; `modelPath` is
 // that directory. Silero is a component of the role, not a model a
 // person selects, so `selectedModel` skips it.
-export const STACK_STT_MODEL: CatalogModelLike = {
-  id: "moonshine-tiny-en-int8",
-  role: "stt",
-  repo: "k2-fsa/sherpa-onnx",
-  license: "MIT",
-  revision: "d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2",
-  engine: "sherpa-onnx-node",
-  sizing: { profile: "p16", quantization: "int8" },
-  download: {
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-moonshine-tiny-en-int8.tar.bz2",
-    sha256: "d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2",
-    approx_bytes: 107_600_538,
-    archive: true,
-  },
-  // scripts/prove-stt.sh, 2026-09-20, the p16 laptop: the worker's
-  // resident set after the post-load check, bun plus onnxruntime plus
-  // the model; context is not a speech quantity.
-  measured: { footprintBytes: 239_387_872, contextLength: 0, hardware: "Apple M4 Pro, 24 GB unified memory" },
-  companions: ["smart-turn-v3.2"],
-};
+export const STACK_STT_MODEL: CatalogModelLike = data.STACK_STT_MODEL as unknown as CatalogModelLike;
 // The optional Parakeet TDT 0.6B v2 int8 package from the same rolling
 // `asr-models` release. The checksum pins the asset because the tag can
 // replace it under the same name. The archive extracts to three ONNX
 // files plus tokens.
-export const STACK_STT_PARAKEET_V2_MODEL: CatalogModelLike = {
-  id: "parakeet-tdt-0.6b-v2-int8",
-  role: "stt",
-  repo: "k2-fsa/sherpa-onnx",
-  license: "CC-BY-4.0",
-  revision: "157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad",
-  engine: "sherpa-onnx-node",
-  sizing: { profile: "p64", quantization: "int8" },
-  download: {
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2",
-    sha256: "157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad",
-    approx_bytes: 482_468_385,
-    archive: true,
-  },
-  measured: { footprintBytes: 1_940_000_000, contextLength: 0, hardware: "Apple M5 Max, 128 GB unified memory" },
-  companions: ["smart-turn-v3.2"],
-};
-export const STACK_VAD_MODEL: CatalogModelLike = {
-  id: "silero-vad",
-  role: "stt",
-  component: "vad",
-  repo: "k2-fsa/sherpa-onnx",
-  license: "MIT",
-  revision: "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
-  engine: "sherpa-onnx-node",
-  sizing: { profile: "p16", quantization: "fp32" },
-  download: {
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
-    sha256: "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
-    approx_bytes: 643_854,
-  },
-};
+export const STACK_STT_PARAKEET_V2_MODEL: CatalogModelLike = data.STACK_STT_PARAKEET_V2_MODEL as unknown as CatalogModelLike;
+export const STACK_VAD_MODEL: CatalogModelLike = data.STACK_VAD_MODEL as unknown as CatalogModelLike;
 
 // Speaker detection (CAPTION-01g, packaged 2026-11-07): two components of the `stt` role, installed beside Parakeet and
 // Silero from the Engines page. Both are sherpa-onnx release assets pinned by checksum (the tags can replace a file).
 // pyannote segmentation 3.0 (MIT, int8 export): the archive extracts to a folder holding model.int8.onnx.
-export const STACK_DIARIZATION_SEGMENTATION_MODEL: CatalogModelLike = {
-  id: "pyannote-segmentation-3.0-int8",
-  role: "stt",
-  component: "diarization-segmentation",
-  repo: "k2-fsa/sherpa-onnx",
-  license: "MIT",
-  revision: "24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488",
-  engine: "sherpa-onnx-node",
-  sizing: { profile: "p16", quantization: "int8" },
-  download: {
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2",
-    sha256: "24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488",
-    approx_bytes: 6_958_444,
-    archive: true,
-  },
-};
+export const STACK_DIARIZATION_SEGMENTATION_MODEL: CatalogModelLike = data.STACK_DIARIZATION_SEGMENTATION_MODEL as unknown as CatalogModelLike;
 // NVIDIA NeMo TitaNet small speaker embedding (CC-BY-4.0, English), one ONNX file. The release folder's name is spelled
 // "speaker-recongition-models" upstream.
-export const STACK_DIARIZATION_EMBEDDING_MODEL: CatalogModelLike = {
-  id: "titanet-small-en",
-  role: "stt",
-  component: "diarization-embedding",
-  repo: "k2-fsa/sherpa-onnx",
-  license: "CC-BY-4.0",
-  revision: "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e",
-  engine: "sherpa-onnx-node",
-  sizing: { profile: "p16", quantization: "fp32" },
-  download: {
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx",
-    sha256: "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e",
-    approx_bytes: 40_257_283,
-  },
-};
+export const STACK_DIARIZATION_EMBEDDING_MODEL: CatalogModelLike = data.STACK_DIARIZATION_EMBEDDING_MODEL as unknown as CatalogModelLike;
 
 // Smart Turn v3.2 (pipecat-ai/smart-turn-v3, BSD-2-Clause): the end-of-turn
 // classifier behind POST /v1/audio/endpoint, a component of the `stt` role
@@ -612,15 +535,7 @@ export const STACK_TTS_VOICE: CatalogModelLike = {
 const CHATTERBOX_REPO = "mlx-community/chatterbox-turbo-fp16";
 const CHATTERBOX_REVISION = "b2d0a13aa7cfff0a06d9acb247ae91c8f19a6d75";
 export const CHATTERBOX_ENGINE = "chatterbox-turbo";
-const CHATTERBOX_FILES: Array<{ file: string; sha256: string; bytes: number }> = [
-  { file: "config.json", sha256: "aacce8af47c9c930636e47da981339fe0d30e08623d19226aa9a43bd3425b736", bytes: 2_059 },
-  { file: "added_tokens.json", sha256: "72e4ab6acb0d9309ac3df4b526ae5fd80a2da5bc5ab7bb02d85096a374f69193", bytes: 418 },
-  { file: "merges.txt", sha256: "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5", bytes: 456_318 },
-  { file: "special_tokens_map.json", sha256: "92ba8063bf40aa163eadebbfe0de07c2aebe44cf0d4a9e8726580b0781fd2640", bytes: 470 },
-  { file: "tokenizer_config.json", sha256: "bca16a2ac1ddbd78b8d6228f0031884cc74b6ea54b967d6f6d2ebae9ccde23e6", bytes: 3_878 },
-  { file: "vocab.json", sha256: "f6bd25a65e4e63ca31360e9fb11c7e4f9a391a78385d640acd814092dd6eee4f", bytes: 999_186 },
-  { file: "conds.safetensors", sha256: "df9ad2c54848027d94cf01f9fc0ed22bc5d3165df6e6a85c903c1124b8a78a4a", bytes: 164_884 },
-];
+const CHATTERBOX_FILES: Array<{ file: string; sha256: string; bytes: number }> = data.CHATTERBOX_FILES as unknown as Array<{ file: string; sha256: string; bytes: number }>;
 export const STACK_TTS_CHATTERBOX_MODEL: CatalogModelLike = {
   id: "chatterbox-turbo-fp16",
   role: "tts",
@@ -760,12 +675,7 @@ const VIDEO_REVISION = "de2998ac446581895089ae363f4dcc0c02ca9ea2";
 export const VIDEO_ENGINE = "video-gen";
 export const STACK_VIDEO_MODEL_ID = "fastwan2-2-ti2v-5b-mlx-bf16";
 export const STACK_VIDEO_TOKENIZER_ID = "video-umt5-tokenizer";
-const VIDEO_FILES = [
-  { path: "model.safetensors", sha256: "d770a93f780208ad8b4edea9ea17c1f9532debb59292688ea038e824a30bbf84", bytes: 9_999_659_892 },
-  { path: "t5_encoder.safetensors", sha256: "e86ee4199903e00a88dcd43583a43a6eb898cef600e38670f222d7e37d163787", bytes: 11_361_845_505 },
-  { path: "vae.safetensors", sha256: "a2d3602f692144facc3d58c56db30820c4400e67d4bb821feff3ea8347629804", bytes: 2_818_778_952 },
-  { path: "config.json", sha256: "6c6520bb7c9af3172de23a7acf67b53958974d81001eac5b6ab24d9577018003", bytes: 1_662 },
-];
+const VIDEO_FILES = data.VIDEO_FILES;
 export const STACK_VIDEO_MODEL: CatalogModelLike = {
   id: STACK_VIDEO_MODEL_ID,
   role: "video",
@@ -785,12 +695,7 @@ export const STACK_VIDEO_MODEL: CatalogModelLike = {
 };
 const UMT5_REPO = "google/umt5-xxl";
 const UMT5_REVISION = "66cb9e7e85526fe440a945569e42c72fb6cbc0ad";
-const UMT5_FILES = [
-  { path: "tokenizer.json", sha256: "af904105ce1071b1202bba0059a841f4a7b85b48b6ec179c4948e3483476e0dd", bytes: 16_853_013 },
-  { path: "tokenizer_config.json", sha256: "616015e2b6c26f9a98ae3171634518d440a46260ebc1115c2596792d33827bdc", bytes: 6_841 },
-  { path: "special_tokens_map.json", sha256: "14ef492a69e59396e918521a5f8394af1acf9f8dddd47273693b2b42570dfd12", bytes: 6_623 },
-  { path: "spiece.model", sha256: "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458", bytes: 4_548_313 },
-];
+const UMT5_FILES = data.UMT5_FILES;
 export const STACK_VIDEO_TOKENIZER: CatalogModelLike = {
   id: STACK_VIDEO_TOKENIZER_ID,
   role: "video",
@@ -826,21 +731,11 @@ export const STACK_VIDEO_MASK_MODELS: CatalogModelLike[] = [STACK_VIDEO_MASK_MOD
 // (GFPGAN, facexlib) are data until a loader is written and reviewed: nothing loads them yet.
 export const STACK_STAGED_STATE = "installed" as const;
 /** GFPGAN v1.4 face repair (TencentARC/GFPGAN, release v1.3.0 asset GFPGANv1.4.pth). Apache-2.0 (LICENSE, 2026-11-15; its third-party notices cover tqdm only). */
-export const STACK_FACE_REPAIR_GFPGAN: CatalogModelLike = {
-  id: "gfpgan-v1-4", role: "image", repo: "TencentARC/GFPGAN", license: "Apache-2.0", revision: "v1.3.0", engine: "face-repair",
-  sizing: { profile: "p32", quantization: "fp32" },
-  download: { url: "https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth", sha256: "e2cd4703ab14f4d01fd1383a8a8b266f9a5833dacee8e6a79d3bf21a1b6be5ad", approx_bytes: 348_632_874, hub_file: "GFPGANv1.4.pth" },
-};
+export const STACK_FACE_REPAIR_GFPGAN: CatalogModelLike = data.STACK_FACE_REPAIR_GFPGAN as unknown as CatalogModelLike;
 /** facexlib face detector GFPGAN calls first (xinntao/facexlib release v0.1.0). MIT. */
-export const STACK_FACE_REPAIR_DETECTOR: CatalogModelLike = {
-  id: "facexlib-detection-resnet50", role: "image", repo: "xinntao/facexlib", license: "MIT", revision: "v0.1.0", engine: "face-repair", component: "face-repair-detector",
-  download: { url: "https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth", sha256: "6d1de9c2944f2ccddca5f5e010ea5ae64a39845a86311af6fdf30841b0a5a16d", approx_bytes: 109_497_761, hub_file: "detection_Resnet50_Final.pth" },
-};
+export const STACK_FACE_REPAIR_DETECTOR: CatalogModelLike = data.STACK_FACE_REPAIR_DETECTOR as unknown as CatalogModelLike;
 /** facexlib face parser GFPGAN pastes the repaired face back with (xinntao/facexlib release v0.2.2). MIT. */
-export const STACK_FACE_REPAIR_PARSER: CatalogModelLike = {
-  id: "facexlib-parsing-parsenet", role: "image", repo: "xinntao/facexlib", license: "MIT", revision: "v0.2.2", engine: "face-repair", component: "face-repair-parser",
-  download: { url: "https://github.com/xinntao/facexlib/releases/download/v0.2.2/parsing_parsenet.pth", sha256: "3d558d8d0e42c20224f13cf5a29c79eba2d59913419f945545d8cf7b72920de2", approx_bytes: 85_331_193, hub_file: "parsing_parsenet.pth" },
-};
+export const STACK_FACE_REPAIR_PARSER: CatalogModelLike = data.STACK_FACE_REPAIR_PARSER as unknown as CatalogModelLike;
 /** Chatterbox voice change: the S3Gen decoder (ResembleAI/chatterbox, s3gen.safetensors) renders a source speaker's speech tokens in the reference voice. MIT. The repository's pickled conds.pt and the .pt twins are not installed. */
 export const STACK_VOICE_CHANGE_CHATTERBOX: CatalogModelLike = {
   id: "chatterbox-vc-s3gen", role: "tts", repo: "ResembleAI/chatterbox", license: "MIT", revision: "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18", engine: "chatterbox-vc",
@@ -889,12 +784,7 @@ export const STACK_TTS_VOXCPM2_MODELS: CatalogModelLike[] = VOXCPM2_FILES.flatMa
 export const VOXCPM2_STT_REPO = "mlx-community/parakeet-tdt-0.6b-v2";
 export const VOXCPM2_STT_REVISION = "8ae155301e23d820d82aa60d24817c900e69e487";
 export const VOXCPM2_STT_ENGINE = "voxcpm2-stt";
-const VOXCPM2_STT_FILES: Array<{ file: string; sha256: string; bytes: number }> = [
-  { file: "model.safetensors", sha256: "b958c37a6baa6874a279108755c8f2818e27bf647d72d54800a234a421341dfe", bytes: 2_471_559_904 },
-  { file: "config.json", sha256: "9bd323e60afe2615c983a5d9fc3a2c0470df2a03edf90c0f861bd59509d07264", bytes: 36_176 },
-  { file: "tokenizer.model", sha256: "5a3a82c48998709f9bc9f5db2924d99a899d20bf82550ca52272da7c7557b0a0", bytes: 251_396 },
-  { file: "vocab.txt", sha256: "70b25deed256d79365a3c290d6191c31cc2315d952faf18d5c3a334f46e4866e", bytes: 5_066 },
-];
+const VOXCPM2_STT_FILES: Array<{ file: string; sha256: string; bytes: number }> = data.VOXCPM2_STT_FILES as unknown as Array<{ file: string; sha256: string; bytes: number }>;
 export const STACK_TTS_VOXCPM2_STT_MODELS: CatalogModelLike[] = VOXCPM2_STT_FILES.map((part) => ({
   id: `voxcpm2-clip-stt-${part.file.replace(/\.[^.]+$/, "").replace(/[._]/g, "-")}`,
   role: "tts" as const,
@@ -942,47 +832,9 @@ export const STACK_MUSIC_LM_06_ID = "ace-step-1-5-lm-0-6b";
 export const STACK_MUSIC_WHISPER_ID = "whisper-large-v3-turbo";
 const MUSIC_WHISPER_REPO = "mlx-community/whisper-large-v3-turbo";
 const MUSIC_WHISPER_REVISION = "f7f36a552f0b2fe385e92622c39b334c817c08d4";
-const MUSIC_WHISPER_FILES = [
-  { path: "weights.npz", sha256: "43d428f9d61dc1fe3dc823c5c77455ec5a69e846177328fb7dcb2dfb5a269477", bytes: 1_614_089_376 },
-  { path: "config.json", sha256: "9da47f6b3306c6e72b9cbc987bd28679041c2f4871ba68c6cabd6c578faf030d", bytes: 268 },
-];
-const MUSIC_FILES = [
-  { path: "Qwen3-Embedding-0.6B/added_tokens.json", sha256: "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680", bytes: 707 },
-  { path: "Qwen3-Embedding-0.6B/chat_template.jinja", sha256: "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5", bytes: 4_116 },
-  { path: "Qwen3-Embedding-0.6B/config.json", sha256: "bb23c1607cfe059a58d8f0196cf1cebb52082b1056b8e358a579da80a5759420", bytes: 1_359 },
-  { path: "Qwen3-Embedding-0.6B/merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
-  { path: "Qwen3-Embedding-0.6B/model.safetensors", sha256: "0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd", bytes: 1_191_586_416 },
-  { path: "Qwen3-Embedding-0.6B/special_tokens_map.json", sha256: "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd", bytes: 613 },
-  { path: "Qwen3-Embedding-0.6B/tokenizer.json", sha256: "def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a", bytes: 11_423_705 },
-  { path: "Qwen3-Embedding-0.6B/tokenizer_config.json", sha256: "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0", bytes: 5_404 },
-  { path: "Qwen3-Embedding-0.6B/vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
-  { path: "acestep-5Hz-lm-1.7B/added_tokens.json", sha256: "db08b66a515fb5d6acca0b3492d25bb44e0deda6241fc1113ac0679d40558c48", bytes: 2_217_787 },
-  { path: "acestep-5Hz-lm-1.7B/chat_template.jinja", sha256: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8", bytes: 4_168 },
-  { path: "acestep-5Hz-lm-1.7B/config.json", sha256: "73515ca4bfd86a5b56f28bf680311d1911e159c85d7f7ceb2188e310007c9010", bytes: 1_385 },
-  { path: "acestep-5Hz-lm-1.7B/merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
-  { path: "acestep-5Hz-lm-1.7B/model.safetensors", sha256: "f161689da73e5ecefa28ff780d51c2d92a00f056d021d7933c779ed5c6cd7db8", bytes: 3_708_521_528 },
-  { path: "acestep-5Hz-lm-1.7B/special_tokens_map.json", sha256: "76e233bfc357b0b03d7b6e6ba8e799244f358552575a7cdadb78d3d19106b298", bytes: 1_824_199 },
-  { path: "acestep-5Hz-lm-1.7B/tokenizer.json", sha256: "35af56c3f5cb3ea2cc578aa28a8937770981d504f183ac5c8c38baf4bbd4af4d", bytes: 24_321_939 },
-  { path: "acestep-5Hz-lm-1.7B/tokenizer_config.json", sha256: "6cd70cdd89425971794f5235562edcc608b0629a6c4686ae51a8b8c8b8ba5e95", bytes: 14_072_925 },
-  { path: "acestep-5Hz-lm-1.7B/vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
-  { path: "acestep-v15-turbo/config.json", sha256: "74745ff704ea49164c3d2d1c99fc0670f3fc635a869f0aec2d1311e6a52d400a", bytes: 1_968 },
-  { path: "acestep-v15-turbo/model.safetensors", sha256: "3f6e0797fad420a39bd33979eb6e840e30989e34a3794e843d23b60ec6e422d7", bytes: 4_787_825_604 },
-  { path: "acestep-v15-turbo/silence_latent.pt", sha256: "a778e9dd942f5e8b2c09c55370782d318834432b03dabbcdf70e6ed49ad6358b", bytes: 3_841_215 },
-  { path: "config.json", sha256: "74745ff704ea49164c3d2d1c99fc0670f3fc635a869f0aec2d1311e6a52d400a", bytes: 1_968 },
-  { path: "vae/config.json", sha256: "14e019904df567f26df750317a70e2bd08f9f8f3c40ff4a24c97d1cd3f20ccd2", bytes: 425 },
-  { path: "vae/diffusion_pytorch_model.safetensors", sha256: "da17edb604c40deaf09e9b24974e590d1ca83a374070e5d0884cfa4bed9a99b0", bytes: 337_431_388 },
-];
-const MUSIC_LM06_FILES = [
-  { path: "added_tokens.json", sha256: "db08b66a515fb5d6acca0b3492d25bb44e0deda6241fc1113ac0679d40558c48", bytes: 2_217_787 },
-  { path: "chat_template.jinja", sha256: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8", bytes: 4_168 },
-  { path: "config.json", sha256: "873ca63808b74e1e008ab950114765553b898b489b9e077e80db83348a118384", bytes: 1_386 },
-  { path: "merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
-  { path: "model.safetensors", sha256: "5d92a60806e2e88c04de58ddc6dde93f2bc8f1336162b3ad5853886c9bcc6b82", bytes: 1_325_804_024 },
-  { path: "special_tokens_map.json", sha256: "76e233bfc357b0b03d7b6e6ba8e799244f358552575a7cdadb78d3d19106b298", bytes: 1_824_199 },
-  { path: "tokenizer.json", sha256: "35af56c3f5cb3ea2cc578aa28a8937770981d504f183ac5c8c38baf4bbd4af4d", bytes: 24_321_939 },
-  { path: "tokenizer_config.json", sha256: "6cd70cdd89425971794f5235562edcc608b0629a6c4686ae51a8b8c8b8ba5e95", bytes: 14_072_925 },
-  { path: "vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
-];
+const MUSIC_WHISPER_FILES = data.MUSIC_WHISPER_FILES;
+const MUSIC_FILES = data.MUSIC_FILES;
+const MUSIC_LM06_FILES = data.MUSIC_LM06_FILES;
 export const STACK_MUSIC_MODEL: CatalogModelLike = {
   id: STACK_MUSIC_MODEL_ID,
   role: "music",
@@ -1033,10 +885,7 @@ const MUSIC_XL_CONFIG_REPO = "ACE-Step/acestep-v15-xl-turbo";
 const MUSIC_XL_CONFIG_REVISION = "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee";
 export const STACK_MUSIC_XL_ID = "ace-step-1-5-xl-turbo-bf16";
 export const STACK_MUSIC_XL_CONFIG_ID = "ace-step-1-5-xl-turbo-config";
-const MUSIC_XL_CONFIG_FILES = [
-  { path: "config.json", sha256: "e3665376d46477cbd3e76203cd4e241f11a6a6bb5f88464c49f3c6aae51a918b", bytes: 2_407 },
-  { path: "silence_latent.pt", sha256: "a778e9dd942f5e8b2c09c55370782d318834432b03dabbcdf70e6ed49ad6358b", bytes: 3_841_215 },
-];
+const MUSIC_XL_CONFIG_FILES = data.MUSIC_XL_CONFIG_FILES;
 export const STACK_MUSIC_XL: CatalogModelLike = {
   id: STACK_MUSIC_XL_ID,
   role: "music",
@@ -1085,23 +934,8 @@ const MUSIC_LM4_REVISION = "0a3ec94b557aea7d508da38b31cfe7341f6ff737";
 export const STACK_MUSIC_SFT_ID = "ace-step-1-5-xl-sft-bf16";
 export const STACK_MUSIC_SFT_CONFIG_ID = "ace-step-1-5-xl-sft-config";
 export const STACK_MUSIC_LM_4B_ID = "ace-step-1-5-lm-4b";
-const MUSIC_SFT_CONFIG_FILES = [
-  { path: "config.json", sha256: "174cf8c4afc2c41212546b4dca9afb11e7958f8b1e1a770d7cd009a82d72a6f1", bytes: 2_525 },
-  { path: "silence_latent.pt", sha256: "a778e9dd942f5e8b2c09c55370782d318834432b03dabbcdf70e6ed49ad6358b", bytes: 3_841_215 },
-];
-const MUSIC_LM4_FILES = [
-  { path: "added_tokens.json", sha256: "db08b66a515fb5d6acca0b3492d25bb44e0deda6241fc1113ac0679d40558c48", bytes: 2_217_787 },
-  { path: "chat_template.jinja", sha256: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8", bytes: 4_168 },
-  { path: "config.json", sha256: "211bb68b2d641360526e4654b524e508f4046c1292016c08555bb877bd686d1b", bytes: 1_562 },
-  { path: "merges.txt", sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", bytes: 1_671_853 },
-  { path: "model-00001-of-00002.safetensors", sha256: "ada9d0d4ff48f112de3f7b82cd4e7d57b4245932657e8b8edc9a5ded6a23b77f", bytes: 4_999_914_896 },
-  { path: "model-00002-of-00002.safetensors", sha256: "6302100c3577e2f1dbf32573e9b5e6e6b1bea7af101b433c2d3d6280faa8ab68", bytes: 3_379_239_240 },
-  { path: "model.safetensors.index.json", sha256: "8a9ec992fbae144ba9b40521f8763a3419546bd7a8864d80b0c3f1e1e3678fcf", bytes: 32_818 },
-  { path: "special_tokens_map.json", sha256: "76e233bfc357b0b03d7b6e6ba8e799244f358552575a7cdadb78d3d19106b298", bytes: 1_824_199 },
-  { path: "tokenizer.json", sha256: "35af56c3f5cb3ea2cc578aa28a8937770981d504f183ac5c8c38baf4bbd4af4d", bytes: 24_321_939 },
-  { path: "tokenizer_config.json", sha256: "6cd70cdd89425971794f5235562edcc608b0629a6c4686ae51a8b8c8b8ba5e95", bytes: 14_072_925 },
-  { path: "vocab.json", sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", bytes: 2_776_833 },
-];
+const MUSIC_SFT_CONFIG_FILES = data.MUSIC_SFT_CONFIG_FILES;
+const MUSIC_LM4_FILES = data.MUSIC_LM4_FILES;
 export const STACK_MUSIC_SFT: CatalogModelLike = {
   id: STACK_MUSIC_SFT_ID,
   role: "music",
@@ -1245,20 +1079,7 @@ export const SFX_REPO = "ddalcu/Stable-Audio-3-Small-SFX-MLX-Serve";
 export const SFX_REVISION = "977fd4791852ba56657a8c814cfd3b0049b2ebae";
 export const SFX_ENGINE = "sfx-gen";
 export const SFX_LICENCE = "Stability AI Community License; Gemma Terms of Use (T5Gemma text encoder)";
-const SFX_FILES = [
-  { path: "model.safetensors", sha256: "ed9cf1b6172f1a8c2921a9560c21109ff3239524563ced9dce6dcdef41e2f515", bytes: 2_270_384_940 },
-  { path: "model_config.json", sha256: "a8aa5d45ae3d6524d3cd4e85e0d6e7d8d401267e7c6f28214bca8aae7b77bdeb", bytes: 10_454 },
-  { path: "LICENSE.md", sha256: "d6f6b1a4dce5c852bd6d7d9482d002baf0ccdb71e662250b73be9eec8764ee8d", bytes: 11_852 },
-  { path: "LICENSE_GEMMA.md", sha256: "e77acc0d3163bb7534675045c584b4d04b387b529239fc4b3647da0a01ba4745", bytes: 10_541 },
-  { path: "NOTICE", sha256: "0722d2570f4acc19188f1b49cc1ab9d62c0790d0a8a4cf3453062aa948978482", bytes: 408 },
-  { path: "t5gemma-b-b-ul2/model.safetensors", sha256: "9b05ea5a4f211d023832f706fb2c0e83e4fc721b6da35ab69ceb0b55eb7800d3", bytes: 1_183_022_944 },
-  { path: "t5gemma-b-b-ul2/config.json", sha256: "575334409716886ac2952f5a275ed92868deef8a0ea560258d9970a431c6fb3a", bytes: 2_540 },
-  { path: "t5gemma-b-b-ul2/generation_config.json", sha256: "1068b94599a94ceea097dd3936819f108c2e70806d7c6cc5ec425610af347625", bytes: 156 },
-  { path: "t5gemma-b-b-ul2/special_tokens_map.json", sha256: "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351", bytes: 636 },
-  { path: "t5gemma-b-b-ul2/tokenizer.json", sha256: "7794135caa3ea73918949c902a781cc61dab674a4b59c17d85931c77c1114cbd", bytes: 34_362_429 },
-  { path: "t5gemma-b-b-ul2/tokenizer.model", sha256: "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2", bytes: 4_241_003 },
-  { path: "t5gemma-b-b-ul2/tokenizer_config.json", sha256: "9546baec0dfefec0e29873edea9488ecde153f846e18c06ea48cb44587bf408f", bytes: 46_437 },
-];
+const SFX_FILES = data.SFX_FILES;
 export const STACK_SFX_MODEL: CatalogModelLike = {
   id: STACK_SFX_MODEL_ID, role: "music", component: "sound-effects", repo: SFX_REPO, license: SFX_LICENCE, revision: SFX_REVISION, engine: SFX_ENGINE,
   sizing: { profile: "p32", quantization: "fp32" },
@@ -1285,22 +1106,7 @@ export const SFX_LICENCE_NOTICE = {
 export const STACK_RECORDED_SPEECH_MODEL_ID = "fish-audio-drama-3-4bit";
 const FISH_DRAMA3_REPO = "mlx-community/fish-audio-drama-3-4bit";
 const FISH_DRAMA3_REVISION = "2b0c8028998533972e77359cce56b8bf1c5d6d4a";
-const FISH_DRAMA3_FILES = [
-  { path: "model-00001.safetensors", sha256: "b536cbc7a6da2d499e119d929063d60f8d11cf98bd5a823e9f9655b3aeee73cf", bytes: 4_324_625_361 },
-  { path: "model-00002.safetensors", sha256: "0447f2ddba6053bc148d49fed29272232b0d10defab789c9de1bfceecdd97709", bytes: 4_390_422_858 },
-  { path: "model-00003.safetensors", sha256: "48d4c171fd6bfe29cbd064a9ca78b953c51da1002a6599b7e3eedc70d7af9955", bytes: 4_304_379_873 },
-  { path: "model-00004.safetensors", sha256: "2abf029c2002f66b52448259d7b7060afb64114044e098a87b752c5ae28252b0", bytes: 4_426_404_468 },
-  { path: "model-00005.safetensors", sha256: "37afe300c944dadcdfae3570b13d9b0ff2cf89d79bd3e093886ef1c932ef14f9", bytes: 4_302_695_649 },
-  { path: "model-00006.safetensors", sha256: "e82053be4e90178f9789ab83310512248af16ce58bf35bbc41129282ce94ed0e", bytes: 439_426_211 },
-  { path: "codec.safetensors", sha256: "6ff9d6f07920b2155e3a48ada21956004b96df9114d255ed9f0788484ba73040", bytes: 1_572_080_341 },
-  { path: "config.json", sha256: "a829790347e2786a6c37096a986a34d25d8aef8dc51147604f5a64045b7bee19", bytes: 53_444 },
-  { path: "tokenizer.json", sha256: "0e9b9db76b2f0389b04b6ef057a2ac3b89100b7e96f2dd7034d19580a09654d6", bytes: 20_791_070 },
-  { path: "tokenizer_config.json", sha256: "00e800279d8436c324b924e97872c7eacd2b19406aa0fe71eeb557b4cd53aa3e", bytes: 103_580 },
-  { path: "special_tokens_map.json", sha256: "08aed9e321dc05275ac68cf883bfa96006b3fc09ff5cccadf262b6bce0873adb", bytes: 102_779 },
-  { path: "chat_template.jinja", sha256: "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715", bytes: 7_756 },
-  { path: "LICENSE", sha256: "733a32442087acbda12ecafe8e71eb8ee5890c89b50ce7ac4ea3777faa3c823e", bytes: 19_685 },
-  { path: "NOTICE", sha256: "b076fbafebd5a20d4c812109aa34f36dbd4c1db1deb645c3d3935482d13ace11", bytes: 983 },
-];
+const FISH_DRAMA3_FILES = data.FISH_DRAMA3_FILES;
 export const STACK_RECORDED_SPEECH_MODEL: CatalogModelLike = {
   id: STACK_RECORDED_SPEECH_MODEL_ID, role: "tts", component: "recorded-speech", repo: FISH_DRAMA3_REPO,
   license: "fish-audio-community", revision: FISH_DRAMA3_REVISION, engine: "recorded-speech",
@@ -1352,24 +1158,7 @@ export const LTX25_ENGINE = "ltx25-gen";
 const LTX25_PRIMARY = "spatial_upscaler_x2.safetensors";
 /** Files the worker checks before it runs a clip. */
 export const LTX25_REQUIRED_FILES = ["transformer-distilled.safetensors", "connector.safetensors", "vae_decoder.safetensors", "vae_encoder.safetensors", "audio_vae.safetensors", "vocoder.safetensors", LTX25_PRIMARY, "text_encoder/model.safetensors", "text_encoder/tokenizer.json", "config.json", "embedded_config.json"];
-const LTX25_FILES = [
-  { path: "LICENSE.md", sha256: "4912471e6a71cc465ab7d0704957b077c69bfdf6f856845030585a5f1e48678e", bytes: 34563 },
-  { path: "audio_vae.safetensors", sha256: "e8f72c4acd0c3b760302a692a0fdffec51a530a4c1a9a21120ca149197c83dd1", bytes: 106509072 },
-  { path: "config.json", sha256: "5ac586cc31bb4ff8cee91f44935084d76bbd99b99dc8976d9d817caf14c927f2", bytes: 2223 },
-  { path: "connector.safetensors", sha256: "028792ba757f509fef60b364a72976a86990930f29757f616a29149150476243", bytes: 6344495770 },
-  { path: "embedded_config.json", sha256: "379ab8acab5d0ba7f2dd729b61fa4d4d1dc4694c12efebd7072834c9001edeb7", bytes: 2390 },
-  { path: "spatial_upscaler_x2.safetensors", sha256: "58d4851cf5f71d4e358efa6729d11fb2ec7db839562349b1c9def32ffc01ec29", bytes: 995743295 },
-  { path: "spatial_upscaler_x2_config.json", sha256: "c0646d97bf1bc3fa6e66ec7d17f16ef31b717e64bf86474b7dc3993b6c42346a", bytes: 275 },
-  { path: "text_encoder/config.json", sha256: "0807e8f1159c2ef274965a1ffe338772f54d7f18bd787ee66ab266b8e245c094", bytes: 2762 },
-  { path: "text_encoder/generation_config.json", sha256: "c70f87dc2995fc43406c0bcfb41b69c6d31c2d0c033fa09e536ffabc091ae24c", bytes: 255 },
-  { path: "text_encoder/model.safetensors", sha256: "c016a7d91c9ce13423f3da66b8bd43643529c3eaa3998b82c9924fc5295d2f9f", bytes: 8146196866 },
-  { path: "text_encoder/tokenizer.json", sha256: "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f", bytes: 32169626 },
-  { path: "text_encoder/tokenizer_config.json", sha256: "794a39f8330ce05020774c70c091225bc5f031b9cacf41fc20e52eb54b4b52d8", bytes: 3736 },
-  { path: "transformer-distilled.safetensors", sha256: "98d4c4d08ecd9e8d6cf1a836240a13bfc9d01e8e9ddc42a238e29e67229cf670", bytes: 20597195976 },
-  { path: "vae_decoder.safetensors", sha256: "c331d8c932d57e0513861ecb9a46e41358537fbb5c426642ceb4ae059dbccff2", bytes: 814349992 },
-  { path: "vae_encoder.safetensors", sha256: "5e9fdbe826de3cff9fb99389f38603b0fb6f518604a23ad4f3de6073178a621e", bytes: 637885357 },
-  { path: "vocoder.safetensors", sha256: "af24fe072b8db83cc9b92ba3f79a203d254e240d0e1c224a8dc5ac33244b9e6d", bytes: 258314385 },
-];
+const LTX25_FILES = data.LTX25_FILES;
 export const STACK_VIDEO_LTX25_MODEL: CatalogModelLike = {
   id: STACK_VIDEO_LTX25_MODEL_ID,
   role: "video",
@@ -1393,12 +1182,7 @@ export const STACK_VIDEO_LTX25_MODELS: CatalogModelLike[] = [STACK_VIDEO_LTX25_M
 // H3-VIDEO-STACK-01: published source files are pinned. Two files on existing installs have no published source; they keep working there and are not offered elsewhere.
 export const STACK_VIDEO_H3_MODEL_ID = "minimax-h3";
 export const H3_VIDEO_LICENSE = "MiniMax H3 Community License";
-export const H3_VIDEO_LICENSE_NOTICE = {
-  id: "minimax-h3-community-2026-08-02",
-  name: "MiniMax H3 Community License Agreement (2026-08-02)",
-  url: "https://huggingface.co/MiniMaxAI/MiniMax-H3",
-  summary: ["The model comes from the maker's published files for household use.", "Territory restrictions apply; authorisation is required above US$20M revenue. Read the licence before accepting."],
-};
+export const H3_VIDEO_LICENSE_NOTICE = data.H3_VIDEO_LICENSE_NOTICE;
 export const STACK_VIDEO_H3_MODEL: CatalogModelLike = {
   id: STACK_VIDEO_H3_MODEL_ID, role: "video", license: H3_VIDEO_LICENSE,
   engine: "minimax-h3-video-gen", sizing: { profile: "p128", quantization: "8-bit or Core4 stream2" },
@@ -1424,28 +1208,7 @@ export const LTX25_MAX_GEMMA_FOLDER = "gemma4-12b-ltx-v1";
 const LTX25_MAX_PRIMARY = "spatial_upscaler_x2_v1_1.safetensors";
 /** Files the worker checks before it runs a Max clip. */
 export const LTX25_MAX_REQUIRED_FILES = ["transformer-distilled.safetensors", "connector.safetensors", "vae_decoder.safetensors", "vae_encoder.safetensors", "audio_vae.safetensors", "vocoder.safetensors", LTX25_MAX_PRIMARY, `${LTX25_MAX_GEMMA_FOLDER}/model.safetensors`, `${LTX25_MAX_GEMMA_FOLDER}/tokenizer.json`, `${LTX25_MAX_GEMMA_FOLDER}/config.json`, "config.json", "embedded_config.json"];
-const LTX25_MAX_FILES = [
-  { path: "LICENSE.md", sha256: "4e7dd26d9c9294e1e0549587505dcf4ba40c7c82c50850559f846f92245f6120", bytes: 30938 },
-  { path: "audio_vae.safetensors", sha256: "d5cde5980a1e27c49188c6b1a17056ec5c06d333e5ecb66ef3e09d6e9e8cc011", bytes: 106509020 },
-  { path: "config.json", sha256: "8a2b961cd343473ad73915dbca041a1257aca86807e36c4922dec97337333568", bytes: 1039 },
-  { path: "connector.safetensors", sha256: "028792ba757f509fef60b364a72976a86990930f29757f616a29149150476243", bytes: 6344495770 },
-  { path: "duration_head.safetensors", sha256: "6a528ee9a20d4b11c19e8f5e53bfe2a683c1c2184074fdc08b2e060494f22bd4", bytes: 3808819 },
-  { path: "embedded_config.json", sha256: "a59ff335d763109068ace8475d41038ef6d4d7841307dd25e9bb1dbe0d5b0757", bytes: 2529 },
-  { path: "gemma4-12b-ltx-v1/chat_template.jinja", sha256: "ae53464bf3be25802b3a5b37def7fd89667067d7577049b3b2d74c4d8de4c6d4", bytes: 18683 },
-  { path: "gemma4-12b-ltx-v1/config.json", sha256: "379a888cc321a8bf7c4e7252fb725965f0ff5d34e6979fdcd54d19a3ed8c3cbc", bytes: 4377 },
-  { path: "gemma4-12b-ltx-v1/generation_config.json", sha256: "c70f87dc2995fc43406c0bcfb41b69c6d31c2d0c033fa09e536ffabc091ae24c", bytes: 255 },
-  { path: "gemma4-12b-ltx-v1/model.safetensors", sha256: "9e792735ebfb76fa2c0dc8526aa1a11485a0e340da9dd2f4d90f95af140358bb", bytes: 23814788105 },
-  { path: "gemma4-12b-ltx-v1/processor_config.json", sha256: "6b938e76555b3e9946890770e1abcd442a4718f34041a58e8139dc8ad34545c9", bytes: 1382 },
-  { path: "gemma4-12b-ltx-v1/tokenizer.json", sha256: "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f", bytes: 32169626 },
-  { path: "gemma4-12b-ltx-v1/tokenizer_config.json", sha256: "794a39f8330ce05020774c70c091225bc5f031b9cacf41fc20e52eb54b4b52d8", bytes: 3736 },
-  { path: "ltx-acceptable-use-policy-snapshot-2026-08-12.pdf", sha256: "054b9e6e9d4b8632dd13abe64faded682c344cf9e514813b8d262d0ea94329f1", bytes: 110423 },
-  { path: "spatial_upscaler_x2_v1_1.safetensors", sha256: "755f69dcb8a3f9589045925eb4a2237e9969f9c026a016393bc395e65ebd5788", bytes: 995745061 },
-  { path: "spatial_upscaler_x2_v1_1_config.json", sha256: "c0646d97bf1bc3fa6e66ec7d17f16ef31b717e64bf86474b7dc3993b6c42346a", bytes: 275 },
-  { path: "transformer-distilled.safetensors", sha256: "61e392660e21843b19301cefe02995c0ae329639d3e66d93ae22dc6eaf7ee32f", bytes: 37985774111 },
-  { path: "vae_decoder.safetensors", sha256: "edcc3294126fc3ec9f11e83088cc39026b8efdce0fd17987f2c90661da2e0ddb", bytes: 814349515 },
-  { path: "vae_encoder.safetensors", sha256: "101970a6cdc83345fa591027d0e5106ae53a1b291220f76640b58c2177e407a5", bytes: 637885335 },
-  { path: "vocoder.safetensors", sha256: "7316de9d2700a91497a833cb572ded629b0d2709b964917525acc22c7439a3f8", bytes: 258314115 },
-];
+const LTX25_MAX_FILES = data.LTX25_MAX_FILES;
 export const STACK_VIDEO_LTX25_MAX_MODEL: CatalogModelLike = {
   id: STACK_VIDEO_LTX25_MAX_MODEL_ID,
   role: "video",
@@ -1510,16 +1273,7 @@ export const H3_LICENCE_NOTICE = {
     "The licence limits where the model may be used (its Applicable Territory), and some regions and larger companies must apply to MiniMax separately. Read it before you accept.",
   ],
 };
-export const KLEIN3_LICENCE_NOTICE = {
-  id: "flux3-image-klein-kommunity-2026-11-16",
-  name: "FLUX Kommunity License v.1.0",
-  url: "https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/09561231f44e41381c461caf53d5452005a60ac9/LICENSE.md",
-  summary: [
-    "FLUX 3 Image Klein is downloaded from Black Forest Labs' published files for your household's use.",
-    "The FLUX Kommunity License sets terms for use and output generation. Read the licence and its accompanying NOTICE.md before accepting; acceptance is recorded before download.",
-    "NOTICE.md: https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/09561231f44e41381c461caf53d5452005a60ac9/NOTICE.md",
-  ],
-};
+export const KLEIN3_LICENCE_NOTICE = data.KLEIN3_LICENCE_NOTICE;
 export const STACK_IMAGE_H3_MODELS: CatalogModelLike[] = H3_IMAGE_FILES.map((file): CatalogModelLike => {
   const primary = file.file === H3_IMAGE_PRIMARY;
   return {
@@ -1596,25 +1350,4 @@ export const STACK_MODELS: CatalogModelLike[] = [STACK_CHAT_8B_MODEL, STACK_CHAT
 // pinned yet: the components inventory lists them as candidates, so a
 // role with no pin never reads as forgotten. Each names where it came from.
 export interface RoleCandidate { name: string; kind: "engine" | "model"; source: string; }
-export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = {
-  chat: [
-  ],
-  stt: [
-    { name: "Whisper tiny.en or base.en on the same runtime, the named alternative", kind: "model", source: "dev.md, The speech roles" },
-  ],
-  tts: [
-    { name: "Kokoro 82M through the stt worker's runtime, rejected by the owner's ear on 2026-09-04; the alternative if he reverses it", kind: "model", source: "dev.md, The speech roles" },
-  ],
-  image: [
-    { name: "GFPGAN v1.4 face repair with the facexlib detector and parser (Apache-2.0 and MIT, installed in the hub cache, no engine yet)", kind: "model", source: "STACK_STAGED_MODELS, 2026-11-15" },
-  ],
-  video: [
-    { name: "HELD, not downloaded (a possible engine switch): LTX-2.5 IC-LoRA adapters, CrossView-Warp adapter with MoGe-2, MuseTalk 1.5, LatentSync 1.6", kind: "model", source: "coordinator hold, 2026-11-15" },
-    { name: "Kandinsky 6.0 Lite distill (3B, MIT, sound-capable), the second pin; no MLX port yet", kind: "model", source: "docs/design/video-generation-2026-10-17.md in Home, VIDEO-GEN-10" },
-    { name: "Wan2.2 A14B (the quality profile, two 14B experts)", kind: "model", source: "docs/design/video-generation-2026-10-17.md in Home, VIDEO-GEN-10" },
-  ],
-  music: [
-    { name: "ACE-Step 1.5 XL turbo (4B DiT, MIT), a later quality profile for p128", kind: "model", source: "docs/design/music-generation-2026-10-17.md in Home, MUSIC-GEN-10" },
-    { name: "Stable Audio 3 Medium for music beds (Stability Community licence, behind a licence gate); Small-SFX is pinned for sound effects (MP-07)", kind: "model", source: "docs/design/music-port-2026-11-13.md in Home, MP-07" },
-  ],
-};
+export const ROLE_CANDIDATES: Partial<Record<string, RoleCandidate[]>> = data.ROLE_CANDIDATES as unknown as Partial<Record<string, RoleCandidate[]>>;
