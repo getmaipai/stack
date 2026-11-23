@@ -297,7 +297,7 @@ function buildCategories(state: State): Category[] {
     });
     const off = state.partChoices[def.partCategory]?.off ?? [];
     return {
-      id: def.id, label: def.label, role: def.role, role_enabled: def.role ? !isRoleDisabled(def.role) : null, role_priority: def.role ? rolePriorityOf(def.role) : null,
+      id: def.id, label: def.label, icon: def.icon, description: def.description, role: def.role, role_enabled: def.role ? !isRoleDisabled(def.role) : null, role_priority: def.role ? rolePriorityOf(def.role) : null,
       role_plan: rolePlanFor(planned, def.role), available: unavailable === null, unavailable_reason: unavailable, tiered: def.levels.length > 1,
       order: candidates.map((candidate) => candidate.id), disabled: off.filter((id) => candidates.some((candidate) => candidate.id === id)),
       candidates, tiers: unavailable ? [] : tiers, profiles,

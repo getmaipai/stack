@@ -9,6 +9,10 @@ import rows from "@/rows/featureRows.json";
 
 export interface CategoryDef {
   id: CategoryId; label: string; role: RoleId | null; partCategory: string; tierCategory?: TierCategory; partIds?: readonly string[]; levels: readonly ChoiceTier[];
+  /** A lucide icon name for the feature. */
+  icon: string;
+  /** One plain sentence describing the feature for the person using it. */
+  description: string;
   /** A level that is the same choice as the same level of another category (one store, two doors): it offers, resolves, lists and saves exactly what that category does. */
   follows?: Partial<Record<ChoiceTier, CategoryId>>;
   /** Levels that run through coding mode, and the only models coding mode can start there (a pick outside the list is refused). */

@@ -54,7 +54,7 @@ export const ProfileAssignmentSchema = z.object({
 export const RolePlanSchema = z.object({ state: z.string(), fit: z.string(), reason: z.string() });
 
 export const CategorySchema = z.object({
-  id: z.enum(CATEGORY_IDS), label: z.string(),
+  id: z.enum(CATEGORY_IDS), label: z.string(), icon: z.string(), description: z.string(),
   role: z.string().nullable(), role_enabled: z.boolean().nullable(), role_priority: z.number().int().nullable(),
   role_plan: RolePlanSchema.nullable().describe("What the profile planner says about this category's role on this computer (state, fit, reason)."),
   available: z.boolean(), unavailable_reason: z.string().nullable(),
