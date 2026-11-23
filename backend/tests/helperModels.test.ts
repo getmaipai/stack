@@ -52,7 +52,7 @@ test("a level question names only that level, and a feature without levels says 
   const max = await readModels(route, { role: "chat", tier: "max" });
   expect(max.text).toContain("- Max (");
   expect(max.text).not.toContain("- Standard (");
-  const coding = await readModels(route, { role: "coding", tier: "max" });
+  const coding = await readModels(route, { role: "stt", tier: "max" });
   expect(coding.ok).toBe(true);
   expect(coding.lead).toContain("has no Max tier");
 });
