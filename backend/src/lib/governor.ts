@@ -4,9 +4,25 @@ import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/m
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_JOB_CLASS, type JobClass } from "@/roles";
 import { reducedFreedBytes as tierReducedFreedBytes, tierCapBytes } from "@/lib/tiers";
+import { CATEGORY_DEFS } from "@/lib/choiceCategories";
 import { logger } from "@/lib/log";
 
 const GB = 1_073_741_824;
+
+/** The role of the resident host feature (the row marked residentHost, which is chat). */
+export function residentHostRole() {
+  return CATEGORY_DEFS.find((def) => def.residentHost)?.role ?? null;
+}
+/** True when the role belongs to the memory-hungry feature (the row marked memoryHungry, which is video). */
+export function isMemoryHungryRole(role: string | null | undefined): boolean {
+  return role !== undefined && role !== null && CATEGORY_DEFS.some((def) => def.memoryHungry && def.role === role);
+}
+/** The loaded resident host item (Home's chat process), by either its role or its id. */
+function findResidentHost(items: Iterable<LoadedInternal>) {
+  const host = residentHostRole();
+  return [...items].find((item) => item.role === host || item.id === host);
+}
+
 let pollChain: Promise<void> = Promise.resolve();
 let pollsInFlight = 0;
 
@@ -410,7 +426,7 @@ function residentRoomBytes(): number {
  * computer does not have. */
 export function reducedRoomBytes(): number {
   const resident = residentRoomBytes();
-  const chat = [...loaded.values()].find((item) => item.role === "chat" || item.id === "chat");
+  const chat = findResidentHost(loaded.values());
   const freed = chat ? liveReducedFreedBytes() : tierReducedFreedBytes(activeTier, resident);
   const ceiling = Math.max(0, Math.min(effectiveCapBytes(), totalMemoryBytes - workingMargin()));
   return Math.max(0, Math.min(freed, ceiling - resident));
@@ -418,7 +434,7 @@ export function reducedRoomBytes(): number {
 
 /** The live loaded chat peak is authoritative; use the tier's standard peak only before chat has been loaded. */
 export function liveReducedFreedBytes(): number {
-  const chat = [...loaded.values()].find((item) => item.role === "chat" || item.id === "chat");
+  const chat = findResidentHost(loaded.values());
   if (!chat || chat.id.includes("reduced")) return 0;
   const reducedChatPeak = 5_700_000_000;
   const ledgerChatSaving = Math.max(0, chat.peakBytes - reducedChatPeak);
@@ -431,11 +447,11 @@ export function liveReducedFreedBytes(): number {
 export function neverFitCapacityBytes(request: GovernorRequest, reducedBytes = liveReducedFreedBytes()): number {
   const baseRoom = tierRoomBytes();
   const capBytes = request.tier ? tierCapBytes(request.tier, baseRoom) : baseRoom;
-  const chat = [...loaded.values()].find((item) => item.role === "chat" || item.id === "chat");
+  const chat = findResidentHost(loaded.values());
   const isHouseholdMax = request.tier === "max" && request.caller !== "dev" && request.caller !== "test";
   // Reduced and the video context floor are the same chat memory saving. The
   // warm pool is already included in tierRoomBytes/canAdmit's reclaimable room.
-  const windowShrinkBytes = request.role === "video" && chat ? Math.max(0, chat.peakBytes - 5_700_000_000) : 0;
+  const windowShrinkBytes = isMemoryHungryRole(request.role) && chat ? Math.max(0, chat.peakBytes - 5_700_000_000) : 0;
   return capBytes + (isHouseholdMax ? Math.max(reducedBytes, windowShrinkBytes) : 0);
 }
 export function fitsEverForTier(request: GovernorRequest, opts: { reducedFreedBytes?: number } = {}): { fits: boolean; capBytes: number; peakBytes: number } {
@@ -464,7 +480,7 @@ export function neverFitReason(request: GovernorRequest): string {
   const label = role === "image" ? "picture" : ROLES[role as keyof typeof ROLES]?.label.toLowerCase() ?? "request";
   const needs = (peak / GB).toFixed(1);
   const available = (afterChat / GB).toFixed(1);
-  if (role === "video") return `This video needs about ${needs} GB of memory and this computer has ${available} GB for pictures and videos after chat. Try a shorter clip, or ask an admin to turn video off for this computer.`;
+  if (isMemoryHungryRole(role)) return `This video needs about ${needs} GB of memory and this computer has ${available} GB for pictures and videos after chat. Try a shorter clip, or ask an admin to turn video off for this computer.`;
   if (role === "image") return `This picture needs about ${needs} GB of memory and this computer has ${available} GB for pictures and videos after chat. Try a smaller picture, or ask an admin to choose a smaller picture model.`;
   return `This ${label} needs about ${needs} GB of memory and this computer has ${available} GB for jobs after chat. Try a smaller ${label} or ask an admin to turn it off for this computer.`;
 }
@@ -1134,8 +1150,8 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     const head = activeQueue[0];
     if (head && head.headSince === null) head.headSince = now;
     for (const entry of queue) if (entry !== head && !entry.settled) entry.headSince = null;
-    const videoWaiting = activeQueue.some((entry) => entry.request.kind === "generator" && entry.request.role === "video");
-    const videoRunning = [...loaded.values()].some((item) => item.kind === "generator" && item.role === "video");
+    const videoWaiting = activeQueue.some((entry) => entry.request.kind === "generator" && isMemoryHungryRole(entry.request.role));
+    const videoRunning = [...loaded.values()].some((item) => item.kind === "generator" && isMemoryHungryRole(item.role));
     if (videoWaiting || videoRunning) videoGoneSince = null;
     else if (videoGoneSince === null) videoGoneSince = now;
     if (options.shrinkChat && !chatYieldBusy) {
@@ -1149,7 +1165,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
       const reclaimable = reclaim.items;
       // An item inside its pool grace (MEM-SPACE-01) is about to go; the ladder is not empty yet.
       const reclaimPollBusy = (!unloadItem && reclaimable.length > 0) || reclaim.heldForGraceBytes > 0;
-      if (head && head.request.caller !== "dev" && head.request.caller !== "test" && head.request.kind === "generator" && head.request.role === "video" && !heldByCodingMode(head.request) && !canAdmit(head.request, peakFor(head.request).bytes) && !options.chatWindowShrunk?.() && !evictionPending && reclaimable.length === 0 && !reclaimPollBusy && (quiet || maxWaitPassed)) {
+      if (head && head.request.caller !== "dev" && head.request.caller !== "test" && head.request.kind === "generator" && isMemoryHungryRole(head.request.role) && !heldByCodingMode(head.request) && !canAdmit(head.request, peakFor(head.request).bytes) && !options.chatWindowShrunk?.() && !evictionPending && reclaimable.length === 0 && !reclaimPollBusy && (quiet || maxWaitPassed)) {
         videoShrinkMaxWaitSeconds = maxWait;
         videoQuietSeconds = quietSeconds;
         chatYieldBusy = true;
@@ -1192,7 +1208,7 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         if (!wasTripped && lookAtReducedNeed(maxOwner.request)) notifyMaxWindow("draining", maxOwner.request.id, maxOwner.request);
         const draining = [...loaded.values()].some((item) => item.kind === "generator" || (item.class !== "reserved" && (options.busy?.(item.id) ?? false)));
         const busyNow = options.busy ?? (() => false);
-        const shrinkPending = maxOwner.request.role === "video" && Boolean(options.shrinkChat) && !options.chatWindowShrunk?.() && liveReducedFreedBytes() > 0;
+        const shrinkPending = isMemoryHungryRole(maxOwner.request.role) && Boolean(options.shrinkChat) && !options.chatWindowShrunk?.() && liveReducedFreedBytes() > 0;
         const helpable = draining || drainCanStillBeHelped(maxOwner, busyNow, shrinkPending, now);
         if (!draining && canAdmit(maxOwner.request, peakFor(maxOwner.request).bytes)) {
           drainStuck = null;

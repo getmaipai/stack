@@ -25,6 +25,10 @@ export interface CategoryDef {
   legacySetting?: { key: string; by: "model" | "engine" };
   /** How this category's models are launched and checked on disk: "family" for picture families, "quality" for video quality tiers. */
   launchKind?: "family" | "quality";
+  /** The feature whose process stays resident and yields its memory for others (the governor's chat host). */
+  residentHost?: true;
+  /** The feature whose jobs need so much memory that the resident host's window may shrink for them (video). */
+  memoryHungry?: true;
 }
 export const CATEGORY_DEFS: readonly CategoryDef[] = rows as unknown as readonly CategoryDef[];
 export const defOf = (id: string): CategoryDef | undefined => CATEGORY_DEFS.find((def) => def.id === id);

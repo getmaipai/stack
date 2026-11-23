@@ -24,7 +24,7 @@
   "backend/src/lib/engineIdle.ts": 2,
   "backend/src/lib/fitPlan.ts": 2,
   "backend/src/lib/genProgress.ts": 5,
-  "backend/src/lib/governor.ts": 25,
+  "backend/src/lib/governor.ts": 13,
   "backend/src/lib/heavyGate.ts": 8,
   "backend/src/lib/helperActions.ts": 3,
   "backend/src/lib/helperInterpret.ts": 1,
