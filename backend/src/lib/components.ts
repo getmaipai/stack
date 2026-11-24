@@ -373,7 +373,7 @@ export function componentDefs(): UnitDef[] {
   units.push({ id: "fish-audio-drama-3-4bit", label: partLabel("fish-audio-drama-3-4bit"), summary: partDef("fish-audio-drama-3-4bit")!.description, group: "voice", role: "tts", pins: STACK_RECORDED_SPEECH_MODELS, envs: [envRecordedSpeech], tiers: ["p64", "p128"], platformBlock: () => recordedSpeech.depsAvailable ? null : "Recorded speech is available on macOS with Apple silicon.", usedBy: () => ["Recorded speech jobs in Home"], busy: () => activeJobFor((kind) => kind === "recorded_speech_generation") ? "A recorded speech job is waiting or rendering right now." : null });
   units.push({ id: "htdemucs-6s", label: partLabel("htdemucs-6s"), summary: partDef("htdemucs-6s")!.description, group: "stems", role: "music", pins: [STACK_STEMS_MODELS[2]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({
-    id: STACK_MUSIC_MODELS[0]!.id, label: partLabel(STACK_MUSIC_MODELS[0]!.id), summary: partDef(STACK_MUSIC_MODELS[0]!.id)!.description, group: "music", role: "music", pins: STACK_MUSIC_MODELS, envs: [envMusic], tiers: ["p64", "p128"],
+    id: STACK_MUSIC_MODELS[0]!.id, label: partLabel(STACK_MUSIC_MODELS[0]!.id), summary: partDef(STACK_MUSIC_MODELS[0]!.id)!.description, ...unitMeta(STACK_MUSIC_MODELS[0]!.id), pins: STACK_MUSIC_MODELS, envs: [envMusic],
     platformBlock: () => musicAvailability().code === "unsupported" ? musicAvailability().reason : null,
     usedBy: () => ["Songs in chat"],
     busy: () => {
@@ -383,7 +383,7 @@ export function componentDefs(): UnitDef[] {
     },
   });
   units.push({
-    id: STACK_SFX_MODELS[0]!.id, label: partLabel(STACK_SFX_MODELS[0]!.id), summary: partDef(STACK_SFX_MODELS[0]!.id)!.description, group: "music", role: "music", pins: STACK_SFX_MODELS, envs: [envSfx], tiers: ["p32", "p64", "p128"], licenceNotice: SFX_LICENCE_NOTICE,
+    id: STACK_SFX_MODELS[0]!.id, label: partLabel(STACK_SFX_MODELS[0]!.id), summary: partDef(STACK_SFX_MODELS[0]!.id)!.description, ...unitMeta(STACK_SFX_MODELS[0]!.id), pins: STACK_SFX_MODELS, envs: [envSfx], licenceNotice: SFX_LICENCE_NOTICE,
     platformBlock: () => sfxTierAvailability().code === "unsupported" ? sfxTierAvailability().reason : null,
     usedBy: () => ["Sound effects in the Music app and chat"],
     busy: () => {
@@ -392,10 +392,10 @@ export function componentDefs(): UnitDef[] {
       return activeJobFor((kind) => kind === SOUND_JOB_KIND) ? "A sound is waiting or being made right now." : null;
     },
   });
-  units.push({ id: "score-gen", label: partLabel("score-gen"), summary: partDef("score-gen")!.description, group: "music", role: "music", pins: [], envs: [envScore], tiers: ["p16", "p32", "p64", "p128"], platformBlock: () => scoreRequirementsFileFor() ? null : `Score transcription is not available on ${process.platform} ${process.arch} yet.`, usedBy: () => ["Audio score transcription"], busy: () => activeJobFor((kind) => kind === SCORE_JOB_KIND) ? "A score is waiting or being made right now." : null });
-  units.push({ id: STACK_MUSIC_WHISPER.id, label: partLabel(STACK_MUSIC_WHISPER.id), summary: partDef(STACK_MUSIC_WHISPER.id)!.description, group: "music", role: "music", pins: [STACK_MUSIC_WHISPER], envs: [envMusic], tiers: ["p64", "p128"], usedBy: () => ["Checking words in finished songs"], busy: () => activeJobFor((kind) => kind === "music_generation") ? "A song is being made right now." : null });
+  units.push({ id: "score-gen", label: partLabel("score-gen"), summary: partDef("score-gen")!.description, ...unitMeta("score-gen"), pins: [], envs: [envScore], platformBlock: () => scoreRequirementsFileFor() ? null : `Score transcription is not available on ${process.platform} ${process.arch} yet.`, usedBy: () => ["Audio score transcription"], busy: () => activeJobFor((kind) => kind === SCORE_JOB_KIND) ? "A score is waiting or being made right now." : null });
+  units.push({ id: STACK_MUSIC_WHISPER.id, label: partLabel(STACK_MUSIC_WHISPER.id), summary: partDef(STACK_MUSIC_WHISPER.id)!.description, ...unitMeta(STACK_MUSIC_WHISPER.id), pins: [STACK_MUSIC_WHISPER], envs: [envMusic], usedBy: () => ["Checking words in finished songs"], busy: () => activeJobFor((kind) => kind === "music_generation") ? "A song is being made right now." : null });
   units.push({
-    id: STACK_MUSIC_XL_ID, label: partLabel(STACK_MUSIC_XL_ID), summary: partDef(STACK_MUSIC_XL_ID)!.description, group: "music", role: "music", pins: STACK_MUSIC_XL_MODELS, envs: [envMusic], tiers: ["p128"],
+    id: STACK_MUSIC_XL_ID, label: partLabel(STACK_MUSIC_XL_ID), summary: partDef(STACK_MUSIC_XL_ID)!.description, ...unitMeta(STACK_MUSIC_XL_ID), pins: STACK_MUSIC_XL_MODELS, envs: [envMusic],
     platformBlock: () => musicAvailability().code === "unsupported" ? musicAvailability().reason : null,
     usedBy: () => ["Boost songs in chat"],
     busy: () => {
@@ -405,7 +405,7 @@ export function componentDefs(): UnitDef[] {
     },
   });
   units.push({
-    id: STACK_MUSIC_SFT_ID, label: partLabel(STACK_MUSIC_SFT_ID), summary: partDef(STACK_MUSIC_SFT_ID)!.description, group: "music", role: "music", pins: STACK_MUSIC_MAX_MODELS, envs: [envMusic], tiers: ["p128"],
+    id: STACK_MUSIC_SFT_ID, label: partLabel(STACK_MUSIC_SFT_ID), summary: partDef(STACK_MUSIC_SFT_ID)!.description, ...unitMeta(STACK_MUSIC_SFT_ID), pins: STACK_MUSIC_MAX_MODELS, envs: [envMusic],
     platformBlock: () => musicAvailability().code === "unsupported" ? musicAvailability().reason : null,
     usedBy: () => ["Max songs in chat"],
     busy: () => {

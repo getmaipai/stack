@@ -3,5 +3,11 @@
   "ltx-2-5-q8-distilled-mlx": { "group": "video", "role": "video", "tiers": ["p128"] },
   "minimax-h3": { "group": "video", "role": "video", "tiers": ["p16", "p32", "p64", "p128"] },
   "ltx-2-5-bf16-distilled-mlx-max": { "group": "video", "role": "video", "tiers": ["p128"] },
-  "sam2.1-hiera-small": { "group": "video", "role": "video", "tiers": ["p64", "p128"] }
+  "sam2.1-hiera-small": { "group": "video", "role": "video", "tiers": ["p64", "p128"] },
+  "ace-step-1-5-turbo": { "group": "music", "role": "music", "tiers": ["p64", "p128"] },
+  "stable-audio-3-small-sfx": { "group": "music", "role": "music", "tiers": ["p32", "p64", "p128"] },
+  "score-gen": { "group": "music", "role": "music", "tiers": ["p16", "p32", "p64", "p128"] },
+  "whisper-large-v3-turbo": { "group": "music", "role": "music", "tiers": ["p64", "p128"] },
+  "ace-step-1-5-xl-turbo-bf16": { "group": "music", "role": "music", "tiers": ["p128"] },
+  "ace-step-1-5-xl-sft-bf16": { "group": "music", "role": "music", "tiers": ["p128"] }
 }

@@ -20,3 +20,16 @@ test("the five video units keep group video, role video and their original tiers
 test("unitMeta throws for an id with no metadata row", () => {
   expect(() => unitMeta("no-such-unit")).toThrow("no unit metadata for no-such-unit");
 });
+
+const MUSIC_META = [
+  { id: "ace-step-1-5-turbo", tiers: ["p64", "p128"] },
+  { id: "stable-audio-3-small-sfx", tiers: ["p32", "p64", "p128"] },
+  { id: "score-gen", tiers: ["p16", "p32", "p64", "p128"] },
+  { id: "whisper-large-v3-turbo", tiers: ["p64", "p128"] },
+  { id: "ace-step-1-5-xl-turbo-bf16", tiers: ["p128"] },
+  { id: "ace-step-1-5-xl-sft-bf16", tiers: ["p128"] },
+];
+
+test("the six music units have metadata rows with group music, role music and their tiers", () => {
+  for (const row of MUSIC_META) expect(unitMeta(row.id)).toEqual({ group: "music", role: "music", tiers: row.tiers as never });
+});
