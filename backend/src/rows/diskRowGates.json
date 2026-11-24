@@ -1,0 +1,13 @@
+{
+  "voice-voxcpm2": { "minTier": "p64" },
+  "voice-voxcpm2-reduced": { "minTier": "p32" },
+  "pictures-zimage": { "minTier": "p128" },
+  "pictures-qwen": { "minTier": "p128" },
+  "pictures-clearer": { "minTier": "p64", "feature": "image" },
+  "music-boost": { "minTier": "p128", "feature": "music" },
+  "music-max": { "minTier": "p128", "feature": "music" },
+  "video-ltx25": { "minTier": "p128", "feature": "video" },
+  "video-ltx25-max": { "minTier": "p128", "feature": "video" },
+  "video-mask": { "minTier": "p64", "feature": "video" },
+  "sound-effects": { "minTier": "p32" }
+}

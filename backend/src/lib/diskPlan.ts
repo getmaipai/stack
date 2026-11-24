@@ -10,6 +10,7 @@
 import { PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
 import measured from "@/lib/diskPlanMeasured.json";
 import diskRoleRowsJson from "@/rows/diskRoleRows.json";
+import diskRowGatesJson from "@/rows/diskRowGates.json";
 import { partDef, partLabel } from "@/lib/partDefs";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
@@ -95,6 +96,18 @@ export const DISK_MEASURED_ON = table.measured_on;
 
 const GIB = 1_073_741_824;
 const TIER_ORDER = ["p16", "p32", "p64", "p128"] as const;
+
+/** One entry of rows/diskRowGates.json: the smallest template that may offer the row, plus the feature the row belongs to when it has one. */
+interface DiskRowGate { minTier: string; feature?: string }
+const DISK_ROW_GATES: Record<string, DiskRowGate> = diskRowGatesJson;
+
+/** DISKGATE-01: whether a hardware template may offer one of the gated optional disk-plan rows. The row is hidden when the template lists the row's feature as not available, or when the template sits below the row's minimum tier. */
+export function rowAllowed(tier: { id: string; notAvailable: readonly string[] }, rowId: string): boolean {
+  const gate = DISK_ROW_GATES[rowId];
+  if (!gate) throw new Error("no disk row gate for " + rowId);
+  if (gate.feature !== undefined && tier.notAvailable.includes(gate.feature)) return false;
+  return TIER_ORDER.indexOf(tier.id as (typeof TIER_ORDER)[number]) >= TIER_ORDER.indexOf(gate.minTier as (typeof TIER_ORDER)[number]);
+}
 
 function pinBytes(pin: CatalogModelLike): { download: number; installed: number; temp: number } {
   const row = table.pins[pin.id];
@@ -193,8 +206,8 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (better.length) rows.push(modelRow({ id: "voice-better", label: partLabel("chatterbox-turbo-fp16"), note: partDef("chatterbox-turbo-fp16")!.description, need: "recommended", engines: ["engine:voice-better", "engine:python"] }, better));
   // voxcpm2 (VOICE-VOXCPM2-01 step 2): two optional rows, off by default, never in the first-run set; the voice is chosen by name in the voice engine setting afterwards.
   // Each size brings its own files and the clip speech-to-text (a shared companion, counted once per row because the rows are alternatives).
-  if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64")) rows.push(modelRow({ id: "voice-voxcpm2", label: partLabel("voxcpm2-bf16"), note: `${partDef("voxcpm2-bf16")!.description} Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.`, need: "optional", engines: ["engine:voice-voxcpm2", "engine:python"] }, voxcpm2PackFor(VOXCPM2_ENGINE)));
-  if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p32")) rows.push(modelRow({ id: "voice-voxcpm2-reduced", label: partLabel("voxcpm2-4bit"), note: `${partDef("voxcpm2-4bit")!.description} Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.`, need: "optional", engines: ["engine:voice-voxcpm2", "engine:python"] }, voxcpm2PackFor(VOXCPM2_REDUCED_ENGINE)));
+  if (rowAllowed(tier, "voice-voxcpm2")) rows.push(modelRow({ id: "voice-voxcpm2", label: partLabel("voxcpm2-bf16"), note: `${partDef("voxcpm2-bf16")!.description} Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.`, need: "optional", engines: ["engine:voice-voxcpm2", "engine:python"] }, voxcpm2PackFor(VOXCPM2_ENGINE)));
+  if (rowAllowed(tier, "voice-voxcpm2-reduced")) rows.push(modelRow({ id: "voice-voxcpm2-reduced", label: partLabel("voxcpm2-4bit"), note: `${partDef("voxcpm2-4bit")!.description} Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.`, need: "optional", engines: ["engine:voice-voxcpm2", "engine:python"] }, voxcpm2PackFor(VOXCPM2_REDUCED_ENGINE)));
   const tools = plannedWhere((pin) => imageTools.has(pin.id));
   if (tools.length) rows.push(modelRow({ id: "image-tools", label: partLabel("image-tools"), note: partDef("image-tools")!.description, need: "recommended", engines: ["engine:image-tools", "engine:python"] }, tools));
   const look = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");
@@ -206,22 +219,22 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
     // H3-IMAGE-STACK-01: one model for new pictures and edits. Recommended where it can stay resident (64 GB and up), optional below, where it streams from disk and takes about half a minute a picture.
     if (IMAGE_FAMILIES["minimax-h3-image"].tiers.some((supportedTier) => supportedTier === tier.id)) rows.push(modelRow({ id: "pictures-h3", label: partLabel("minimax-h3-image"), note: partDef("minimax-h3-image")!.description, need: TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64") ? "recommended" : "optional", engines: ["engine:pictures-h3", "engine:python"] }, STACK_IMAGE_H3_MODELS));
     if ((IMAGE_FAMILIES[STACK_IMAGE_KLEIN3_ID].tiers as string[]).includes(tier.id)) rows.push(modelRow({ id: "pictures-klein3", label: partLabel("flux3-image-klein"), note: partDef("flux3-image-klein")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN3_MODELS));
-    if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-zimage", label: partLabel("z-image-turbo"), note: partDef("z-image-turbo")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));
-    if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "pictures-qwen", label: partLabel("qwen-image-2512-q8"), note: partDef("qwen-image-2512-q8")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_QWEN_MODELS));
+    if (rowAllowed(tier, "pictures-zimage")) rows.push(modelRow({ id: "pictures-zimage", label: partLabel("z-image-turbo"), note: partDef("z-image-turbo")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));
+    if (rowAllowed(tier, "pictures-qwen")) rows.push(modelRow({ id: "pictures-qwen", label: partLabel("qwen-image-2512-q8"), note: partDef("qwen-image-2512-q8")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_QWEN_MODELS));
   }
   // MAKE-CLEARER-2026-11-13: the Best level of Make clearer for pictures. Optional; its 12 GB peak is recommended only from the 64 GB tier up.
-  if (!tier.notAvailable.includes("image") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64")) rows.push(modelRow({ id: "pictures-clearer", label: partLabel("seedvr2-3b"), note: partDef("seedvr2-3b")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_RESTORE_MODELS));
+  if (rowAllowed(tier, "pictures-clearer")) rows.push(modelRow({ id: "pictures-clearer", label: partLabel("seedvr2-3b"), note: partDef("seedvr2-3b")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_RESTORE_MODELS));
   if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video", label: partLabel("fastwan2-2-ti2v-5b-mlx-bf16"), note: partDef("fastwan2-2-ti2v-5b-mlx-bf16")!.description, need: "optional", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_MODELS));
   if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music", label: partLabel("ace-step-1-5-turbo"), note: partDef("ace-step-1-5-turbo")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MODELS));
   if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music-transcribe", label: partLabel("whisper-large-v3-turbo"), note: partDef("whisper-large-v3-turbo")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, [STACK_MUSIC_WHISPER]));
-  if (!tier.notAvailable.includes("music") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "music-boost", label: partLabel("ace-step-1-5-xl-turbo-bf16"), note: partDef("ace-step-1-5-xl-turbo-bf16")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_XL_MODELS));
-  if (!tier.notAvailable.includes("music") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "music-max", label: partLabel("ace-step-1-5-xl-sft-bf16"), note: partDef("ace-step-1-5-xl-sft-bf16")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MAX_MODELS));
-  if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-ltx25", label: partLabel("ltx-2-5-q8-distilled-mlx"), note: partDef("ltx-2-5-q8-distilled-mlx")!.description, need: "optional", engines: ["engine:video-ltx25", "engine:python"] }, STACK_VIDEO_LTX25_MODELS));
-  if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p128")) rows.push(modelRow({ id: "video-ltx25-max", label: partLabel("ltx-2-5-bf16-distilled-mlx-max"), note: partDef("ltx-2-5-bf16-distilled-mlx-max")!.description, need: "optional", engines: ["engine:video-ltx25-max", "engine:python"] }, STACK_VIDEO_LTX25_MAX_MODELS));
+  if (rowAllowed(tier, "music-boost")) rows.push(modelRow({ id: "music-boost", label: partLabel("ace-step-1-5-xl-turbo-bf16"), note: partDef("ace-step-1-5-xl-turbo-bf16")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_XL_MODELS));
+  if (rowAllowed(tier, "music-max")) rows.push(modelRow({ id: "music-max", label: partLabel("ace-step-1-5-xl-sft-bf16"), note: partDef("ace-step-1-5-xl-sft-bf16")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MAX_MODELS));
+  if (rowAllowed(tier, "video-ltx25")) rows.push(modelRow({ id: "video-ltx25", label: partLabel("ltx-2-5-q8-distilled-mlx"), note: partDef("ltx-2-5-q8-distilled-mlx")!.description, need: "optional", engines: ["engine:video-ltx25", "engine:python"] }, STACK_VIDEO_LTX25_MODELS));
+  if (rowAllowed(tier, "video-ltx25-max")) rows.push(modelRow({ id: "video-ltx25-max", label: partLabel("ltx-2-5-bf16-distilled-mlx-max"), note: partDef("ltx-2-5-bf16-distilled-mlx-max")!.description, need: "optional", engines: ["engine:video-ltx25-max", "engine:python"] }, STACK_VIDEO_LTX25_MAX_MODELS));
   if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video-minimax-h3", label: partLabel("minimax-h3"), note: partDef("minimax-h3")!.description, need: "optional", engines: ["engine:minimax-h3-video-gen", "engine:swap-composite"] }, STACK_VIDEO_H3_MODELS));
-  if (!tier.notAvailable.includes("video") && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64")) rows.push(modelRow({ id: "video-mask", label: partLabel("sam2.1-hiera-small"), note: partDef("sam2.1-hiera-small")!.description, need: "optional", engines: ["engine:video-mask", "engine:python"] }, STACK_VIDEO_MASK_MODELS));
+  if (rowAllowed(tier, "video-mask")) rows.push(modelRow({ id: "video-mask", label: partLabel("sam2.1-hiera-small"), note: partDef("sam2.1-hiera-small")!.description, need: "optional", engines: ["engine:video-mask", "engine:python"] }, STACK_VIDEO_MASK_MODELS));
   // MP-07: sound effects, optional, on every tier with 32 GB or more (about 6.5 GB while a sound is made); the maker's licence is accepted at install.
-  if (TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p32")) rows.push(modelRow({ id: "sound-effects", label: partLabel("stable-audio-3-small-sfx"), note: partDef("stable-audio-3-small-sfx")!.description, need: "optional", engines: ["engine:sound-effects", "engine:python"] }, STACK_SFX_MODELS));
+  if (rowAllowed(tier, "sound-effects")) rows.push(modelRow({ id: "sound-effects", label: partLabel("stable-audio-3-small-sfx"), note: partDef("stable-audio-3-small-sfx")!.description, need: "optional", engines: ["engine:sound-effects", "engine:python"] }, STACK_SFX_MODELS));
   rows.push({ id: "score-transcription", label: partLabel("score-gen"), note: partDef("score-gen")!.description, kind: "model", need: "optional", selectable: true, download_bytes: 0, installed_bytes: 0, peak_temp_bytes: 0, model_ids: [], engines: ["engine:score", "engine:python"], installed: false, basis: "measured" });
   rows.push(modelRow({ id: "stems", label: partLabel("htdemucs"), note: partDef("htdemucs")!.description, need: "recommended", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[0]!]));
   rows.push(modelRow({ id: "stems-ft", label: partLabel("htdemucs-ft"), note: partDef("htdemucs-ft")!.description, need: "optional", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[1]!]));
