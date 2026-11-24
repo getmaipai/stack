@@ -24,6 +24,7 @@ import { HELPER_SHORTCUT } from "./helperText";
 import { Engines, Health, healthKind, healthWord, roleWord } from "./screens";
 import { IconChip, Pill } from "./kit";
 import { roleIcon } from "./roleIcons";
+import { setFeatureRows, useFeatureRows } from "./featureRows";
 import { Overview } from "./Overview";
 
 type Screen = "overview" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper";
@@ -79,6 +80,13 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [helperOpen, setHelperOpen] = useState(false);
   const stackClient = useStackClient(refresh);
+  // Each feature's icon and place come from the Stack's own rows (the same GET /stack/v1/choices read), loaded once; before then the small fallback table answers.
+  useFeatureRows();
+  useEffect(() => {
+    let live = true;
+    stackClient.readChoices().then((view) => { if (live) setFeatureRows(view.categories.map((c) => ({ role: c.role, icon: c.icon }))); }).catch(() => { /* the fallback icons stay */ });
+    return () => { live = false; };
+  }, [stackClient]);
   // The palette finds models with the same `GET /stack/v1/choices` read the AI and models screen uses; it asks again each time it opens.
   const [modelIndex, setModelIndex] = useState<readonly StackChoiceCategory[]>([]);
   useEffect(() => {

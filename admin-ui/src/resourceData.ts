@@ -1,3 +1,4 @@
+import { featureOrder } from "./featureRows";
 // Pure helpers for the Resources screen: no React, so the unit test can load them.
 // Data comes only from GET /stack/v1/resources/{history,summary} (ADMIN-02).
 
@@ -103,11 +104,18 @@ export function timeLabel(t: number, range: Range): string {
 const GBYTES = 1024 ** 3;
 
 /** Fixed order (busiest features first), so a feature keeps its color on every chart and bar. The kit's chart tokens include a near-black and a dark grey that vanish on a dark page, so the six base colors are the cyan, the blue and the mid and light greys, plus two shades mixed toward the text color; features past the sixth reuse them lightened. The legend names every slice too. */
-const ROLE_ORDER = ["chat", "coding", "image", "tts", "stt", "embed", "helper", "video", "music", "vision", "judge", "router", "rerank", "wakeword"];
+/** The Stack's own feature order first (from its rows), then the roles that are not features. */
+const NON_FEATURE_ROLES = ["helper", "judge", "router", "rerank"];
+const FALLBACK_ORDER = ["chat", "coding", "image", "tts", "stt", "embed", "video", "music", "vision", "wakeword"];
+function roleOrder(): string[] {
+  const fromRows = featureOrder();
+  return [...(fromRows.length ? fromRows : FALLBACK_ORDER), ...NON_FEATURE_ROLES];
+}
 const ROLE_SLOTS = ["var(--chart-1)", "var(--primary)", "color-mix(in oklab, var(--chart-1) 45%, var(--foreground))", "var(--chart-2)", "color-mix(in oklab, var(--primary) 45%, var(--foreground))", "var(--chart-3)"];
 export function roleColor(role: string): string {
-  const i = ROLE_ORDER.indexOf(role);
-  const n = i >= 0 ? i : ROLE_ORDER.length + [...role].reduce((sum, c) => sum + c.charCodeAt(0), 0) % 12;
+  const order = roleOrder();
+  const i = order.indexOf(role);
+  const n = i >= 0 ? i : order.length + [...role].reduce((sum, c) => sum + c.charCodeAt(0), 0) % 12;
   const base = ROLE_SLOTS[n % ROLE_SLOTS.length]!;
   return n < ROLE_SLOTS.length ? base : `color-mix(in oklab, ${base} ${n < 2 * ROLE_SLOTS.length ? 60 : 38}%, var(--card))`;
 }
