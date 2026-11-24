@@ -911,6 +911,13 @@
             },
             "description": "Readiness of the feature in order; empty when the category has no role."
           },
+          "requires": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChoiceRequires"
+            },
+            "description": "The engines and drafts this category's candidates need, with the candidate ids using each; sorted engine first, then by id."
+          },
           "available": {
             "type": "boolean"
           },
@@ -1018,6 +1025,7 @@
           "role_priority",
           "role_plan",
           "steps",
+          "requires",
           "available",
           "unavailable_reason",
           "tiered",
@@ -1026,6 +1034,69 @@
           "candidates",
           "tiers",
           "profiles"
+        ]
+      },
+      "ChoiceRequires": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "engine",
+              "draft"
+            ],
+            "description": "`engine` is an engine a candidate runs on; `draft` is a companion model a candidate needs alongside it."
+          },
+          "label": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "installing",
+              "notInstalled",
+              "failed",
+              "unsupported"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "The plain sentence for the state, or null when it is installed and fine."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "On disk when installed, else what installing it downloads."
+          },
+          "can_install": {
+            "type": "boolean"
+          },
+          "can_uninstall": {
+            "type": "boolean"
+          },
+          "needed_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The candidate ids of this category that use it."
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "state",
+          "reason",
+          "size_bytes",
+          "can_install",
+          "can_uninstall",
+          "needed_by"
         ]
       },
       "ChoiceCandidate": {
