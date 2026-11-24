@@ -1,4 +1,5 @@
 import { StackPartList as StackPartListSchema, type StackPartList } from "@maipai/spec/stack/ts/stack-part-list.js";
+import { PRIMARY_ROLE } from "@/roles";
 import type { StackPartView } from "@maipai/spec/stack/ts/stack-part-view.js";
 import { partDef } from "@/lib/partDefs";
 import { stackParts } from "@/lib/parts";

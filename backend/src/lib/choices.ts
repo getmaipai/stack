@@ -12,7 +12,7 @@ import { partDef } from "@/lib/partDefs";
 import { listParts } from "@/lib/partsList";
 import { recommend, type ProfilePlan } from "@/lib/profilePlanner";
 import { isRoleDisabled, rolePriorityOf } from "@/lib/roleSwitches";
-import { ROLE_IDS, type RoleId, type RoleState } from "@/roles";
+import { ROLE_IDS, type RoleId, type RoleState, HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
 import { getRoleStatus } from "@/lib/supervisor";
 import { requiresFor, stepsFromState, type RequiresPart } from "@/lib/choiceRequires";
 import { settingValues, updateSettings } from "@/settings";
@@ -116,7 +116,7 @@ function poolOf(state: State, def: CategoryDef): PoolEntry[] {
       out.push({ id: row.id, kind: "shipped", family: row.family, vetting: row.vetting ?? null, row, added: null });
     }
   } else for (const id of def.partIds ?? []) if (state.parts.has(id)) out.push({ id, kind: "shipped", family: null, vetting: null, row: null, added: null });
-  if (def.id === "chat") for (const added of Object.values(state.added)) out.push({ id: added.id, kind: "added", family: null, vetting: null, row: null, added });
+  if (def.id === PRIMARY_ROLE) for (const added of Object.values(state.added)) out.push({ id: added.id, kind: "added", family: null, vetting: null, row: null, added });
   // A level that follows another category lists that category's installed models too, so its row shows a size and a state. They are options for that level only: offeredAt uses def.partIds for the other levels.
   for (const from of Object.values(def.follows ?? {})) {
     const source = defOf(from!);
@@ -248,7 +248,7 @@ function levelOptions(state: State, def: CategoryDef, pool: PoolEntry[], tier: C
     const choices = state.partChoices;
     recommended = bound && options.some((option) => option.model === bound && option.fits) ? bound : options.filter((option) => option.fits && !(choices[def.partCategory]?.off ?? []).includes(option.model)).sort((a, b) => (partDef(a.model)?.priority ?? 99) - (partDef(b.model)?.priority ?? 99))[0]?.model ?? null;
   }
-  if (def.id === "chat") for (const added of Object.values(state.added)) { const fit = addedFit(added, tier, state); options.push({ model: added.id, fits: fit.fits, refusal: fit.refusal }); if (added.ram_bytes > 0) peaks.set(added.id, added.ram_bytes); }
+  if (def.id === PRIMARY_ROLE) for (const added of Object.values(state.added)) { const fit = addedFit(added, tier, state); options.push({ model: added.id, fits: fit.fits, refusal: fit.refusal }); if (added.ram_bytes > 0) peaks.set(added.id, added.ram_bytes); }
   return { options, capBytes, recommended, peaks };
 }
 
@@ -472,16 +472,16 @@ async function applyPick(def: CategoryDef, tier: ChoiceTier, entry: PoolEntry, i
     await restartRole("tts", "model-load");
     return { applied: true, pending_restart: false, note: null };
   }
-  if (!installed) return { applied: false, pending_restart: false, note: `The choice is saved. ${def.label} switches to it once it is installed and checked; ${def.id === "chat" ? "chat" : "the model that answers now"} keeps answering until then.` };
+  if (!installed) return { applied: false, pending_restart: false, note: `The choice is saved. ${def.label} switches to it once it is installed and checked; ${def.id === PRIMARY_ROLE ? PRIMARY_ROLE : "the model that answers now"} keeps answering until then.` };
   if (def.process) {
     const role = def.role!;
-    if (def.id === "chat") updateSettings({ "stack.engines.chat.model": entry.id });
+    if (def.id === PRIMARY_ROLE) updateSettings({ "stack.engines.chat.model": entry.id });
     const supervisor = await import("@/lib/supervisor");
     const loaded = supervisor.loadedModelId(role);
     if (loaded === null || loaded === entry.id) return { applied: true, pending_restart: false, note: null };
     if (supervisor.activeRequestsOf(role) > 0) return { applied: false, pending_restart: true, note: `${def.label} is answering a request now. The new model starts the next time ${def.label.toLowerCase()} restarts.` };
-    if (role === "chat" && (await import("@/lib/reducedChat")).reducedChatForcesLight()) return { applied: false, pending_restart: true, note: "Chat is in Reduced now. The new model starts when Reduced ends." };
-    if (role === "chat" && (await import("@/lib/homeMode")).currentHomeMode() === "coding") return { applied: false, pending_restart: true, note: "Coding mode is on. The new chat model starts when coding mode ends." };
+    if (role === PRIMARY_ROLE && (await import("@/lib/reducedChat")).reducedChatForcesLight()) return { applied: false, pending_restart: true, note: "Chat is in Reduced now. The new model starts when Reduced ends." };
+    if (role === PRIMARY_ROLE && (await import("@/lib/homeMode")).currentHomeMode() === HEAVY_ROLE) return { applied: false, pending_restart: true, note: "Coding mode is on. The new chat model starts when coding mode ends." };
     // The pick holds the choice from here on: the load's session preference is dropped so a later change to the pick or the order is not shadowed by it.
     try { await supervisor.loadModelForRole(role, entry.id); supervisor.preferModel(role, null); return { applied: true, pending_restart: false, note: null }; }
     catch (error) {
@@ -523,7 +523,7 @@ export async function setPick(input: PickInput, source: ActionSource, remote: st
   }
   const changed = JSON.stringify(before) !== JSON.stringify(next);
   // The legacy setting and the pick are one value (choiceResolver.ts): clearing the pick back to "recommended" clears the setting too, or the setting would keep the old model running.
-  if (next === null && tier === "standard" && own && (def.id === "chat" || def.id === "voice")) updateSettings({ [def.id === "chat" ? "stack.engines.chat.model" : TTS_ENGINE_SETTING]: def.id === "voice" ? "auto" : "" });
+  if (next === null && tier === "standard" && own && (def.id === PRIMARY_ROLE || def.id === "voice")) updateSettings({ [def.id === PRIMARY_ROLE ? "stack.engines.chat.model" : TTS_ENGINE_SETTING]: def.id === "voice" ? "auto" : "" });
   if (changed) writePicks(withPick(state.picks, profile, def.id, tier, next));
   notifyChoicesChanged();
   const effect: Effect = next && next.model !== "off" && own && entry ? await applyPick(def, tier, entry, installed) : { applied: false, pending_restart: false, note: null };
@@ -666,7 +666,7 @@ export async function addModel(input: { source: string; file?: string; tier: Cho
   const id = addedModelId(found.repo, found.file, found.sha256);
   const label = `${found.repo.split("/").at(-1) ?? found.repo} (${found.file.replace(/\.gguf$/i, "")})`.slice(0, 200);
   const record: AddedModel = {
-    id, label, category: "chat", repo: found.repo, file: found.file, url: found.url, revision: found.revision, sha256: found.sha256, size_bytes: found.sizeBytes, licence: found.licence,
+    id, label, category: PRIMARY_ROLE, repo: found.repo, file: found.file, url: found.url, revision: found.revision, sha256: found.sha256, size_bytes: found.sizeBytes, licence: found.licence,
     architecture: found.architecture.name, verified: found.architecture.verified, ram_bytes: Math.round(found.architecture.ramBytes) || 0, added_at: new Date().toISOString(), added_by: source,
   };
   const fit = addedFit(record, input.tier, state);
@@ -678,17 +678,17 @@ export async function addModel(input: { source: string; file?: string; tier: Cho
   if (view === "notInstalled") {
     try {
       const pin = { id, role: "chat" as const, repo: found.repo, license: found.licence, revision: found.revision, engine: "llama-server", download: { url: found.url, sha256: found.sha256, approx_bytes: found.sizeBytes } };
-      job = (await choicesDeps.installPin(pin, "chat")).job;
+      job = (await choicesDeps.installPin(pin, PRIMARY_ROLE)).job;
     } catch (error) {
       if (error instanceof DiskRefusalError) return refuse(409, "not_enough_space", error.reason);
       return refuse(409, "install_failed", error instanceof Error ? error.message : "The download could not start. Try again.");
     }
   }
   writeAddedModels(added);
-  if (input.use) writePicks(withPick(readPicks(), state.profile.id, "chat", input.tier, { model: id }));
+  if (input.use) writePicks(withPick(readPicks(), state.profile.id, PRIMARY_ROLE, input.tier, { model: id }));
   const installed = view === "installed";
   if (input.use) notifyChoicesChanged();
-  if (input.use && installed && input.tier === "standard") await applyPick(defOf("chat")!, "standard", { id, kind: "added", family: null, vetting: null, row: null, added: record }, true);
+  if (input.use && installed && input.tier === "standard") await applyPick(defOf(PRIMARY_ROLE)!, "standard", { id, kind: "added", family: null, vetting: null, row: null, added: record }, true);
   auditAction("choices.add-model", source, remote, { id, level: input.tier, use: String(input.use) });
   return { ok: true, id, label, category: "chat", tier: input.tier, chosen: input.use, state: installed ? "installed" : "installing", install_job: job, size_bytes: found.sizeBytes, licence: found.licence };
 }
@@ -721,7 +721,7 @@ export async function migrate(input: MigrateInput, source: ActionSource, remote:
     const key = record.id;
     if (record.licence === null) { results.push({ kind: "added_model", key, status: "refused", reason: "The record names no licence, and the Stack installs nothing without one. Add the model again from its link." }); continue; }
     if (added[key]) { results.push({ kind: "added_model", key, status: "unchanged", reason: null }); continue; }
-    added = { ...added, [key]: { ...record, licence: record.licence, category: "chat", added_at: new Date().toISOString(), added_by: `migration:${source}` } };
+    added = { ...added, [key]: { ...record, licence: record.licence, category: PRIMARY_ROLE, added_at: new Date().toISOString(), added_by: `migration:${source}` } };
     results.push({ kind: "added_model", key, status: "accepted", reason: null });
   }
   if (write) writeAddedModels(added);

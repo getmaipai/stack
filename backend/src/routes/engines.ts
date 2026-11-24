@@ -29,7 +29,7 @@ import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { emit } from "@/lib/events";
 import { requestEngineRestart, selfHealSummary } from "@/lib/selfHeal";
 import { metalHostFault } from "@/lib/hostProbe";
-import { ROLE_IDS } from "@/roles";
+import { ROLE_IDS, HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
 import { EngineIndexEntrySchema } from "@/updates/catalog";
 import { engineUpdateFor } from "@/lib/engineUpdates";
 
@@ -82,10 +82,10 @@ enginesRoutes.openapi(listRoute, async (c) => {
     // row), a llama-server pin for its other roles; never a tool pin
     // (uv) or a source pin (ComfyUI), and never a chat engine that is
     // installed but not running.
-    const isChat = engineRole(pin.name) === "chat";
+    const isChat = engineRole(pin.name) === PRIMARY_ROLE;
     // The coding role runs on llama-server or Splash, chosen by stack.engines.coding.engine: only the build whose process serves it is compared.
-    const isCoding = engineRole(pin.name) === "coding";
-    const runsTheRole = isChat ? runningEngine("chat") === pin.name : isCoding ? runningEngine("coding") === pin.name : !pin.tool || pin.tool === "llama-server";
+    const isCoding = engineRole(pin.name) === HEAVY_ROLE;
+    const runsTheRole = isChat ? runningEngine(PRIMARY_ROLE) === pin.name : isCoding ? runningEngine(HEAVY_ROLE) === pin.name : !pin.tool || pin.tool === "llama-server";
     const running = runsTheRole ? status.identity?.build ?? null : null;
     const version = deriveEngineVersionState({ running, currentTag: currentEngine(pin.name), newestTag: selected?.id === pin.id ? pin.tag : null, needsRestart: isChat && pin.name === chosenChatEngine && needsRestart });
     return { id: pin.id, name: pin.name, label: pin.label, platform: pin.platform, arch: pin.arch, verified: pin.verified, installed: existsSync(join(engineDir(pin), ENGINE_READY_MARKER)), matchesThisMachine: selected?.id === pin.id, ...version, directory: engineDir(pin), roleState: status.state, roleReason: status.reason, update: selected?.id === pin.id ? engineUpdateFor(pin.name) : null };
@@ -95,7 +95,7 @@ enginesRoutes.openapi(listRoute, async (c) => {
   const managed = MANAGED_RUNTIMES.map((runtime) => {
     const status = getRoleStatus(engineRole(runtime.name));
     const installed = runtime.name === POCKET_TTS_NAME ? pocketTtsInstalled() : runtime.name === MLX_AUDIO_NAME ? mlxAudioInstalled() : runtime.name === OMLX_NAME ? omlxInstalled() : runtime.name === COMFYUI_NAME ? comfyuiInstalled() : runtime.name === VIDEO_GEN_NAME ? videoGenEnvironmentReady() : runtime.name === MUSIC_GEN_NAME ? musicGenEnvironmentReady() : runtime.name === IMAGE_GEN_NAME ? imageGenEnvironmentReady() : runtime.name === H3_GEN_NAME ? h3GenEnvironmentReady() : runtime.name === LTX25_GEN_NAME ? ltx25EnvironmentReady() : runtime.name === LTX25_MAX_GEN_NAME ? ltx25MaxEnvironmentReady() : false;
-    const running = engineRole(runtime.name) === "chat" && runningEngine("chat") !== runtime.name ? null : status.identity?.build ?? null;
+    const running = engineRole(runtime.name) === PRIMARY_ROLE && runningEngine(PRIMARY_ROLE) !== runtime.name ? null : status.identity?.build ?? null;
     const version = deriveEngineVersionState({ running, currentTag: installed ? runtime.version : null, newestTag: runtime.version, needsRestart: false });
     return { id: `${runtime.name}-${runtime.version}`, name: runtime.name, label: `${runtime.name} ${runtime.version}, an environment the Stack assembles through uv`, platform: process.platform, arch: process.arch, verified: true, installed, matchesThisMachine: true, ...version, directory: runtime.name === POCKET_TTS_NAME ? pocketTtsRoot() : runtime.name === MLX_AUDIO_NAME ? mlxAudioRoot() : runtime.name === OMLX_NAME ? omlxRoot() : runtime.name === COMFYUI_NAME ? comfyuiRoot() : runtime.name === VIDEO_GEN_NAME ? videoGenRoot() : runtime.name === MUSIC_GEN_NAME ? musicGenRoot() : runtime.name === H3_GEN_NAME ? h3GenRoot() : runtime.name === LTX25_GEN_NAME ? ltx25GenRoot() : runtime.name === LTX25_MAX_GEN_NAME ? ltx25MaxGenRoot() : "", roleState: status.state, roleReason: status.reason, update: null };
   });
@@ -226,9 +226,9 @@ enginesRoutes.openapi(installRoute, async (c) => {
  * process holds the role can always be stopped, chosen or not. */
 function unchosenChatEngine(name: string, options: { stoppable?: boolean } = {}): string | null {
   if (!CHAT_ENGINES.includes(name as ChatEngine)) return null;
-  if (options.stoppable) return runningEngine("chat") === name || (runningEngine("chat") === null && name === chatEngine()) ? null : `The chat role is not running ${name}.`;
+  if (options.stoppable) return runningEngine(PRIMARY_ROLE) === name || (runningEngine(PRIMARY_ROLE) === null && name === chatEngine()) ? null : `The chat role is not running ${name}.`;
   if (name === chatEngine()) return null;
-  const running = runningEngine("chat");
+  const running = runningEngine(PRIMARY_ROLE);
   return `The chat role is set to ${chatEngine()}${running && running !== chatEngine() ? ` (${running} runs until the restart)` : ""}; set stack.engines.chat.engine to ${name} and restart the Stack to run it.`;
 }
 for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openapi(controlRoute(action), async (c) => {
@@ -264,7 +264,7 @@ for (const action of ["start", "stop", "restart"] as const) enginesRoutes.openap
     const status = getRoleStatus(role);
     // "Already running" only when the process is this engine's: a chat
     // role still on the other engine after the setting changed restarts.
-    const other = CHAT_ENGINES.includes(name as ChatEngine) && runningEngine("chat") !== null && runningEngine("chat") !== name;
+    const other = CHAT_ENGINES.includes(name as ChatEngine) && runningEngine(PRIMARY_ROLE) !== null && runningEngine(PRIMARY_ROLE) !== name;
     if (other) { await restartRole(role, "route-engines-other"); await getProcess(role); return c.json({ ok: true }, 200); }
     if (status.state === "ready" || status.state === "busy" || status.state === "loading") return c.json({ ok: true, reason: "Already running." }, 200);
     if (!roleCanBeStartedByStack(role) && status.state !== "stopped") return c.json({ ok: false, reason: `The ${role} role is bound to a server the Stack does not start.` }, 200);
@@ -282,7 +282,7 @@ enginesRoutes.openapi(currentRoute, async (c) => {
     // process to drain, and nothing to restart that would prove the build.
     if (unchosenChatEngine(name)) await swapEngine(name, tag);
     // The coding engine is on demand: it is drained, and the next coding request starts the new build (a build that does not start falls back to llama-server) rather than loading 20 GB here.
-    else if (role === "coding") await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change.", "engine-swap-drain") });
+    else if (role === HEAVY_ROLE) await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change.", "engine-swap-drain") });
     else await swapEngine(name, tag, { drain: () => stopRole(role, "Draining for an engine change.", "engine-swap-drain"), postLoadCheck: async () => { await restartRole(role, "engine-swap-postload"); await getProcess(role); return true; } });
     return c.json({ ok: true as const, tag }, 200);
   } catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error) }, 400); }

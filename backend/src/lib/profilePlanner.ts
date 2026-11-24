@@ -12,7 +12,7 @@ import type { HardwareInfo, MemorySource } from "@/lib/hardware";
 import { STACK_MODELS } from "@/lib/modelCatalog";
 import { defaultRolePriority } from "@/lib/roleSwitches";
 import { reducedFreedBytes, resolveLadder, resolveTier, TIER_CANDIDATES, type ProfileId, type TierCategory } from "@/lib/tiers";
-import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
+import { ROLE_IDS, ROLES, type RoleId, PRIMARY_ROLE } from "@/roles";
 
 const GIB = 1_073_741_824;
 const GB = 1_000_000_000;
@@ -103,10 +103,10 @@ function candidatePeak(id: string, measured: Record<string, number> | undefined)
 
 /** The chat models above the tier's own one that the planner may pick: pinned chat models on a standard or boost slot, not under vetting, not excluded, smallest first. The catalog has none today, so chat stays on the tier's model; the code is here for the day it does. */
 export function defaultChatLadder(profile: ProfileId): Array<{ id: string; peakBytes: number; verified: boolean }> {
-  const pinned = new Set(STACK_MODELS.filter((pin) => pin.role === "chat" && !pin.component).map((pin) => pin.id));
+  const pinned = new Set(STACK_MODELS.filter((pin) => pin.role === PRIMARY_ROLE && !pin.component).map((pin) => pin.id));
   const base = PROFILE_MODEL_BINDINGS[profile]?.chat;
   return TIER_CANDIDATES
-    .filter((item) => item.category === "chat" && item.profiles.includes(profile) && !item.vetting && item.id !== base && pinned.has(item.id) && !PLANNER_EXCLUDED_CHAT.includes(item.id) && item.tiers.some((tier) => tier === "standard" || tier === "boost"))
+    .filter((item) => item.category === PRIMARY_ROLE && item.profiles.includes(profile) && !item.vetting && item.id !== base && pinned.has(item.id) && !PLANNER_EXCLUDED_CHAT.includes(item.id) && item.tiers.some((tier) => tier === "standard" || tier === "boost"))
     .map((item) => ({ id: item.id, peakBytes: item.peaks[0]!.peakBytes, verified: item.peaks[0]!.status === "measured" }))
     .sort((a, b) => a.peakBytes - b.peakBytes);
 }
@@ -154,7 +154,7 @@ export function planFor(input: PlannerInput, options: PlanOptions = { upgrade: t
   let chat = candidatePeak(chatId, input.measuredPeaks) ?? { bytes: 7 * GB, basis: "estimated" as Basis };
   let chosenChat = chatId;
   const need = (role: RoleId): { model: string | null; bytes: number; basis: Basis } => {
-    if (role === "chat") return { model: chosenChat, bytes: chat.bytes, basis: chat.basis };
+    if (role === PRIMARY_ROLE) return { model: chosenChat, bytes: chat.bytes, basis: chat.basis };
     if (role === "judge") { const id = bindings.judge; const peak = id ? candidatePeak(id, input.measuredPeaks) : null; return peak ? { model: id!, bytes: peak.bytes, basis: peak.basis } : { model: null, bytes: 0, basis: "measured" }; }
     if (role === "tts") { const slot = resolveTier({ category: "voice", tier: "standard", profile: tier.id, roomBytes: Number.MAX_SAFE_INTEGER }); return slot ? { model: slot.model, bytes: input.measuredPeaks?.[slot.model] ?? slot.peakBytes, basis: input.measuredPeaks?.[slot.model] !== undefined || slot.verified ? "measured" : "estimated" } : { model: null, bytes: 1.6 * GB, basis: "estimated" }; }
     if (role === "stt") return { model: bindings.stt ?? null, bytes: tier.id === "p16" || tier.id === "p32" ? STT_BYTES.small : STT_BYTES.large, basis: "estimated" };
@@ -175,9 +175,9 @@ export function planFor(input: PlannerInput, options: PlanOptions = { upgrade: t
   // Upgrades (Custom recommended only): the chat model, while it leaves headroom and every generator the tier offers still has a slot.
   const generatorRoles = GENERATORS.filter(({ role }) => !disabled.has(role) && (tier.onDemand.includes(role) || tier.resident.includes(role)));
   const upgradeNotes: string[] = [];
-  if (options.upgrade && !disabled.has("chat")) {
+  if (options.upgrade && !disabled.has(PRIMARY_ROLE)) {
     const ladder = (input.chatLadder ?? defaultChatLadder(tier.id)).filter((rung) => rung.peakBytes > chat.bytes);
-    const outranked = generatorRoles.some(({ role }) => priorityOf(role) < priorityOf("chat"));
+    const outranked = generatorRoles.some(({ role }) => priorityOf(role) < priorityOf(PRIMARY_ROLE));
     if (outranked && ladder.length > 0) upgradeNotes.push("Chat keeps its model: a picture, video or music role is ranked above it, so its room is kept.");
     else {
       for (const rung of ladder) {
@@ -187,7 +187,7 @@ export function planFor(input: PlannerInput, options: PlanOptions = { upgrade: t
         if (roomAfter() >= UPGRADE_HEADROOM_BYTES && keepsSlots) {
           chat = { bytes: rung.peakBytes, basis: rung.verified ? "measured" : "estimated" };
           chosenChat = rung.id;
-          row("chat", { ...rows.get("chat")!, model: rung.id, peak_bytes: rung.peakBytes, basis: chat.basis, reason: `Uses the ${rung.id} model because ${gb1(roomAfter())} GB stay spare after it.` });
+          row(PRIMARY_ROLE, { ...rows.get(PRIMARY_ROLE)!, model: rung.id, peak_bytes: rung.peakBytes, basis: chat.basis, reason: `Uses the ${rung.id} model because ${gb1(roomAfter())} GB stay spare after it.` });
         } else resident = before;
       }
     }
@@ -230,7 +230,7 @@ export function explainPlan(plan: ProfilePlan, memoryGb: number): string[] {
   why.push(`${memoryGb} GB of memory, less ${gb1(b.os_reserve_bytes)} GB kept for the computer, leaves ${gb1(b.resident_cap_bytes)} GB for models.`);
   why.push(`The resident models (${plan.roles.filter((r) => r.state === "resident").map((r) => r.role).join(", ")}) take about ${gb1(b.resident_bytes)} GB, which leaves ${gb1(b.room_bytes)} GB for pictures, video, music and coding.`);
   if (b.tight) why.push("The resident models are estimated a little over the budget; the shipped setup for this size is kept and the numbers are estimates until measured here.");
-  const chat = plan.roles.find((r) => r.role === "chat");
+  const chat = plan.roles.find((r) => r.role === PRIMARY_ROLE);
   if (chat?.model) why.push(chat.reason.startsWith("Uses") ? chat.reason : `Chat uses the ${chat.model} model: no larger chat model in the catalog is cleared for automatic choice.`);
   for (const role of plan.roles.filter((r) => r.state === "on_demand" && r.fit !== "n/a" && GENERATORS.some((g) => g.role === r.role))) why.push(`${ROLES[role.role].label} runs at the ${role.slot} level: ${role.reason}`);
   for (const role of plan.roles.filter((r) => r.state === "unavailable" && r.fit === "refused")) why.push(role.reason);

@@ -34,6 +34,7 @@
 //   (`enabled`), live.
 // Only a PausableProcess made with `{ engine: true }` may be an engine; the
 // protected-pid list still shields every other engine.
+import { HEAVY_ROLE, PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "@/lib/log";
@@ -41,7 +42,7 @@ import { dataDir } from "@/lib/paths";
 import { processTree } from "@/lib/processTree";
 
 /** The roles whose requests are interactive (the turn pipeline and voice). The memory judge, embeddings and rerank are background work and never pause a job. */
-export const INTERACTIVE_ROLES = ["chat", "coding", "vision", "router", "stt", "tts"] as const;
+export const INTERACTIVE_ROLES = [PRIMARY_ROLE, HEAVY_ROLE, PICTURE_READER_ROLE, "router", "stt", "tts"] as const;
 export function isInteractiveRole(role: string): boolean { return (INTERACTIVE_ROLES as readonly string[]).includes(role); }
 
 const num = (name: string, fallback: number): number => { const value = Number(process.env[name]); return Number.isFinite(value) && process.env[name] !== undefined && process.env[name] !== "" ? value : fallback; };
@@ -219,7 +220,7 @@ class HeavyGate {
   private active(): boolean { return isolationRules.enabled() && (this.interactive.size > 0 || this.tailTimer !== null); }
 
   /** Interactive requests in flight that are not coding's own. */
-  private othersInFlight(): number { let count = 0; for (const entry of this.interactive.values()) if (entry.role !== "coding") count++; return count; }
+  private othersInFlight(): number { let count = 0; for (const entry of this.interactive.values()) if (entry.role !== HEAVY_ROLE) count++; return count; }
 
   /** Whether requests (or their tail) say this lease's worker should be stopped now. A lease that skips coding looks only at the requests that are not coding's. */
   private demands(lease: LeaseState): boolean {
@@ -234,7 +235,7 @@ class HeavyGate {
     const id = this.nextId++;
     this.interactive.set(id, { role, at: Date.now() });
     if (this.tailTimer) { clearTimeout(this.tailTimer); this.tailTimer = null; }
-    if (role !== "coding" && this.tailTimerOthers) { clearTimeout(this.tailTimerOthers); this.tailTimerOthers = null; }
+    if (role !== HEAVY_ROLE && this.tailTimerOthers) { clearTimeout(this.tailTimerOthers); this.tailTimerOthers = null; }
     this.pauseAll(role);
     let ended = false;
     return () => {
@@ -243,7 +244,7 @@ class HeavyGate {
       this.interactive.delete(id);
       const tail = isolationRules.tailMs();
       // Leases that skip coding are quiet when no request but coding's is in flight.
-      if (role !== "coding" && this.othersInFlight() === 0 && !this.tailTimerOthers) {
+      if (role !== HEAVY_ROLE && this.othersInFlight() === 0 && !this.tailTimerOthers) {
         if (tail <= 0) this.resumeAll("quiet", true);
         else this.tailTimerOthers = setTimeout(() => { this.tailTimerOthers = null; if (this.othersInFlight() === 0) this.resumeAll("quiet", true); }, tail);
       }
@@ -272,7 +273,7 @@ class HeavyGate {
   }
 
   /** A request of `role` began: stop every worker it outranks. Coding's own request does not stop a lease that skips coding. */
-  private pauseAll(role: string): void { for (const lease of this.leases) if (!(lease.skipCoding && role === "coding")) this.pauseLease(lease); }
+  private pauseAll(role: string): void { for (const lease of this.leases) if (!(lease.skipCoding && role === HEAVY_ROLE)) this.pauseLease(lease); }
   /** `others`: only the leases that skip coding (their own quiet moment). Otherwise every lease, except one that skips coding while its own tail still runs. */
   private resumeAll(reason: string, others = false): void {
     for (const lease of this.leases) {

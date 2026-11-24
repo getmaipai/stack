@@ -11,6 +11,7 @@
 // a role that does not fit stays on-demand (loaded by its first request,
 // as before). The warm set is also what the idle unload leaves alone
 // (the `stack.runtime.keep_warm` setting, off when on battery).
+import { HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
 import { GovernorRules, defaultModelBudgetBytes, getGovernorStatus, type GovernorTier } from "@/lib/governor";
 import { logger } from "@/lib/log";
 import { currentMachineTier, engineInstalledFor, getProcess, processRoleFor, requestRole, selectedModel } from "@/lib/supervisor";
@@ -20,7 +21,7 @@ import { currentHomeMode, homeModeEnteringCoding } from "@/lib/homeMode";
 
 /** Most important first: a role later in the list is dropped first when
  * the machine cannot hold them all. */
-export const WARM_ORDER: RoleId[] = ["chat", "embed", "judge", "stt", "tts"];
+export const WARM_ORDER: RoleId[] = [PRIMARY_ROLE, "embed", "judge", "stt", "tts"];
 const FOOTPRINT_FACTOR = 1.3;
 
 export type WarmRoleState = "pending" | "warming" | "warm" | "skipped" | "failed";
@@ -60,16 +61,16 @@ let warmed = new Set<RoleId>();
 
 export function warmupStatus(): WarmupStatus { return { ...status, roles: status.roles.map((row) => ({ ...row })) }; }
 /** The roles the idle unload spares. The coding engine is never among them: it loads while someone is coding and unloads after its own keep-warm minutes (CODE-STACK-01 S2). */
-export function warmedRoles(): RoleId[] { return [...warmed].filter((role) => role !== "coding"); }
+export function warmedRoles(): RoleId[] { return [...warmed].filter((role) => role !== HEAVY_ROLE); }
 
 /** In coding mode, and while Home is switching into it, chat and judge stay unloaded: a warm-up that loaded them mid-switch kept ~30 GB the large model needed (live, 2026-11-21: the switch was refused for memory). */
-function residentsHeldOff(): boolean { return currentHomeMode() === "coding" || homeModeEnteringCoding(); }
+function residentsHeldOff(): boolean { return currentHomeMode() === HEAVY_ROLE || homeModeEnteringCoding(); }
 
 function candidatesNow(): WarmCandidate[] {
   const out: WarmCandidate[] = [];
   const seen = new Set<RoleId>();
   for (const role of WARM_ORDER) {
-    if (residentsHeldOff() && (role === "chat" || role === "judge")) continue;
+    if (residentsHeldOff() && (role === PRIMARY_ROLE || role === "judge")) continue;
     const owner = processRoleFor(role);
     if (seen.has(owner)) continue;
     const model = selectedModel(owner);
@@ -102,7 +103,7 @@ export const PRIME_TEXT = [
 
 /** The request that loads the weights and primes the engine's kernels, per role. */
 async function prime(role: RoleId): Promise<void> {
-  if (role === "chat" || role === "judge") await requestRole(role, "/v1/chat/completions", { model: role, messages: [{ role: "user", content: PRIME_TEXT }], max_tokens: 48, temperature: 0 });
+  if (role === PRIMARY_ROLE || role === "judge") await requestRole(role, "/v1/chat/completions", { model: role, messages: [{ role: "user", content: PRIME_TEXT }], max_tokens: 48, temperature: 0 });
   else if (role === "embed") await requestRole(role, "/v1/embeddings", { model: role, input: "Hi" });
 }
 
@@ -124,7 +125,7 @@ async function run(trigger: string): Promise<WarmupStatus> {
     }),
   };
   for (const role of plan.warm) {
-    if (residentsHeldOff() && (role === "chat" || role === "judge")) { setRole(role, { state: "skipped", reason: "Home is switching to the large coding mode." }); continue; }
+    if (residentsHeldOff() && (role === PRIMARY_ROLE || role === "judge")) { setRole(role, { state: "skipped", reason: "Home is switching to the large coding mode." }); continue; }
     const began = Date.now();
     setRole(role, { state: "warming" });
     try {
@@ -144,7 +145,7 @@ async function run(trigger: string): Promise<WarmupStatus> {
 /** Warm the machine now. A call while a warm-up runs joins it. With the
  * setting off it only records that nothing was warmed. */
 export function warmUp(trigger = "request"): Promise<WarmupStatus> {
-  if (!keepWarmEnabled() && currentHomeMode() !== "coding") return Promise.resolve(warmupStatus());
+  if (!keepWarmEnabled() && currentHomeMode() !== HEAVY_ROLE) return Promise.resolve(warmupStatus());
   // A trigger during a run (a second model finished installing) reruns
   // once at the end, so the candidates are read again.
   if (running) { rerun = trigger; return running; }

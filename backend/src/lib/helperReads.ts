@@ -5,7 +5,7 @@
 import type { Candidate, Category } from "@/lib/choicesSchema";
 import { GLOSSARY, gb, lookupTerm, modelLabel, plainJson, resolveRole, roleExplain, roleLabel, TIER_NAMES, tierCategoryOf, type TierName } from "@/lib/helperKnowledge";
 import type { RouteCall, ToolOutcome } from "@/lib/helperTools";
-import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
+import { ROLE_IDS, ROLES, type RoleId, HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
 import { SETTINGS, settingValues } from "@/settings";
 
 const SECRET_SETTING = /token|secret|password|key$|_key|cookie/i;
@@ -70,7 +70,7 @@ function categoryOf(categories: Category[], role: RoleId): Category | null {
 const levelWord = (tier: string): string => `${tier[0]!.toUpperCase()}${tier.slice(1)}`;
 
 export async function readModels(route: RouteCall, args: { role?: unknown; tier?: unknown }): Promise<ToolOutcome> {
-  const resolved = resolveRole(args.role ?? "chat");
+  const resolved = resolveRole(args.role ?? PRIMARY_ROLE);
   if (!resolved.ok) return fail(resolved.reason);
   const role = resolved.role;
   const roles = await loadRoles(route);
@@ -84,7 +84,7 @@ export async function readModels(route: RouteCall, args: { role?: unknown; tier?
 
   lines.push(`${view.label} (${role}) is ${stateWord(view)}. It is a ${ROLES[role].residency === "resident" ? "always-loaded" : "load-when-asked"} feature (${roleExplain(role)}).`);
   lines.push(view.model ? `Running right now: ${modelLabel(view.model.id)} (${view.model.id}).` : "Running right now: none, because none is installed for it.");
-  if (role === "coding" && view.coding) lines.push(`Coding engine: ${view.coding.engine}${view.coding.engine_reason ? ` (${view.coding.engine_reason})` : ""}.`);
+  if (role === HEAVY_ROLE && view.coding) lines.push(`Coding engine: ${view.coding.engine}${view.coding.engine_reason ? ` (${view.coding.engine_reason})` : ""}.`);
   if (role === "tts" && view.tts) lines.push(`Voice engine in use: ${view.tts.engine}.`);
   if (!category) {
     lines.push(`The Stack lists no models for ${view.label}.`);
@@ -171,10 +171,10 @@ export async function readEngineUse(route: RouteCall, args: { name?: unknown }):
   if (roles) {
     const serving: string[] = [];
     const chatEngine = String(values["stack.engines.chat.engine"] ?? "auto");
-    const codingEngine = roles.find((r) => r.id === "coding")?.coding?.engine;
+    const codingEngine = roles.find((r) => r.id === HEAVY_ROLE)?.coding?.engine;
     if (name === "splash") {
-      if (chatEngine === "splash") { const c = roles.find((r) => r.id === "chat"); serving.push(`Chat${c?.model ? ` (${modelLabel(c.model.id)}${c.model.sizeBytes ? `, ${gb(c.model.sizeBytes)} file` : ""})` : ""}`); }
-      if (codingEngine === "splash") { const c = roles.find((r) => r.id === "coding"); serving.push(`Coding${c?.model ? ` (${modelLabel(c.model.id)})` : ""}`); }
+      if (chatEngine === "splash") { const c = roles.find((r) => r.id === PRIMARY_ROLE); serving.push(`Chat${c?.model ? ` (${modelLabel(c.model.id)}${c.model.sizeBytes ? `, ${gb(c.model.sizeBytes)} file` : ""})` : ""}`); }
+      if (codingEngine === "splash") { const c = roles.find((r) => r.id === HEAVY_ROLE); serving.push(`Coding${c?.model ? ` (${modelLabel(c.model.id)})` : ""}`); }
       lines.push(serving.length > 0 ? `Splash is set to serve: ${serving.join(" and ")}.` : "No feature is set to use Splash right now.");
       lines.push(`Besides the model, Splash keeps a conversation cache. The setting Chat memory headroom (stack.engines.chat.max_memory_headroom_gb) is ${values["stack.engines.chat.max_memory_headroom_gb"] ?? 12} GB, the most extra room that cache may take. Lowering it, picking a smaller tier, or setting the chat engine to llama-server uses less memory.`);
     } else if (name === "llama-server") {

@@ -2,6 +2,7 @@
 // and the writes behind it: a pick per category and level (and per hardware profile), the order, the recommended setup, what is unused,
 // add-a-model-and-use-it, and the one-time import of Home's old values. Home and the admin page are two views over these routes. Writes go
 // through the same guard as every other write (the loopback checks and Home's token, or the admin session with its CSRF header).
+import { PRIMARY_ROLE } from "@/roles";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
@@ -13,7 +14,7 @@ import {
 
 const json = <T extends z.ZodTypeAny>(schema: T, description: string) => ({ content: { "application/json": { schema } }, description });
 const refusal = json(ErrorBody, "A plain sentence and a stable code.");
-const path = z.object({ category: z.string().min(1).max(40).openapi({ param: { name: "category", in: "path" }, example: "chat" }) });
+const path = z.object({ category: z.string().min(1).max(40).openapi({ param: { name: "category", in: "path" }, example: PRIMARY_ROLE }) });
 const levelPath = path.extend({ tier: z.string().min(1).max(20).openapi({ param: { name: "tier", in: "path" }, example: "standard" }) });
 
 const readRoute = createRoute({

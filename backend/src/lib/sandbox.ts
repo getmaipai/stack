@@ -5,6 +5,7 @@
 //
 // TODO (CODE-SANDBOX-02, egress proxy slice): the allowlist proxy and `network.policy = "hosts"`.
 // TODO (CODE-SANDBOX-01b, later slices): governor memory admission, disk and process limits.
+import { HEAVY_ROLE } from "@/roles";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, posix, sep } from "node:path";
@@ -416,7 +417,7 @@ export class SandboxService {
 let shared: SandboxService | undefined;
 /** The daemon's one service. Coding folder: STACK_CODING_ROOT, else `<data>/coding`. */
 export function sandboxService(dataDir: string): SandboxService {
-  shared ??= new SandboxService(realRunner, defaultConfig(process.env.STACK_CODING_ROOT ?? join(dataDir, "coding")));
+  shared ??= new SandboxService(realRunner, defaultConfig(process.env.STACK_CODING_ROOT ?? join(dataDir, HEAVY_ROLE)));
   return shared;
 }
 export function setSandboxServiceForTests(service: SandboxService | undefined): void { shared = service; }

@@ -14,6 +14,7 @@
 // item, the engine state the chat pause reads, and a short event record
 // (GET /stack/v1/engines/self-heal) Home turns into one Notification and
 // the Status page's crash counts.
+import { HEAVY_ROLE, PICTURE_READER_ROLE } from "@/roles";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
@@ -47,7 +48,7 @@ let rules: Rules = { ...SELF_HEAL_RULES, backoffMs: [...SELF_HEAL_RULES.backoffM
 
 /** Roles that load on a request and are evicted when idle: a crash of one
  * with nobody using it needs no restart; the next request starts it. */
-const ON_DEMAND_ROLES: RoleId[] = ["vision", "coding", "image"];
+const ON_DEMAND_ROLES: RoleId[] = [PICTURE_READER_ROLE, HEAVY_ROLE, "image"];
 
 export interface Clock { now(): number; after(ms: number, run: () => void): () => void; }
 const realClock: Clock = {

@@ -29,6 +29,7 @@
 // exception: an orphaned engine of this Stack's own engines directory
 // (parent launchd, older than 90 s, no client connected, outside every
 // live Stack's process tree) is stopped, because nothing else will.
+import { PRIMARY_ROLE } from "@/roles";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { logger } from "@/lib/log";
@@ -228,7 +229,7 @@ export const defaultActions: WatchdogActions = {
   unloadIdleWorkers: defaultUnloadIdleWorkers,
   cancelQueued: (reason) => cancelGeneratorsForMemory("queued", reason),
   cancelRunning: (reason) => cancelGeneratorsForMemory("running", reason),
-  evictRole: async (role) => { const supervisor = await import("@/lib/supervisor"); if (supervisor.processRoleFor(role) === "chat") return false; return supervisor.unloadRole(role, "Unloaded: this computer is low on memory.", "memory-watchdog-evict").catch(() => false); },
+  evictRole: async (role) => { const supervisor = await import("@/lib/supervisor"); if (supervisor.processRoleFor(role) === PRIMARY_ROLE) return false; return supervisor.unloadRole(role, "Unloaded: this computer is low on memory.", "memory-watchdog-evict").catch(() => false); },
   reduceChat: async () => {
     const result = await controlReducedChat(true, "watchdog").catch(() => null);
     if (!result) return "unavailable";
@@ -241,7 +242,7 @@ export const defaultActions: WatchdogActions = {
     if (result.status === 200) return reducedHolders().length > 0 ? "kept" : "restored";
     return result.status === 202 ? "waiting" : "failed";
   },
-  restartChat: async () => { const supervisor = await import("@/lib/supervisor"); await supervisor.restartRole("chat", "memory-watchdog"); void import("@/lib/supervisor").then(({ getProcess }) => getProcess("chat")).catch(() => {}); },
+  restartChat: async () => { const supervisor = await import("@/lib/supervisor"); await supervisor.restartRole(PRIMARY_ROLE, "memory-watchdog"); void import("@/lib/supervisor").then(({ getProcess }) => getProcess(PRIMARY_ROLE)).catch(() => {}); },
   restartChatGuard: async (cause) => { const supervisor = await import("@/lib/supervisor"); await supervisor.restartChatForHostGuard(cause); },
   notify: (data) => { emit({ id: "pressure", data }); },
 };
@@ -371,7 +372,7 @@ export class MemoryWatchdog {
     this.commandOf = options.commandOf ?? ((pid) => {
       try { return Bun.spawnSync(["ps", "-o", "command=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim() || null; } catch { return null; }
     });
-    this.chatLoaded = options.chatLoaded ?? (() => ["ready", "loaded", "busy"].includes(getRoleStatus("chat").state));
+    this.chatLoaded = options.chatLoaded ?? (() => ["ready", "loaded", "busy"].includes(getRoleStatus(PRIMARY_ROLE).state));
     this.chatIdleNow = options.chatIdle ?? (() => { const last = lastInteractiveAt(); return last === null || this.now() - last >= CHAT_IDLE_MS; });
     this.measureFolder = options.folderBytes ?? folderBytes;
     this.sweepDisk = options.runSweeps ?? runSweeps;

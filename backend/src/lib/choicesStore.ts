@@ -5,6 +5,7 @@
 //   choices.migration  the one-time import of Home's old values, marked done
 // The order of models and the list switched off stay in `parts.choices` (partChoices.ts); role on/off and priority stay in the
 // settings (`stack.roles.<role>.enabled`, `.priority`). This module never reads those: choices.ts joins them.
+import { PRIMARY_ROLE } from "@/roles";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -25,7 +26,7 @@ export type Picks = z.infer<typeof PicksSchema>;
 export const AddedModelSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9._-]*$/).max(120),
   label: z.string().min(1).max(200),
-  category: z.literal("chat"),
+  category: z.literal(PRIMARY_ROLE),
   repo: z.string().min(1).max(300), file: z.string().min(1).max(400), url: z.string().url().max(1000), revision: z.string().min(1).max(100),
   sha256: z.string().regex(/^[a-f0-9]{64}$/), size_bytes: z.number().int().positive(),
   licence: z.string().max(200).nullable(), architecture: z.string().max(100), verified: z.boolean(), ram_bytes: z.number().int().nonnegative(),

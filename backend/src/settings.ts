@@ -18,7 +18,7 @@ import { decryptSecret, encryptSecret } from "@/lib/secrets";
 import { ENGINE_BINARIES } from "@/lib/engineCatalog";
 import { partLabel } from "@/lib/partDefs";
 import { setBudgetPercent } from "@/profiles";
-import { ROLE_IDS, ROLES } from "@/roles";
+import { ROLE_IDS, ROLES, HEAVY_ROLE, PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
 import { defaultRolePriority, ROLE_PRIORITY_MAX, ROLE_PRIORITY_MIN, setRoleSwitches } from "@/lib/roleSwitches";
 
 export type SettingValue = number | boolean | string;
@@ -47,7 +47,7 @@ export const SETTING_SECTIONS = [
 // A `url` binding: a server the person already runs, bound read-only to
 // one role. Empty means no binding; the Stack then spawns its own engine
 // for the role where it can.
-export const URL_BINDING_ROLES = ["chat", "embed", "vision", "stt", "tts"] as const;
+export const URL_BINDING_ROLES = [PRIMARY_ROLE, "embed", PICTURE_READER_ROLE, "stt", "tts"] as const;
 export type UrlBindingRole = typeof URL_BINDING_ROLES[number];
 
 const stack = { scope: "device" as const, lives_in: "stack" as const, honoured_by: ["home", "bot"] as Array<"home" | "bot"> };
@@ -62,7 +62,7 @@ function urlBinding(role: UrlBindingRole, order: number): SettingDeclaration[] {
 // Which roles the llama-server engine runs, and so which can choose where
 // their layers live (STACK-EMBED-02). Declared once here; the launch, the
 // fit plan and the settings page all read this one declaration.
-export const GPU_LAYER_ROLES = ["chat", "embed", "vision"] as const;
+export const GPU_LAYER_ROLES = [PRIMARY_ROLE, "embed", PICTURE_READER_ROLE] as const;
 export type GpuLayerRole = typeof GPU_LAYER_ROLES[number];
 export type GpuLayers = "all" | 0;
 
@@ -129,7 +129,7 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.engines.image.keep_warm_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 10, label: "Keep pictures ready", help: "Minutes the picture model stays loaded after the last picture.", section: { id: "engines.image", order: 10 }, level: "advanced", needs_restart: false },
   // HELPER-01: the admin Helper's own process, loaded by the first message and unloaded after this many idle minutes.
   { ...stack, key: "stack.engines.helper.keep_warm_minutes", selector: "number", range: { min: 1, max: 60 }, default: 5, label: "Keep the Helper ready", help: "Minutes the Helper's model stays loaded after the last message. After that it unloads and the next message wakes it, which takes a few seconds.", section: { id: "engines.helper", order: 10 }, level: "basic", needs_restart: false },
-  { ...stack, key: "stack.engines.coding.home_mode", selector: "select", range: { options: [{ value: "normal", label: "Normal" }, { value: "coding", label: "Coding" }] }, default: "normal", label: "Home mode", help: "Normal keeps the household chat model loaded. Coding uses the large coding model for chat, judge and router too.", section: { id: "engines.coding", order: 1 }, level: "basic", needs_restart: false },
+  { ...stack, key: "stack.engines.coding.home_mode", selector: "select", range: { options: [{ value: "normal", label: "Normal" }, { value: HEAVY_ROLE, label: "Coding" }] }, default: "normal", label: "Home mode", help: "Normal keeps the household chat model loaded. Coding uses the large coding model for chat, judge and router too.", section: { id: "engines.coding", order: 1 }, level: "basic", needs_restart: false },
   { ...stack, key: "stack.engines.coding.keep_warm_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 15, label: "Keep coding warm", help: "Minutes the coding model stays loaded after its last request. After that it unloads and the next coding request loads it again, which takes a few seconds to a minute.", section: { id: "engines.coding", order: 10 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.engines.coding.thinking_budget_ceiling", selector: "number", range: { min: 0, max: 32768 }, default: 2000, label: "Most thinking per answer", help: "The most tokens the coding model may spend thinking before it answers. Uncapped thinking looped on some questions in testing. 0 turns thinking off.", section: { id: "engines.coding", order: 20 }, level: "advanced", needs_restart: true },
   { ...stack, key: "stack.engines.coding.slots", selector: "number", range: { min: 0, max: 8 }, default: 0, label: "Coding requests at once", help: "How many coding requests the model serves at the same time. 0 picks for this computer: 2 on a 128 GB Mac, 1 on a 64 GB one.", section: { id: "engines.coding", order: 30 }, level: "advanced", needs_restart: true },
@@ -137,9 +137,9 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.engines.coding.max_chat_context_length", selector: "number", range: { min: 32768, max: 262144 }, default: 32768, label: "Max chat window", help: "The most text, in tokens, the large Max chat model holds at once. It starts at the 32,768 the model was measured at; a larger window uses more memory and is only worth setting once it has been measured on this computer.", section: { id: "engines.coding", order: 45 }, level: "expert", needs_restart: true },
   { ...stack, key: "stack.engines.coding.yield_to_chat", selector: "boolean", default: true, label: "Coding waits for chat", help: "While a chat, voice or picture-reading request is being answered, the coding model pauses (for at most two minutes at a time) so chat stays as fast as when coding is idle. Coding answers finish a little later when you use both at once. Turn this off to let coding and chat run at the same time.", section: { id: "engines.coding", order: 50 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.engines.coding.engine", selector: "select", range: { options: [{ value: "auto", label: "Automatic (Splash where this Mac can run it)" }, { value: "splash", label: "Splash (Apple silicon M3 or newer, 36 GB or more)" }, { value: "llama-server", label: "llama-server (slower, runs everywhere)" }] }, default: "auto", label: "Coding engine", help: "Which engine answers coding requests, from the next time the coding model loads. Automatic uses Splash, about four times faster, on a Mac with an M3 chip or newer, 64 GB of memory or more and macOS 26.4 or later, and llama-server everywhere else. If Splash does not start, coding uses llama-server and a repair item says so. Choose llama-server to force the slower engine.", section: { id: "engines.coding", order: 5 }, level: "advanced", needs_restart: true },
-  ...urlBinding("chat", 10),
+  ...urlBinding(PRIMARY_ROLE, 10),
   ...urlBinding("embed", 10),
-  ...urlBinding("vision", 10),
+  ...urlBinding(PICTURE_READER_ROLE, 10),
   ...urlBinding("stt", 10),
   ...urlBinding("tts", 10),
   // The voice engine (VOICE-STUDIO-01): one setting picks the engine behind
@@ -334,7 +334,7 @@ export function applySettingsToRuntime(): void {
   setBudgetPercent(Number(values["stack.memory.budget_percent"]));
   setDownloadCapMbps(Number(values["stack.runtime.download_cap_mbps"]));
   // The coding engine idles out after its own keep-warm minutes, not the governor-wide limit (CODE-STACK-01 S2).
-  setIdleTtlSeconds("coding", Number(values["stack.engines.coding.keep_warm_minutes"]) * 60);
+  setIdleTtlSeconds(HEAVY_ROLE, Number(values["stack.engines.coding.keep_warm_minutes"]) * 60);
   setIdleTtlSeconds("helper", Math.max(1, Number(values["stack.engines.helper.keep_warm_minutes"])) * 60);
   // Turning the coding engine's yield to chat off continues it at once if chat has it stopped (CODE-STACK-01 S3b).
   heavyGate.recheck();

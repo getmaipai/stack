@@ -2,6 +2,7 @@
 // (`GET /stack/v1/roles`) and the choices read (`GET /stack/v1/choices`) both call `runningFor`, so they cannot disagree.
 // A model that is chosen but not installed, or does not fit, is never loaded silently: the model that was answering keeps answering and
 // `reason` says why in plain words.
+import { HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
 import type { RoleId } from "@/roles";
 import { TIER_CANDIDATES } from "@/lib/tiers";
 import { partDef } from "@/lib/partDefs";
@@ -67,9 +68,9 @@ export function runningFor(env: ResolverEnv, def: CategoryDef, tier: ChoiceTier,
 
 /** The level a process role is serving right now: chat is Standard, Reduced while the swap is on, Max while coding mode is on. */
 export function activeLevelOf(role: RoleId): ChoiceTier {
-  if (role === "chat" || role === "judge" || role === "router") return reducedChatForcesLight() ? "reduced" : currentHomeMode() === "coding" ? "max" : "standard";
+  if (role === PRIMARY_ROLE || role === "judge" || role === "router") return reducedChatForcesLight() ? "reduced" : currentHomeMode() === HEAVY_ROLE ? "max" : "standard";
   const own = categoryOfRole(role);
-  if (own?.follows?.max || own?.heavyAt?.max) return currentHomeMode() === "coding" ? "max" : "standard";
+  if (own?.follows?.max || own?.heavyAt?.max) return currentHomeMode() === HEAVY_ROLE ? "max" : "standard";
   return "standard";
 }
 

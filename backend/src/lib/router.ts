@@ -3,7 +3,7 @@
 // stored. `ready` is claimed only within READY_TTL_MS of a real request
 // through the public route (the STACK-87 promise).
 import { roleDisabledReason } from "@/lib/roleSwitches";
-import { ROLE_IDS, MODE_FOLLOWER_ROLES, READY_TTL_MS, type RoleId, type RoleState, type RoleStateRecord } from "@/roles";
+import { ROLE_IDS, MODE_FOLLOWER_ROLES, READY_TTL_MS, type RoleId, type RoleState, type RoleStateRecord, HEAVY_ROLE } from "@/roles";
 import { identityHeaders } from "@/lib/identity";
 import { getModel, isModelSelectable } from "@/lib/modelStore";
 import { codingCannotFitReason, getRoleStatus, identityCheck, lastRealRequestAt, processRoleFor, selectedModel } from "@/lib/supervisor";
@@ -88,7 +88,7 @@ export function resolveRoleState(role: RoleId): RoleStateRecord {
   }
   if (flat === "offline") return { state: "offline", since: now, reason: getRoleStatus(role).reason ?? "The engine is unavailable." };
   // The coding model is on disk but cannot load now (it would not fit): said on the role, with what to do.
-  if (flat === "installed" && role === "coding") { const reason = codingCannotFitReason(); if (reason) return { state: "installed", since: now, reason }; }
+  if (flat === "installed" && role === HEAVY_ROLE) { const reason = codingCannotFitReason(); if (reason) return { state: "installed", since: now, reason }; }
   return { state: flat, since: now };
 }
 

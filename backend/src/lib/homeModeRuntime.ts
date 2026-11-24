@@ -1,5 +1,5 @@
 import { settingValues, updateSettings } from "@/settings";
-import { MODE_FOLLOWER_ROLES } from "@/roles";
+import { MODE_FOLLOWER_ROLES, HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
 import { STACK_CODING_MODEL } from "@/lib/modelCatalog";
 import { codingModeHeavy, splashMeasuredPeakBytes, splashResidentWeightsBytes } from "@/lib/splashStore";
 import { isComponent, listModels } from "@/lib/modelStore";
@@ -95,7 +95,7 @@ export async function retryWhileResidentStarts<T>(start: () => Promise<T>, waitM
   }
 }
 async function postLoadCodingCheck(): Promise<void> {
-  const process = await getProcess("coding", codingModeHeavy().pin.id);
+  const process = await getProcess(HEAVY_ROLE, codingModeHeavy().pin.id);
   await checkHomeModeOpenAIWire(process.client);
 }
 
@@ -111,26 +111,26 @@ export async function setupHomeModeRuntime(initial: HomeMode): Promise<void> {
       }
     },
     // A resident start already past its guard when the switch began can finish after stopResidents; stop it again before the large model asks for memory.
-    startHeavy: async () => { setCodingModeActive(true); await adapter.stopResidents(); await retryWhileResidentStarts(() => getProcess("coding", codingModeHeavy().pin.id)); },
-    stopHeavy: async () => { await unloadRole("coding", "Home is changing modes.", "home-mode-change"); },
+    startHeavy: async () => { setCodingModeActive(true); await adapter.stopResidents(); await retryWhileResidentStarts(() => getProcess(HEAVY_ROLE, codingModeHeavy().pin.id)); },
+    stopHeavy: async () => { await unloadRole(HEAVY_ROLE, "Home is changing modes.", "home-mode-change"); },
     startResidents: async () => {
       setCodingModeActive(false);
-      await getProcess("chat");
+      await getProcess(PRIMARY_ROLE);
       if (getRoleStatus("judge").state !== "notInstalled") await getProcess("judge");
     },
     checkHeavy: postLoadCodingCheck,
-    bind: (mode) => { setCodingModeActive(mode === "coding"); emitHomeModeReady(); },
+    bind: (mode) => { setCodingModeActive(mode === HEAVY_ROLE); emitHomeModeReady(); },
     transition: () => { setCodingModeActive(true); emitHomeModeTransition(); },
     persistMode: (mode) => { updateSettings({ "stack.engines.coding.home_mode": mode }); },
     generating: () => getGovernorStatus().loaded.some((entry) => entry.kind === "generator"),
     pins: () => JSON.stringify([currentEngineTag("splash") ?? "", codingModeHeavy().pin.revision, codingModeHeavy().draftPin.revision]),
   };
   configureHomeMode(adapter); initializeHomeMode("normal");
-  if (initial === "coding") {
+  if (initial === HEAVY_ROLE) {
     // STACK-START-01: the persisted mode is restored in the background. The large model takes minutes to load, and the Stack must already
     // answer /healthz and the status routes meanwhile (Home's installer waits only 20 s). switchHomeMode sets its "switching" state before
     // its first await, so every request and the startup warm-up see "entering coding" the moment this returns.
-    restore = switchHomeMode("coding").catch((error) => {
+    restore = switchHomeMode(HEAVY_ROLE).catch((error) => {
       const reason = error instanceof Error ? error.message : String(error);
       homeModeFailure(reason, "unavailable");
       updateSettings({ "stack.engines.coding.home_mode": "normal" });

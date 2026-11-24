@@ -1,5 +1,6 @@
 // MEM-SPACE-06: what this computer can ever run at each level, per category, for the Performance page and the setup wizard. The same
 // answer the resolver and the governor give: `fits_ever` is the governor's fitsEverForTier for the level's pick, `cap_bytes` the level's cap.
+import { PRIMARY_ROLE } from "@/roles";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
@@ -10,7 +11,7 @@ import { resolveTier, tierCapBytes, TIER_CANDIDATES, type ProfileId, type TierCa
 const CATEGORIES = [["chat", "chat"], ["image", "pictures"], ["video", "video"], ["music", "music"], ["voice", "voice"]] as const satisfies ReadonlyArray<readonly [string, TierCategory]>;
 const LEVELS = ["standard", "boost", "max"] as const;
 const Row = z.object({
-  category: z.enum(["chat", "image", "video", "music", "voice"]), tier: z.enum(LEVELS),
+  category: z.enum([PRIMARY_ROLE, "image", "video", "music", "voice"]), tier: z.enum(LEVELS),
   fits_ever: z.boolean().describe("Whether the level's pick could ever be admitted on this computer, with everything else idle."),
   needs_bytes: z.number().nullable().describe("The pick's peak memory, or the smallest catalogued peak for the level when nothing fits; null when the level has no model."),
   cap_bytes: z.number().describe("The most memory this level may hold on this computer."),

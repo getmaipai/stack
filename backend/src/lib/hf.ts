@@ -1,4 +1,5 @@
 import { settingValues } from "@/settings";
+import { PRIMARY_ROLE } from "@/roles";
 import { listFiles, modelInfo } from "@huggingface/hub";
 
 const DEFAULT_ENDPOINT = "https://huggingface.co";

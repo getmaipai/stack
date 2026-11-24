@@ -9,7 +9,7 @@ import { SPLASH_LOCAL_CHAT_MODELS, STACK_SFX_MODELS, STACK_IMAGE_ERNIE_MODELS, S
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
-import { ROLES } from "@/roles";
+import { ROLES, HEAVY_ROLE, PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
 import type { ImageFamilyId } from "@/images/models";
 
 export interface PlanModel {
@@ -33,9 +33,9 @@ export interface InstallPlan {
 
 /** Role importance for ordering: chat first, then speech in, speech out,
  * embeddings, the judge, the router, anything else. */
-const ROLE_ORDER: RoleId[] = ["chat", "stt", "tts", "embed", "judge", "router", "coding"];
+const ROLE_ORDER: RoleId[] = [PRIMARY_ROLE, "stt", "tts", "embed", "judge", "router", HEAVY_ROLE];
 /** Roles whose bound model is in the recommended setup but removable afterwards: the coding model (CODE-STACK-01), which only p64 and p128 bind. */
-const REMOVABLE_ROLES: RoleId[] = ["coding", "vision"];
+const REMOVABLE_ROLES: RoleId[] = [HEAVY_ROLE, PICTURE_READER_ROLE];
 const rank = (role: RoleId): number => { const index = ROLE_ORDER.indexOf(role); return index === -1 ? ROLE_ORDER.length : index; };
 
 const NO_TIER_LABEL = "This computer has less than 16 GB of memory for AI, which is the least the Stack can run chat and voice on.";
@@ -46,7 +46,7 @@ function pinFor(role: RoleId, tier: ProfileTier): CatalogModelLike | null {
   const own = bound ? STACK_MODELS.find((pin) => pin.id === bound) : undefined;
   // Without a binding: the shipped pin for the role, the engine the role
   // runs by default (llama-server for the chat wire), not a component.
-  return own ?? STACK_MODELS.find((pin) => pin.role === role && !pin.component && pin.engine !== "mlx-serve" && pin.engine !== "omlx" && (role !== "coding" || pin.id === "qwen3.8-27b-ud-q4-k-m")) ?? null;
+  return own ?? STACK_MODELS.find((pin) => pin.role === role && !pin.component && pin.engine !== "mlx-serve" && pin.engine !== "omlx" && (role !== HEAVY_ROLE || pin.id === "qwen3.8-27b-ud-q4-k-m")) ?? null;
 }
 
 function view(pin: CatalogModelLike, installed: Set<string>, starter: boolean, removable = false): PlanModel | null {
@@ -159,7 +159,7 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
   // demand but has its own bound model, so the recommended setup brings
   // it (removable). A role that shares another's model (router, an
   // unbound judge) adds nothing.
-  const roles = [...new Set<RoleId>([...tier.resident, ...tier.onDemand.filter((role) => role === "embed" || (role === "coding" && PROFILE_MODEL_BINDINGS[tier.id]?.coding) || role === "vision")])]
+  const roles = [...new Set<RoleId>([...tier.resident, ...tier.onDemand.filter((role) => role === "embed" || (role === HEAVY_ROLE && PROFILE_MODEL_BINDINGS[tier.id]?.coding) || role === PICTURE_READER_ROLE)])]
     .filter((role) => !(ROLES[role] as { sharesModelWith?: RoleId }).sharesModelWith || PROFILE_MODEL_BINDINGS[tier.id]?.[role])
     .sort((a, b) => rank(a) - rank(b));
   const planned: Array<{ pin: CatalogModelLike; starter: boolean; removable?: boolean }> = [];
@@ -167,15 +167,15 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
   for (const role of roles) {
     const pin = pinFor(role, tier);
     if (!pin) continue;
-    if (role === "chat") {
+    if (role === PRIMARY_ROLE) {
       // The tier's chat model is the starter: no smaller chat model ships ahead of it.
       add(pin, true);
     } else add(pin, false, REMOVABLE_ROLES.includes(role));
     // A model's companions install and remove with it (the coding model's Splash draft, CODE-STACK-01 S5a), where the engine that reads them can run.
-    if (role === "coding") for (const id of pin.companions ?? []) { const part = STACK_MODELS.find((candidate) => candidate.id === id); if (part && splashDraftWanted(target, tier.id, knownAppleChip())) add(part, false, true); }
+    if (role === HEAVY_ROLE) for (const id of pin.companions ?? []) { const part = STACK_MODELS.find((candidate) => candidate.id === id); if (part && splashDraftWanted(target, tier.id, knownAppleChip())) add(part, false, true); }
     // A bound model that reads pictures brings its projector (VISION-03a).
     const projector = pin.imageInput ? STACK_MODELS.find((candidate) => candidate.id === pin.imageInput!.projector) : undefined;
-    for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && (candidate.engine === pin.engine || (role === "stt" && (pin.companions ?? []).includes(candidate.id))) && !projectors.has(candidate.id) && (role !== "coding" || (pin.companions ?? []).includes(candidate.id)))) add(part);
+    for (const part of STACK_MODELS.filter((candidate) => candidate.role === role && candidate.component && (candidate.engine === pin.engine || (role === "stt" && (pin.companions ?? []).includes(candidate.id))) && !projectors.has(candidate.id) && (role !== HEAVY_ROLE || (pin.companions ?? []).includes(candidate.id)))) add(part);
     add(projector ?? null);
     // oMLX's MLX build of the model is not in the first-run plan: llama-server
     // is the default on every tier (ENGINE-MLX-02), and the 19 GB MLX weights

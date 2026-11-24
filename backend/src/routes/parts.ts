@@ -1,4 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi";
+import { PRIMARY_ROLE } from "@/roles";
 import { apiRouter } from "@maipai/core/src/openapi";
 import { StackPartView as StackPartViewSchema } from "@maipai/spec/stack/ts/stack-part-view.js";
 import type { AppEnv } from "@/types";
@@ -135,7 +136,7 @@ partsRoutes.openapi(rollbackRoute, async (c) => {
   if (def.kind === "model") { const result = await rollbackModel(id); return result.ok ? c.json({ ok: true as const, part: id, version: result.revision }, 200) : c.json({ error: result.reason, code: "no_previous" }, 409); }
   if (def.kind === "engine" && id === "llama-server") {
     const previous = previousEngine(id); if (!previous) return c.json({ error: "No previous engine version is recorded or installed.", code: "no_previous" }, 409);
-    try { await stopRole("chat", "Draining for a rollback.", "rollback-drain"); await rollbackEngine(id, previous); await restartRole("chat", "rollback-restart"); return c.json({ ok: true as const, part: id, version: previous }, 200); }
+    try { await stopRole(PRIMARY_ROLE, "Draining for a rollback.", "rollback-drain"); await rollbackEngine(id, previous); await restartRole(PRIMARY_ROLE, "rollback-restart"); return c.json({ ok: true as const, part: id, version: previous }, 200); }
     catch (error) { return c.json({ error: error instanceof Error ? error.message : String(error), code: "no_previous" }, 409); }
   }
   return c.json({ error: `${def.label} has no previous version to restore.`, code: "no_previous" }, 409);

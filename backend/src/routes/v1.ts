@@ -8,7 +8,7 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { identityHeaders } from "@/lib/identity";
 import { noEngineResponse, resolveRole, UnknownRoleError, UnverifiedModelError } from "@/lib/router";
-import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
+import { ROLE_IDS, ROLES, type RoleId, HEAVY_ROLE, PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
 import { clampThinking, normalizeStopSequences, CODING_WIRE_PATHS, CodingRequestError, engineServesWire, refuseUnsupportedResponsesFields, wireNotServedMessage, type CodingWire } from "@/lib/codingWire";
 import { codingEngineName, codingLaunchSettings, codingServedModel, EngineUnavailableError, getRoleStatus, requestRole, restartRole, roleHasEngine, roleIsBound, speakRole, speechForm, streamRole, ttsEngineInEffect } from "@/lib/supervisor";
 import { listModels, ProvenanceIncompleteError } from "@/lib/modelStore";
@@ -113,7 +113,7 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
     const resolution = resolveRole(modelField);
     const role: RoleId = resolution.role;
     const definition = ROLES[role];
-    if (definition.wire !== wire && !(wire === "chat" && definition.wire === "chat")) {
+    if (definition.wire !== wire && !(wire === PRIMARY_ROLE && definition.wire === PRIMARY_ROLE)) {
       return jsonReply(c, { error: `Role '${role}' does not answer on this endpoint.`, roles: ROLE_IDS.filter((id) => ROLES[id].wire === wire) }, 400, identityHeaders(null));
     }
     if (wire === "job") {
@@ -136,10 +136,10 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
       return jsonReply(c, { created, job: settled.id, data: images }, 200, identityHeaders(null));
     }
     // CODE-STACK-01 S3: the coding role's thinking budget never exceeds the admin's ceiling, on this wire as on the Anthropic and Responses ones.
-    if (role === "coding" && wire === "chat") body = clampThinking(body, codingLaunchSettings().thinkingBudgetTokens);
+    if (role === HEAVY_ROLE && wire === PRIMARY_ROLE) body = clampThinking(body, codingLaunchSettings().thinkingBudgetTokens);
     // ISOLATION-01: a chat or transcription request is interactive for as long as it is in flight; a running heavy job is paused meanwhile.
-    const interactive = wire === "chat" || wire === "transcription";
-    if (wire === "chat" && body.stream === true) {
+    const interactive = wire === PRIMARY_ROLE || wire === "transcription";
+    if (wire === PRIMARY_ROLE && body.stream === true) {
       const end = heavyGate.begin(role);
       let result: Awaited<ReturnType<typeof streamRole>>;
       try { result = await streamRole(role, WIRE_PATHS.chat, body, c.req.raw.signal); } catch (error) { end(); throw error; }
@@ -155,7 +155,7 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
   } catch (error) {
     if (error instanceof CodingRequestError) return jsonReply(c, { error: error.message }, 400, identityHeaders(null));
     if (error instanceof EngineUnavailableError) {
-      const role = (() => { try { return resolveRole(modelField).role; } catch { return "chat" as RoleId; } })();
+      const role = (() => { try { return resolveRole(modelField).role; } catch { return PRIMARY_ROLE as RoleId; } })();
       const result = noEngineResponse(role, error.reason);
       return jsonReply(c, result.body, result.status, result.headers);
     }
@@ -173,8 +173,8 @@ async function tokenizeReply<T extends Context>(c: T, body: TokenCountRequest) {
   const modelField = String(body.model);
   try {
     const role = resolveRole(modelField).role;
-    if (ROLES[role].wire !== "chat") return jsonReply(c, { error: `Role '${role}' does not count tokens.`, roles: ROLE_IDS.filter((id) => ROLES[id].wire === "chat") }, 400, identityHeaders(null));
-    if ((body.messages === undefined) === (body.content === undefined)) return jsonReply(c, { error: "Send exactly one of `messages` or `content`.", roles: ROLE_IDS.filter((id) => ROLES[id].wire === "chat") }, 400, identityHeaders(null));
+    if (ROLES[role].wire !== PRIMARY_ROLE) return jsonReply(c, { error: `Role '${role}' does not count tokens.`, roles: ROLE_IDS.filter((id) => ROLES[id].wire === PRIMARY_ROLE) }, 400, identityHeaders(null));
+    if ((body.messages === undefined) === (body.content === undefined)) return jsonReply(c, { error: "Send exactly one of `messages` or `content`.", roles: ROLE_IDS.filter((id) => ROLES[id].wire === PRIMARY_ROLE) }, 400, identityHeaders(null));
     const cannotCount = (headers: Record<string, string>) => jsonReply(c, { error: `This ${role} engine does not report token counts.`, role }, 501, headers);
     let content = body.content;
     if (body.messages !== undefined) {
@@ -193,7 +193,7 @@ async function tokenizeReply<T extends Context>(c: T, body: TokenCountRequest) {
     return jsonReply(c, { count: tokens.length }, 200, counted.headers);
   } catch (error) {
     if (error instanceof EngineUnavailableError) {
-      const role = (() => { try { return resolveRole(modelField).role; } catch { return "chat" as RoleId; } })();
+      const role = (() => { try { return resolveRole(modelField).role; } catch { return PRIMARY_ROLE as RoleId; } })();
       const result = noEngineResponse(role, error.reason);
       return jsonReply(c, result.body, result.status, result.headers);
     }
@@ -207,7 +207,7 @@ async function codingWireReply<T extends Context>(c: T, wire: CodingWire, body: 
   const modelField = String(body.model);
   try {
     const role = resolveRole(modelField).role;
-    if (role !== "coding") return jsonReply(c, { error: `Role '${role}' does not answer on this endpoint. Send model 'coding'.`, roles: ["coding"] }, 400, identityHeaders(null));
+    if (role !== HEAVY_ROLE) return jsonReply(c, { error: `Role '${role}' does not answer on this endpoint. Send model 'coding'.`, roles: [HEAVY_ROLE] }, 400, identityHeaders(null));
     const engine = codingEngineName();
     if (!engineServesWire(engine, wire)) return jsonReply(c, { error: wireNotServedMessage(wire, engine), role, wire }, 501, identityHeaders(null));
     const path = CODING_WIRE_PATHS[wire];
@@ -231,7 +231,7 @@ async function codingWireReply<T extends Context>(c: T, wire: CodingWire, body: 
     } finally { end(); }
   } catch (error) {
     if (error instanceof CodingRequestError) return jsonReply(c, { error: error.message }, 400, identityHeaders(null));
-    if (error instanceof EngineUnavailableError) { const result = noEngineResponse("coding", error.reason); return jsonReply(c, result.body, result.status, result.headers); }
+    if (error instanceof EngineUnavailableError) { const result = noEngineResponse(HEAVY_ROLE, error.reason); return jsonReply(c, result.body, result.status, result.headers); }
     if (error instanceof UnverifiedModelError) return jsonReply(c, { error: error.message, model: error.modelId, reason: "unverified", missing: error.missing }, 409, identityHeaders(null));
     return jsonReply(c, { error: error instanceof UnknownRoleError ? error.message : "Unknown role or model.", roles: ROLE_IDS }, 400, identityHeaders(null));
   }
@@ -277,9 +277,9 @@ export const v1Routes = apiRouter<AppEnv>();
 v1Routes.openapi(modelsRoute, (c) => {
   const { role } = c.req.valid("query");
   if (role === undefined) return c.json({ object: "list" as const, data: [...new Set([...ROLE_IDS, ...listModels().map((model) => model.id)])].map((id) => ({ id, object: "model" as const, created: 0, owned_by: "maipai-stack" as const })) }, 200) as never;
-  if (role !== "coding") return jsonReply(c, { error: `Only the coding role has a scoped model list; '${role}' is not supported. Leave out ?role to list every role and model.` }, 400, identityHeaders(null)) as never;
+  if (role !== HEAVY_ROLE) return jsonReply(c, { error: `Only the coding role has a scoped model list; '${role}' is not supported. Leave out ?role to list every role and model.` }, 400, identityHeaders(null)) as never;
   const served = codingServedModel();
-  return c.json({ object: "list" as const, data: served ? [{ id: served.id, object: "model" as const, created: 0, owned_by: "maipai-stack" as const, role: "coding", context_length: served.context_length, thinking_budget_ceiling: served.thinking_budget_ceiling }] : [] }, 200) as never;
+  return c.json({ object: "list" as const, data: served ? [{ id: served.id, object: "model" as const, created: 0, owned_by: "maipai-stack" as const, role: HEAVY_ROLE, context_length: served.context_length, thinking_budget_ceiling: served.thinking_budget_ceiling }] : [] }, 200) as never;
 });
 v1Routes.openapi(messagesRoute, (c) => codingWireReply(c, "messages", c.req.valid("json")) as never);
 v1Routes.openapi(countTokensRoute, (c) => codingWireReply(c, "count_tokens", c.req.valid("json")) as never);
@@ -416,7 +416,7 @@ const ImageEditFormSchema = z.object({
   width: z.coerce.number().int().positive().optional(),
   height: z.coerce.number().int().positive().optional(),
   factor: z.coerce.number().positive().optional(),
-  engine: z.enum(["auto", "vision", "isnet"]).optional().openapi({ description: "remove_background only: auto uses Apple's on-device finder when this Mac has it, else the ONNX model." }),
+  engine: z.enum(["auto", PICTURE_READER_ROLE, "isnet"]).optional().openapi({ description: "remove_background only: auto uses Apple's on-device finder when this Mac has it, else the ONNX model." }),
   timeout_ms: z.coerce.number().int().positive().optional(),
   image_source: z.enum(["generated", "uploaded", "household_photo"]).optional().openapi({ description: "edit and edit_masked: where the picture came from, as Home knows it (required): `generated` (this Stack made it; its hash is checked), `household_photo` or `uploaded`; no value is refused, it only decides whether the result is recorded as a free starting picture." }),
   reference: z.custom<File>((value) => value instanceof File, "A reference picture.").openapi({ type: "string", format: "binary", description: "edit and edit_masked: a picture the edit draws on, like a person to add to the scene (\"add the woman from the second picture\"). Up to two (`reference`, `reference2`). Say where each came from with `reference_source`." }).optional(),

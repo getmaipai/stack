@@ -18,6 +18,7 @@
 // hub names an LFS file, so Splash does not hash 16 GB again to describe it.
 // If the data directory cannot hold a hardlink (two volumes) a symlink is used, which
 // works but makes Splash hash the file once when it assembles.
+import { PRIMARY_ROLE } from "@/roles";
 import { existsSync, linkSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { chosenToRun } from "@/lib/choiceResolver";
 import { basename, dirname, join, relative } from "node:path";
@@ -159,7 +160,7 @@ export function codingModeHeavy(lookup: (id: string) => ModelRecord | null = get
   const everyday = { pin: STACK_CODING_MODEL, draftPin: STACK_CODING_DRAFT_MODEL };
   const flashReady = ready(flash.pin.id) && ready(flash.draftPin.id);
   // The household's Max chat pick (docs/dev/choices.md, "What runs"): the two models that have a draft and run on Splash are the ones coding mode can start. Max is judged on the Max room, so the fit is not asked here (Home's mode check refuses what cannot load). A pick of one that is not ready, or of any other model, leaves the rule below.
-  const picked = chosenToRun("chat", "max", { ignoreFit: true })?.model;
+  const picked = chosenToRun(PRIMARY_ROLE, "max", { ignoreFit: true })?.model;
   if (picked === everyday.pin.id && ready(everyday.pin.id) && ready(everyday.draftPin.id)) return everyday;
   if (picked === flash.pin.id && flashReady) return flash;
   return flashReady ? flash : everyday;

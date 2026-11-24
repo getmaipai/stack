@@ -1,6 +1,7 @@
 // TIER-HOME-04: the tier catalog as Home's slot dialogs need it (read only). The profile is this machine's proposed one and the room is the
 // governor's tier room, so a candidate's "fits" is the same answer the resolver and the governor give. Max is sized from the Max room,
 // the resident room plus what Reduced frees (TIER-ROOM-01), as the governor sizes a Max job at admission.
+import { PRIMARY_ROLE } from "@/roles";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
@@ -20,7 +21,7 @@ const Level = z.object({ tier: z.enum(["standard", "boost", "max"]), cap_bytes: 
 const candidatesRoute = createRoute({
   method: "get", path: "/candidates", tags: ["Tiers"], summary: "The models each level of a category may use on this computer (TIER-HOME-04)",
   description: "Every catalog candidate for the category on this computer's profile, under each of Standard, Boost and Max, with the family it belongs to, its peak memory, whether it fits that level's cap and the plain refusal when it does not. `profile` is null when this computer is too small for any profile.",
-  request: { query: z.object({ category: z.enum(["chat", "pictures", "video", "music", "voice", "stems"]) }) },
+  request: { query: z.object({ category: z.enum([PRIMARY_ROLE, "pictures", "video", "music", "voice", "stems"]) }) },
   responses: { 200: { content: { "application/json": { schema: z.object({ category: z.string(), profile: z.enum(["p16", "p32", "p64", "p128"]).nullable(), room_bytes: z.number(), levels: z.array(Level) }) } }, description: "The candidates per level." } },
 });
 
@@ -59,7 +60,7 @@ tiersRoutes.openapi(reducedRoute, async (c) => {
 const choiceRoute = createRoute({
   method: "put", path: "/choice", tags: ["Tiers"], summary: "Pick a model for a level; the Stack applies it (stack-owns-model-choices)",
   description: "Validates that the model is a candidate of the category, then applies what the pick means to the Stack. For voice, the engine the candidate names is saved in `stack.voice.engine` and starts at the next voice engine restart. `applied` is false when the candidate names no engine to apply.",
-  request: { body: { required: true, content: { "application/json": { schema: z.object({ category: z.enum(["chat", "pictures", "video", "music", "voice", "stems"]), tier: z.enum(["reduced", "standard", "boost", "max"]), model: z.string().min(1) }) } } } },
+  request: { body: { required: true, content: { "application/json": { schema: z.object({ category: z.enum([PRIMARY_ROLE, "pictures", "video", "music", "voice", "stems"]), tier: z.enum(["reduced", "standard", "boost", "max"]), model: z.string().min(1) }) } } } },
   responses: {
     200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), applied: z.boolean(), pending_restart: z.boolean() }) } }, description: "The pick is valid; `applied` says whether the Stack changed a setting for it." },
     404: { content: { "application/json": { schema: z.object({ error: z.string(), code: z.string() }) } }, description: "No such candidate in that category." },

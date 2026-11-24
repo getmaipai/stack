@@ -3,6 +3,7 @@
 // message asks for, or which sentence to say (a question when the words fit two features, a refusal for what
 // the Helper does not do). Anything it does not recognise falls through to the model and its tools.
 // Pure: no network, no model. tests/helperInterpret.test.ts pins it.
+import { PRIMARY_ROLE } from "@/roles";
 import { GLOSSARY, resolveRole, termsIn, TIER_NAMES, type Topic } from "@/lib/helperKnowledge";
 import type { RoleId } from "@/roles";
 
@@ -130,7 +131,7 @@ export function interpret(message: string, previous: Topic | null): Plan {
     else if (/\b(chip|cpu|gpu|hardware|disk|storage|kind of (computer|mac)|what computer|apple silicon)\b/.test(t)) add("get_hardware");
     else if (/\b(features|roles)\b/.test(t) || /\b(switched|turned|which)\b.*\b(on|off)\b/.test(t)) add("get_roles", { focus: "onoff" });
     else if (/\blogs?\b|\berrors?\b/.test(t)) add("get_logs", { tail: 50 });
-    else if (/\b(model|models)\b/.test(t) && /\b(which|what)\b/.test(t)) add("get_models", { role: "chat" });
+    else if (/\b(model|models)\b/.test(t) && /\b(which|what)\b/.test(t)) add("get_models", { role: PRIMARY_ROLE });
   }
   return { reads };
 }

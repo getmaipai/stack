@@ -12,7 +12,7 @@ import packageJson from "../../package.json";
 import { ROLE_CANDIDATES, STACK_HELPER_MODEL_ID, STACK_MODELS, type RoleCandidate } from "@/lib/modelCatalog";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { PROFILE_MODEL_BINDINGS, PROFILE_TIERS, type ProfileTier } from "@/profiles";
-import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
+import { ROLE_IDS, ROLES, type RoleId, HEAVY_ROLE, PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
 
 export interface ComponentsCatalog {
   roles: RoleId[];
@@ -37,7 +37,7 @@ export function collectComponentsCatalog(): ComponentsCatalog {
 }
 
 const PROFILE_ORDER = ["p16", "p32", "p64", "p128"] as const;
-const LLAMA_ROLES = new Set<string>(["chat", "coding", "judge", "router", "vision", "embed"]);
+const LLAMA_ROLES = new Set<string>([PRIMARY_ROLE, HEAVY_ROLE, "judge", "router", PICTURE_READER_ROLE, "embed"]);
 
 function gb(bytes: number | undefined): string { return !bytes ? "unknown" : bytes < 104_857_600 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${(bytes / 1_073_741_824).toFixed(2)} GB`; }
 function stance(profile: ProfileTier, role: RoleId): string {
@@ -81,15 +81,15 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     const shares = catalog.shares?.[role];
     if (shares) { lines.push(`Shares \`${shares}\`'s model and process unless bound elsewhere; the rows below are \`${shares}\`'s pins seen from this role.`); lines.push(""); }
     if (role === "helper") { lines.push(`The admin page's chat assistant (HELPER-01). Not part of any machine profile: it runs the judge's pinned model \`${STACK_HELPER_MODEL_ID}\` (Qwen3-4B Q4_K_M, Apache-2.0) in a process of its own on llama-server, loaded by the first admin message and unloaded after \`stack.engines.helper.keep_warm_minutes\` idle (default 5). It is never on \`/v1\`. The bench that chose the model is \`docs/helper-bench.md\`; the model row is under judge.`); lines.push(""); continue; }
-    if (role === "coding") { lines.push("Runs on its own on-demand process (not chat's): Splash on an Apple silicon Mac with an M3 chip or newer, 64 GB of memory or more and macOS 26.4 or later (about 124 tokens/s against 27.6 on llama-server, measured on the same weights), and llama-server everywhere else and whenever Splash cannot start (`stack.engines.coding.engine`: auto, llama-server or splash). Started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model. While a chat, voice or picture-reading request is answered it is paused for at most 120 s at a time (`stack.engines.coding.yield_to_chat`, default on), so chat stays as fast as when coding is idle."); lines.push(""); }
+    if (role === HEAVY_ROLE) { lines.push("Runs on its own on-demand process (not chat's): Splash on an Apple silicon Mac with an M3 chip or newer, 64 GB of memory or more and macOS 26.4 or later (about 124 tokens/s against 27.6 on llama-server, measured on the same weights), and llama-server everywhere else and whenever Splash cannot start (`stack.engines.coding.engine`: auto, llama-server or splash). Started by the first coding request and unloaded after `stack.engines.coding.keep_warm_minutes` idle (default 15); the memory governor admits it as an on-demand item that yields to a picture, video or music job and never evicts a resident model. While a chat, voice or picture-reading request is answered it is paused for at most 120 s at a time (`stack.engines.coding.yield_to_chat`, default on), so chat stays as fast as when coding is idle."); lines.push(""); }
     lines.push("Engines per platform:");
     lines.push("");
     lines.push("| Engine | Build | Platform | Status |");
     lines.push("|---|---|---|---|");
     // llama-server's pins serve the chat wire's roles; a tool pin (uv)
     // serves the role its name maps to.
-    const pins = catalog.engines.filter((pin) => LLAMA_ROLES.has(role) ? engineRole(pin.name) === "chat" || (role === "coding" && engineRole(pin.name) === "coding") : engineRole(pin.name) === role);
-    for (const pin of pins) lines.push(`| \`${pin.id}\` | ${pin.tag} | ${pin.platform} ${pin.arch}${pin.requiresNvidia ? " (NVIDIA)" : ""} | ${pin.verified ? "pinned, verified" : "pinned, not yet verified"}${pin.name === "splash" ? " (the coding engine on Apple silicon with an M3 chip or newer, 36 GB or more and macOS 26.4 or later; its draft model is installed with the coding model; llama-server is the fallback)" : pin.name === "splash-chat" ? " (opt-in chat engine on an M3 or newer Mac with 36 GB or more and macOS 26.4 or later; uses the pinned Huihui model and DFlash draft; no outbound connection; local cache is bounded and emptied at launch; llama-server is the fallback)" : pin.tool === "uv" ? ` (the tool that builds the ${role} environment)` : catalog.managed.some((runtime) => runtime.name === pin.name) ? " (the engine's source; its environment is the row below)" : pin.name === "mlx-serve" ? (role === "embed" ? " (the second chat engine; the embed role stays on llama-server)" : role === "vision" ? " (the second chat engine; the vision role stays on llama-server, which loads its projector)" : role === "coding" ? " (the second chat engine; the coding role runs its own process and never mlx-serve)" : " (the second chat engine, chosen by `stack.engines.chat.engine`)") : ""} |`);
+    const pins = catalog.engines.filter((pin) => LLAMA_ROLES.has(role) ? engineRole(pin.name) === PRIMARY_ROLE || (role === HEAVY_ROLE && engineRole(pin.name) === HEAVY_ROLE) : engineRole(pin.name) === role);
+    for (const pin of pins) lines.push(`| \`${pin.id}\` | ${pin.tag} | ${pin.platform} ${pin.arch}${pin.requiresNvidia ? " (NVIDIA)" : ""} | ${pin.verified ? "pinned, verified" : "pinned, not yet verified"}${pin.name === "splash" ? " (the coding engine on Apple silicon with an M3 chip or newer, 36 GB or more and macOS 26.4 or later; its draft model is installed with the coding model; llama-server is the fallback)" : pin.name === "splash-chat" ? " (opt-in chat engine on an M3 or newer Mac with 36 GB or more and macOS 26.4 or later; uses the pinned Huihui model and DFlash draft; no outbound connection; local cache is bounded and emptied at launch; llama-server is the fallback)" : pin.tool === "uv" ? ` (the tool that builds the ${role} environment)` : catalog.managed.some((runtime) => runtime.name === pin.name) ? " (the engine's source; its environment is the row below)" : pin.name === "mlx-serve" ? (role === "embed" ? " (the second chat engine; the embed role stays on llama-server)" : role === PICTURE_READER_ROLE ? " (the second chat engine; the vision role stays on llama-server, which loads its projector)" : role === HEAVY_ROLE ? " (the second chat engine; the coding role runs its own process and never mlx-serve)" : " (the second chat engine, chosen by `stack.engines.chat.engine`)") : ""} |`);
     const modelRole = shares ?? role;
     for (const runtime of catalog.managed.filter((candidate) => candidate.roles.includes(modelRole))) lines.push(`| \`${runtime.name}\` | ${runtime.version} | ${runtime.platforms} | an environment the Stack assembles through the pinned uv from a hashed requirements file (backend/src/speech/ or backend/src/generators/); updates with the Stack's release |`);
     const runtimes = catalog.runtimes.filter((runtime) => runtime.roles.includes(modelRole));
@@ -110,7 +110,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
       // whatever chat's pin says.
       if (roleStance === "not available") { lines.push(`| ${profile.id} | not available |  |  |  |  |  |  |  | not available |`); continue; }
       const ownRolePins = catalog.models.filter((candidate) => candidate.role === role && candidate.download?.sha256 && !candidate.component);
-      const rowRole = role === "judge" && profile.id === "p16" ? "chat" : ownRolePins.length > 0 ? role : modelRole;
+      const rowRole = role === "judge" && profile.id === "p16" ? PRIMARY_ROLE : ownRolePins.length > 0 ? role : modelRole;
       const rowPins = catalog.models.filter((candidate) => candidate.role === rowRole && candidate.download?.sha256 && !candidate.component);
       const fitting = rowPins.filter((candidate) => fits(candidate, profile));
       const bound = catalog.bindings?.[profile.id]?.[rowRole];
@@ -123,7 +123,7 @@ export function renderComponentsDoc(catalog: ComponentsCatalog): string {
     const alsoPinned = pinned.filter((model) => !shown.has(model.id));
     if (alsoPinned.length && shown.size > 0) {
       lines.push("");
-      lines.push(`Also pinned, started only when chosen (Home's "load this model"): ${alsoPinned.map((model) => `\`${model.id}\` (${quantization(model)}, ${gb(model.download?.approx_bytes)}, ${model.license ?? "licence unknown"}, ${model.repo ?? "catalog"} @ ${model.revision ?? "unknown"}${model.role === "coding" ? ", optional p128 coding choice; not selected by default" : model.imageInput ? ", reads pictures" : ""})`).join("; ")}.`);
+      lines.push(`Also pinned, started only when chosen (Home's "load this model"): ${alsoPinned.map((model) => `\`${model.id}\` (${quantization(model)}, ${gb(model.download?.approx_bytes)}, ${model.license ?? "licence unknown"}, ${model.repo ?? "catalog"} @ ${model.revision ?? "unknown"}${model.role === HEAVY_ROLE ? ", optional p128 coding choice; not selected by default" : model.imageInput ? ", reads pictures" : ""})`).join("; ")}.`);
     }
     if (components.length) {
       lines.push("");

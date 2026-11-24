@@ -14,7 +14,7 @@ import { DiskRefusalError } from "@/lib/diskState";
 import { listModels } from "@/lib/modelStore";
 import { STACK_MODELS } from "@/lib/modelCatalog";
 import { modelView } from "@/routes/models";
-import { ROLE_IDS, type RoleId } from "@/roles";
+import { ROLE_IDS, type RoleId, PRIMARY_ROLE } from "@/roles";
 
 export interface RoleChoiceInput { role: RoleId; enabled?: boolean; priority?: number }
 export interface ApplyInput {
@@ -99,7 +99,7 @@ export async function applyProfile(body: ApplyInput, deps: ApplyDeps, source: Ac
   if (body.mode !== "custom") {
     const installed = new Set(listModels().map(modelView).filter((model) => model.state === "installed").map((model) => model.id));
     const pins = plannedPinsFor(PROFILE_TIERS.find((tier) => tier.id === tierId)!, hardware).map((entry) => entry.pin);
-    const upgraded = STACK_MODELS.find((pin) => pin.id === plan.chat_model && pin.role === "chat");
+    const upgraded = STACK_MODELS.find((pin) => pin.id === plan.chat_model && pin.role === PRIMARY_ROLE);
     if (upgraded && !pins.some((pin) => pin.id === upgraded.id)) pins.push(upgraded);
     for (const pin of pins) {
       if (installed.has(pin.id)) continue;

@@ -7,6 +7,7 @@
 // pin's bytes change without the table being re-measured, so the numbers
 // the installer, the wizard and Settings show cannot drift from the pins.
 // Pure: the install plan route supplies nothing but the tier.
+import { PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
 import measured from "@/lib/diskPlanMeasured.json";
 import diskRoleRowsJson from "@/rows/diskRoleRows.json";
 import { partDef, partLabel } from "@/lib/partDefs";
@@ -166,7 +167,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   const chatterbox = new Set(STACK_MODELS.filter((pin) => pin.engine === CHATTERBOX_ENGINE).map((pin) => pin.id));
   const imageTools = new Set(STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component !== "tool-look").map((pin) => pin.id));
   const plannedWhere = (test: (pin: CatalogModelLike) => boolean) => planned.map((entry) => entry.pin).filter(test);
-  const chat = plannedWhere((pin) => pin.role === "chat" && !projectors.has(pin.id));
+  const chat = plannedWhere((pin) => pin.role === PRIMARY_ROLE && !projectors.has(pin.id));
   const bigChat = chat[0];
   const rows: DiskRow[] = [];
   rows.push({
@@ -174,10 +175,10 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
     download_bytes: table.engines.home!.download_bytes, installed_bytes: table.engines.home!.installed_bytes, peak_temp_bytes: table.engines.home!.peak_temp_bytes, model_ids: [], engines: [], installed: false, basis: table.engines.home!.basis,
   });
   if (chat.length) {
-    rows.push(modelRow({ id: "chat", label: `Chat AI (${chatName(bigChat!)})`, note: "The AI you talk to.", need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
+    rows.push(modelRow({ id: PRIMARY_ROLE, label: `Chat AI (${chatName(bigChat!)})`, note: "The AI you talk to.", need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
   }
   for (const entry of SPLASH_LOCAL_CHAT_MODELS) if (entry.profiles.includes(tier.id)) rows.push(modelRow({ id: entry.row, label: partLabel(entry.pin.id), note: "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.", need: "optional", engines: [] }, [entry.pin, entry.draftPin]));
-  const reads = plannedWhere((pin) => projectors.has(pin.id) && pin.role !== "vision");
+  const reads = plannedWhere((pin) => projectors.has(pin.id) && pin.role !== PICTURE_READER_ROLE);
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: partLabel("qwen3-vl-8b-instruct-q4-k-m"), note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));
   // The plain-role rows (the picture reader that checks finished clips and pictures for safety when chat cannot read
   // pictures, AIMODELS-VISION-01; the judge; the coding model, which rides the recommended setup but an admin can leave

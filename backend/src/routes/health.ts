@@ -8,7 +8,7 @@ import { ignore, list as listHealth, resolve } from "@/lib/health";
 import { chatEngine, getProcess, restartRole, runningEngine, stopRole, unloadAllRoles } from "@/lib/supervisor";
 import { ENGINE_BINARIES, engineRole, selectEngineBinary } from "@/lib/engineCatalog";
 import { rollbackEngine, currentEngine, engineOfFailedSwap, previousEngine } from "@/updates/engines";
-import { ROLE_IDS, type RoleId } from "@/roles";
+import { ROLE_IDS, type RoleId, HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
 import { ensureEngine } from "@/lib/engineInstall";
 import { detectHardware } from "@/lib/hardware";
 import { DDGS_HEALTH_CODE, ddgsSupervisor } from "@/search/ddgsSidecar";
@@ -27,7 +27,7 @@ const actionRoute = (action: "resolve" | "ignore") => createRoute({ method: "pos
 
 function roleFromCode(code: string): RoleId {
   const suffix = code.split(".").at(-1) ?? "";
-  return ROLE_IDS.includes(suffix as RoleId) ? (suffix as RoleId) : "chat";
+  return ROLE_IDS.includes(suffix as RoleId) ? (suffix as RoleId) : PRIMARY_ROLE;
 }
 
 export async function runFix(code: string): Promise<{ ok: boolean; result: string } | null> {
@@ -43,13 +43,13 @@ export async function runFix(code: string): Promise<{ ok: boolean; result: strin
       const engine = engineOfFailedSwap(code);
       const previous = previousEngine(engine);
       if (!previous) return { ok: false, result: "No previous build is recorded to roll back to." };
-      const runsChat = engineRole(engine) === "chat" && chatEngine() === engine;
+      const runsChat = engineRole(engine) === PRIMARY_ROLE && chatEngine() === engine;
       // The coding engine is on demand: drained, and the next coding request starts the build the link now names.
-      const runsCoding = engineRole(engine) === "coding" && runningEngine("coding") === engine;
-      if (runsChat) await stopRole("chat", "Draining for a rollback.", "rollback-drain");
-      if (runsCoding) await stopRole("coding", "Draining for a rollback.", "rollback-drain");
+      const runsCoding = engineRole(engine) === HEAVY_ROLE && runningEngine(HEAVY_ROLE) === engine;
+      if (runsChat) await stopRole(PRIMARY_ROLE, "Draining for a rollback.", "rollback-drain");
+      if (runsCoding) await stopRole(HEAVY_ROLE, "Draining for a rollback.", "rollback-drain");
       await rollbackEngine(engine, previous);
-      if (runsChat) await restartRole("chat", "health-action");
+      if (runsChat) await restartRole(PRIMARY_ROLE, "health-action");
       resolve(code);
       return { ok: true, result: `Rolled back ${engine} to ${currentEngine(engine) ?? previous}.` };
     }

@@ -7,6 +7,7 @@
 // `llama-server` nothing is fetched. Until the pieces are verified chat keeps
 // answering on llama-server. Never throws: a missing engine never stops chat
 // (a Repairs item says what is missing).
+import { PRIMARY_ROLE } from "@/roles";
 import { existsSync } from "node:fs";
 import { ensureOmlxEnvironment, omlxInstalled, omlxSupportedHere } from "@/chat/omlx";
 import { CHAT_ENGINE_SETTING, requestedChatEngine } from "@/lib/chatEngines";
@@ -25,12 +26,12 @@ const DISK_MARGIN_BYTES = 6 * 1024 ** 3;
 
 /** An installed, verified chat model that oMLX runs is on disk. */
 function mlxModelOnDisk(): boolean {
-  return listModels().some((model) => model.roles.includes("chat") && model.engineRequirements.engine === "omlx" && !model.engineRequirements.component && isModelSelectable(model) && !!model.modelPath && existsSync(model.modelPath));
+  return listModels().some((model) => model.roles.includes(PRIMARY_ROLE) && model.engineRequirements.engine === "omlx" && !model.engineRequirements.component && isModelSelectable(model) && !!model.modelPath && existsSync(model.modelPath));
 }
 
 /** A chat model (the GGUF the install plan or Home put there) is installed: the person has a working chat to keep. */
 function chatInstalled(): boolean {
-  return listModels().some((model) => model.roles.includes("chat") && model.engineRequirements.engine === "llama-server" && !model.engineRequirements.component && isModelSelectable(model) && !!model.modelPath);
+  return listModels().some((model) => model.roles.includes(PRIMARY_ROLE) && model.engineRequirements.engine === "llama-server" && !model.engineRequirements.component && isModelSelectable(model) && !!model.modelPath);
 }
 
 let inFlight: Promise<void> | null = null;
@@ -79,7 +80,7 @@ async function run(): Promise<void> {
 export async function switchWhenReady(attempts = 20, waitMs = 30_000): Promise<boolean> {
   if (!omlxInstalled() || !mlxModelOnDisk()) return false;
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const running = runningEngine("chat");
+    const running = runningEngine(PRIMARY_ROLE);
     if (running === null || running === activeChatChoice().engine) return false;
     if (await restartForNewChatEngine().catch(() => false)) { await warmUp("chat-engine-ready").catch(() => undefined); return true; }
     await new Promise((resolve) => setTimeout(resolve, waitMs));

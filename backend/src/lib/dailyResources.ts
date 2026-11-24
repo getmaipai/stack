@@ -1,3 +1,4 @@
+import { PRIMARY_ROLE } from "@/roles";
 export type DailyResources = {
   date: string;
   chat_restarts_by_cause: Record<string, number>;
@@ -54,7 +55,7 @@ export function dailyResources(lines: string[], days: number, now: Date): DailyR
     switch (event.event) {
       case "engine.retired":
         count(row.engine_stops_by_cause, event.cause);
-        if (event.role === "chat" && typeof event.cause === "string" && isRestartCause(event.cause)) count(row.chat_restarts_by_cause, event.cause);
+        if (event.role === PRIMARY_ROLE && typeof event.cause === "string" && isRestartCause(event.cause)) count(row.chat_restarts_by_cause, event.cause);
         break;
       case "isolation.paused": row.pauses++; break;
       case "isolation.resumed": row.resumes++; if (typeof event.paused_seconds === "number") row.paused_seconds += event.paused_seconds; break;

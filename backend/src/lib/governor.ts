@@ -2,7 +2,7 @@ import { emit, emitGovernorWindow } from "@/lib/events";
 import { roleDisabledReason, rolePriorityOf } from "@/lib/roleSwitches";
 import { getMemoryReader, type MemoryPressure, type MemoryReader } from "@/lib/memory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
-import { ROLES, ROLE_JOB_CLASS, type JobClass } from "@/roles";
+import { ROLES, ROLE_JOB_CLASS, type JobClass, PRIMARY_ROLE } from "@/roles";
 import { reducedFreedBytes as tierReducedFreedBytes, tierCapBytes } from "@/lib/tiers";
 import { CATEGORY_DEFS } from "@/lib/choiceCategories";
 import { logger } from "@/lib/log";
@@ -1169,14 +1169,14 @@ export function startGovernor(options: StartGovernorOptions): () => void {
         videoShrinkMaxWaitSeconds = maxWait;
         videoQuietSeconds = quietSeconds;
         chatYieldBusy = true;
-        void options.shrinkChat().then((done) => { if (done) { videoShrinkCount++; videoShrunkSince = new Date(options.now?.() ?? Date.now()).toISOString(); decide("Restarted", "A video job was waiting for memory, so chat was restarted once at a smaller window.", "chat"); } }).catch(() => {}).finally(() => { chatYieldBusy = false; });
+        void options.shrinkChat().then((done) => { if (done) { videoShrinkCount++; videoShrunkSince = new Date(options.now?.() ?? Date.now()).toISOString(); decide("Restarted", "A video job was waiting for memory, so chat was restarted once at a smaller window.", PRIMARY_ROLE); } }).catch(() => {}).finally(() => { chatYieldBusy = false; });
       } else if (options.restoreChat && options.chatWindowShrunk?.() && !videoWaiting && !videoRunning) {
         const quietSecondsRestore = videoQuietSeconds;
         const quietRestore = interactiveAt === null || now - interactiveAt >= quietSecondsRestore * 1000;
         const maxWaitRestore = videoGoneSince !== null && now - videoGoneSince >= videoShrinkMaxWaitSeconds * 1000;
-        if ((quietRestore || maxWaitRestore) && !(options.busy?.("chat") ?? false)) {
+        if ((quietRestore || maxWaitRestore) && !(options.busy?.(PRIMARY_ROLE) ?? false)) {
           chatYieldBusy = true;
-          void options.restoreChat().then((done) => { if (done) { videoRestoreCount++; videoShrunkSince = null; decide("Restarted", "The video job is done, so chat has its full window back.", "chat"); } }).catch(() => {}).finally(() => { chatYieldBusy = false; });
+          void options.restoreChat().then((done) => { if (done) { videoRestoreCount++; videoShrunkSince = null; decide("Restarted", "The video job is done, so chat has its full window back.", PRIMARY_ROLE); } }).catch(() => {}).finally(() => { chatYieldBusy = false; });
         }
       }
     }
@@ -1184,18 +1184,18 @@ export function startGovernor(options: StartGovernorOptions): () => void {
     // was admitted for by enough to let the job in: chat is restarted between turns (its cache is the growth; the fresh
     // process starts at its admitted size). Owner's ruling 2026-11-12: allowed while idle, never mid-turn.
     if (options.restartChat && !chatYieldBusy && head && head.request.kind === "generator" && !heldByCodingMode(head.request) && !canAdmit(head.request, peakFor(head.request).bytes)) {
-      const chatOverage = overageOf("chat");
+      const chatOverage = overageOf(PRIMARY_ROLE);
       const interactiveAt = options.lastInteractiveAt?.() ?? null;
       const quietSeconds = head.request.quietSeconds ?? 60;
       const quiet = interactiveAt === null || now - interactiveAt >= quietSeconds * 1000;
       const evictionPending = [...loaded.values()].some((item) => item.evicting);
       const reclaimable = reclaimableItems(options.busy ?? (() => false), now);
       const retryDue = now - lastChatOverageRestartAt >= GovernorRules.chatOverageRetryMs;
-      if (chatOverage > 0 && quiet && retryDue && !evictionPending && reclaimable.items.length === 0 && reclaimable.heldForGraceBytes === 0 && !(options.busy?.("chat") ?? false) && wouldAdmitAfterFreeing(head.request, peakFor(head.request).bytes, chatOverage)) {
+      if (chatOverage > 0 && quiet && retryDue && !evictionPending && reclaimable.items.length === 0 && reclaimable.heldForGraceBytes === 0 && !(options.busy?.(PRIMARY_ROLE) ?? false) && wouldAdmitAfterFreeing(head.request, peakFor(head.request).bytes, chatOverage)) {
         chatYieldBusy = true;
         lastChatOverageRestartAt = now;
         const waiting = head.request.id;
-        void options.restartChat().then((done) => { if (done) { chatOverageRestartCount++; decide("Restarted", `A ${head.request.role ?? "generator"} job was waiting and chat had grown ${(chatOverage / GB).toFixed(1)} GB past its admitted size, so chat was restarted between turns.`, "chat"); reclaim(waiting, "restart_chat", "chat", chatOverage, now); } }).catch(() => {}).finally(() => { chatYieldBusy = false; });
+        void options.restartChat().then((done) => { if (done) { chatOverageRestartCount++; decide("Restarted", `A ${head.request.role ?? "generator"} job was waiting and chat had grown ${(chatOverage / GB).toFixed(1)} GB past its admitted size, so chat was restarted between turns.`, PRIMARY_ROLE); reclaim(waiting, "restart_chat", PRIMARY_ROLE, chatOverage, now); } }).catch(() => {}).finally(() => { chatYieldBusy = false; });
       }
     }
     // Every poll tries the queue head, not only on a pressure or floor edge:

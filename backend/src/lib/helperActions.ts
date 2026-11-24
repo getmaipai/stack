@@ -9,7 +9,7 @@ import { SECRET_SETTING } from "@/lib/helperReads";
 import type { RouteCall } from "@/lib/helperTools";
 import { gb } from "@/lib/helperKnowledge";
 import { ROLE_PRIORITY_MAX, ROLE_PRIORITY_MIN } from "@/lib/roleSwitches";
-import { type RoleId } from "@/roles";
+import { type RoleId, HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
 
 export const ACTION_NAMES = ["set_role_enabled", "set_role_priority", "apply_profile", "restart_engine", "restart_stack", "set_setting", "check_updates", "apply_update", "rollback_update"] as const;
 export type ActionName = (typeof ACTION_NAMES)[number];
@@ -61,8 +61,8 @@ function engineForRole(role: RoleId, views: Array<Record<string, any>>): string 
   const chatSetting = String(settingValues()["stack.engines.chat.engine"] ?? "auto");
   switch (role) {
     case "tts": return view?.tts?.engine ?? null;
-    case "coding": return view?.coding?.engine ?? null;
-    case "chat": case "judge": case "router": return chatSetting === "splash" ? "splash-chat" : chatSetting === "auto" ? "llama-server" : chatSetting;
+    case HEAVY_ROLE: return view?.coding?.engine ?? null;
+    case PRIMARY_ROLE: case "judge": case "router": return chatSetting === "splash" ? "splash-chat" : chatSetting === "auto" ? "llama-server" : chatSetting;
     case "helper": return "llama-server";
     case "image": return "image-gen";
     case "music": return "music-gen";

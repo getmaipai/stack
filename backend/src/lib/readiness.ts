@@ -12,7 +12,7 @@ import type { MemoryReader } from "@/lib/memory/types";
 import { expectedCheckpoint, probeReplyOk, probeRequest, processRoleFor, PROBE_SENTENCE, requestRole, getRoleStatus, roleIsBound, runOnRole, SPAWNABLE_ROLES, speakRole, speechForm } from "@/lib/supervisor";
 import { probeGenerator } from "@/generators/comfyui";
 import { resolveRoleState } from "@/lib/router";
-import { ROLE_IDS, ROLES, type RoleId } from "@/roles";
+import { ROLE_IDS, ROLES, type RoleId, HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
 import { lastStackChange, stackGeneration } from "@/lib/stackGeneration";
 import type { HealthFix } from "@/lib/health";
 
@@ -35,12 +35,12 @@ let running: { startedAt: string } | null = null;
 
 function fixFor(role: RoleId, reason: string): HealthFix {
   if (reason.toLowerCase().includes("memory")) return { label: "Free memory", action: "free_memory" };
-  if (["chat", "embeddings", "transcription", "speech", "job"].includes(ROLES[role].wire)) return { label: "Restart engine", action: "restart_engine" };
+  if ([PRIMARY_ROLE, "embeddings", "transcription", "speech", "job"].includes(ROLES[role].wire)) return { label: "Restart engine", action: "restart_engine" };
   return { label: "Reinstall model", action: "reinstall_model" };
 }
 
 /** Roles the check never probes: a probe would load them (a fresh start) or keep them loaded (a request restarts the idle clock). The coding engine loads for the person who codes; its own post-load check proves it each time, and its state is on the role list (CODE-STACK-01 S2). */
-const NEVER_PROBED_ROLES: RoleId[] = ["coding"];
+const NEVER_PROBED_ROLES: RoleId[] = [HEAVY_ROLE];
 
 async function checkRole(role: RoleId, options: CheckOptions): Promise<CheckRoleResult> {
   const started = performance.now();
@@ -62,7 +62,7 @@ async function checkRole(role: RoleId, options: CheckOptions): Promise<CheckRole
     // The wires with a real probe: a completion, an embedding, the
     // bundled clip's transcript, one sentence rendered, a generator's
     // checkpoint list. The rest are skipped, never green.
-    if (!["chat", "embeddings", "transcription", "speech", "job"].includes(wire) || ROLES[role].endpoints.length === 0) {
+    if (![PRIMARY_ROLE, "embeddings", "transcription", "speech", "job"].includes(wire) || ROLES[role].endpoints.length === 0) {
       resolveHealth(`check-role.${role}`);
       return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason: `Skipped: no ${wire} engine is ready for ${role}.`, loadMs: null };
     }
@@ -147,12 +147,12 @@ export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
     }
     // The generator runs on chat only when chat's own probe answered:
     // a chat that failed to start would fail to start again here.
-    const chatAnswered = results.some((result) => result.role === "chat" && result.ok);
+    const chatAnswered = results.some((result) => result.role === PRIMARY_ROLE && result.ok);
     const fitTogether = await runFitTogetherCheck({
-      fitGenerator: options.fitGenerator ?? (!options.requestRole && chatAnswered && SPAWNABLE_ROLES.includes("chat") ? async () => {
-        const probe = probeRequest("chat");
-        const reply = await requestRole("chat", probe.path, probe.body);
-        if (!probeReplyOk("chat", reply)) throw new Error(`The generator returned HTTP ${reply.status}.`);
+      fitGenerator: options.fitGenerator ?? (!options.requestRole && chatAnswered && SPAWNABLE_ROLES.includes(PRIMARY_ROLE) ? async () => {
+        const probe = probeRequest(PRIMARY_ROLE);
+        const reply = await requestRole(PRIMARY_ROLE, probe.path, probe.body);
+        if (!probeReplyOk(PRIMARY_ROLE, reply)) throw new Error(`The generator returned HTTP ${reply.status}.`);
       } : undefined),
       memoryReader: options.memoryReader,
       sampleMs: options.sampleMs,
