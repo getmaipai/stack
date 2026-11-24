@@ -1,6 +1,5 @@
 // MEM-SPACE-06: what this computer can ever run at each level, per category, for the Performance page and the setup wizard. The same
 // answer the resolver and the governor give: `fits_ever` is the governor's fitsEverForTier for the level's pick, `cap_bytes` the level's cap.
-import { PRIMARY_ROLE } from "@/roles";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";

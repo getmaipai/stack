@@ -1,7 +1,6 @@
 // TIER-HOME-04: the tier catalog as Home's slot dialogs need it (read only). The profile is this machine's proposed one and the room is the
 // governor's tier room, so a candidate's "fits" is the same answer the resolver and the governor give. Max is sized from the Max room,
 // the resident room plus what Reduced frees (TIER-ROOM-01), as the governor sizes a Max job at admission.
-import { PRIMARY_ROLE } from "@/roles";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
