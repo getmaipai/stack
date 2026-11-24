@@ -8,9 +8,10 @@ import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { ComponentError, listComponents, startComponentInstall, uninstallComponent } from "@/lib/components";
 import { planTidy, runTidy } from "@/lib/tidy";
+import { COMPONENT_GROUPS } from "@/lib/choicesSchema";
 
 const ComponentSchema = z.object({
-  id: z.string(), label: z.string(), summary: z.string(), group: z.enum(["chat", "voice", "pictures", "video", "music", "stems", "tools", "loras"]), kind: z.enum(["model", "lora"]), superseded_by: z.array(z.string()),
+  id: z.string(), label: z.string(), summary: z.string(), group: z.enum(COMPONENT_GROUPS), kind: z.enum(["model", "lora"]), superseded_by: z.array(z.string()),
   state: z.enum(["installed", "installing", "notInstalled", "failed"]),
   size_bytes: z.number().int().nullable().openapi({ description: "Bytes on disk now (models and their engine environment); null when nothing is installed." }),
   download_bytes: z.number().int().openapi({ description: "What an install would still download; 0 when installed." }),

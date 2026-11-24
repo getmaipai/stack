@@ -68,7 +68,7 @@ export const COMPONENT_FAILED_PREFIX = "component-install-failed.";
 /** Room kept free on the data volume beyond a download, so a fit never leaves the computer full. */
 export const DISK_MARGIN_BYTES = 5_000_000_000;
 
-export type ComponentGroup = "chat" | "voice" | "pictures" | "video" | "music" | "stems" | "tools" | "loras";
+export type ComponentGroup = string;
 export type ComponentState = "installed" | "installing" | "notInstalled" | "failed";
 export type ComponentRequirement = "required" | "optional" | "unsupported";
 type Tier = string;

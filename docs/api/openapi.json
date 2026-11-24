@@ -32080,10 +32080,10 @@
                             "type": "string",
                             "enum": [
                               "chat",
-                              "voice",
                               "pictures",
                               "video",
                               "music",
+                              "voice",
                               "stems",
                               "tools",
                               "loras"
@@ -34164,10 +34164,10 @@
                             "type": "string",
                             "enum": [
                               "chat",
-                              "voice",
                               "pictures",
                               "video",
                               "music",
+                              "voice",
                               "stems",
                               "tools",
                               "loras"

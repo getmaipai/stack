@@ -1,9 +1,20 @@
 // The wire shapes of the choices API (docs/dev/choices.md), declared once: the routes use the schemas, choices.ts uses the inferred types.
 import { z } from "@hono/zod-openapi";
 import { CHOICE_PROFILES, CHOICE_TIERS } from "@/lib/choicesStore";
+import featureRows from "@/rows/featureRows.json";
 
-export const CATEGORY_IDS = ["chat", "coding", "pictures", "video", "music", "voice", "stt", "embeddings", "vision", "wakeword", "stems"] as const;
-export type CategoryId = typeof CATEGORY_IDS[number];
+/** Feature ids, from rows/featureRows.json. */
+export const CATEGORY_IDS = featureRows.map((row) => row.id) as [string, ...string[]];
+export type CategoryId = string;
+/** The features that have tier candidates (a `tierCategory`), the values of the tiers routes' `category`. */
+export const TIER_CATEGORY_IDS = featureRows.flatMap((row) => ("tierCategory" in row && row.tierCategory ? [row.tierCategory as string] : [])) as [string, ...string[]];
+/** The groups the components list is split into: every tiered feature plus the tools and the loras. */
+export const COMPONENT_GROUPS = [...TIER_CATEGORY_IDS, "tools", "loras"] as [string, ...string[]];
+/** Capability rows: the name the capabilities route uses for a feature (its `capability` value, or its id when it is `true`) and the feature's tier category. */
+export const CAPABILITY_CATEGORIES = featureRows.flatMap((row) => {
+  const flag = (row as { capability?: true | string }).capability;
+  return flag ? [[flag === true ? row.id : flag, (row as { tierCategory?: string }).tierCategory ?? row.id] as const] : [];
+});
 
 export const TierName = z.enum(CHOICE_TIERS).openapi("ChoiceLevel");
 export const ProfileName = z.enum(CHOICE_PROFILES).openapi("ChoiceProfile");

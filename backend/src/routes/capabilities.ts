@@ -7,11 +7,12 @@ import type { AppEnv } from "@/types";
 import { fitsEverForTier, getGovernorStatus, reducedRoomBytes, tierRoomBytes } from "@/lib/governor";
 import { currentMachineTier } from "@/lib/supervisor";
 import { resolveTier, tierCapBytes, TIER_CANDIDATES, type ProfileId, type TierCategory } from "@/lib/tiers";
+import { CAPABILITY_CATEGORIES } from "@/lib/choicesSchema";
 
-const CATEGORIES = [["chat", "chat"], ["image", "pictures"], ["video", "video"], ["music", "music"], ["voice", "voice"]] as const satisfies ReadonlyArray<readonly [string, TierCategory]>;
+const CATEGORIES = CAPABILITY_CATEGORIES as ReadonlyArray<readonly [string, TierCategory]>;
 const LEVELS = ["standard", "boost", "max"] as const;
 const Row = z.object({
-  category: z.enum([PRIMARY_ROLE, "image", "video", "music", "voice"]), tier: z.enum(LEVELS),
+  category: z.enum(CATEGORIES.map(([name]) => name) as [string, ...string[]]), tier: z.enum(LEVELS),
   fits_ever: z.boolean().describe("Whether the level's pick could ever be admitted on this computer, with everything else idle."),
   needs_bytes: z.number().nullable().describe("The pick's peak memory, or the smallest catalogued peak for the level when nothing fits; null when the level has no model."),
   cap_bytes: z.number().describe("The most memory this level may hold on this computer."),

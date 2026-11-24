@@ -12,6 +12,7 @@ import { tierCandidateLists, TIER_CANDIDATES, type TierCategory } from "@/lib/ti
 import { applyVoiceEngine } from "@/lib/tierPick";
 import { controlReducedChat } from "@/lib/reducedChatLease";
 import { PROFILE_IDS } from "@/lib/profileIds";
+import { TIER_CATEGORY_IDS } from "@/lib/choicesSchema";
 
 const Candidate = z.object({
   id: z.string(), label: z.string(), family: z.string(), peak_bytes: z.number(), verified: z.boolean(),
@@ -22,7 +23,7 @@ const Level = z.object({ tier: z.enum(["standard", "boost", "max"]), cap_bytes: 
 const candidatesRoute = createRoute({
   method: "get", path: "/candidates", tags: ["Tiers"], summary: "The models each level of a category may use on this computer (TIER-HOME-04)",
   description: "Every catalog candidate for the category on this computer's profile, under each of Standard, Boost and Max, with the family it belongs to, its peak memory, whether it fits that level's cap and the plain refusal when it does not. `profile` is null when this computer is too small for any profile.",
-  request: { query: z.object({ category: z.enum([PRIMARY_ROLE, "pictures", "video", "music", "voice", "stems"]) }) },
+  request: { query: z.object({ category: z.enum(TIER_CATEGORY_IDS) }) },
   responses: { 200: { content: { "application/json": { schema: z.object({ category: z.string(), profile: z.enum(PROFILE_IDS).nullable(), room_bytes: z.number(), levels: z.array(Level) }) } }, description: "The candidates per level." } },
 });
 
@@ -61,7 +62,7 @@ tiersRoutes.openapi(reducedRoute, async (c) => {
 const choiceRoute = createRoute({
   method: "put", path: "/choice", tags: ["Tiers"], summary: "Pick a model for a level; the Stack applies it (stack-owns-model-choices)",
   description: "Validates that the model is a candidate of the category, then applies what the pick means to the Stack. For voice, the engine the candidate names is saved in `stack.voice.engine` and starts at the next voice engine restart. `applied` is false when the candidate names no engine to apply.",
-  request: { body: { required: true, content: { "application/json": { schema: z.object({ category: z.enum([PRIMARY_ROLE, "pictures", "video", "music", "voice", "stems"]), tier: z.enum(["reduced", "standard", "boost", "max"]), model: z.string().min(1) }) } } } },
+  request: { body: { required: true, content: { "application/json": { schema: z.object({ category: z.enum(TIER_CATEGORY_IDS), tier: z.enum(["reduced", "standard", "boost", "max"]), model: z.string().min(1) }) } } } },
   responses: {
     200: { content: { "application/json": { schema: z.object({ ok: z.literal(true), applied: z.boolean(), pending_restart: z.boolean() }) } }, description: "The pick is valid; `applied` says whether the Stack changed a setting for it." },
     404: { content: { "application/json": { schema: z.object({ error: z.string(), code: z.string() }) } }, description: "No such candidate in that category." },
