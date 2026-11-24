@@ -75,7 +75,7 @@ choicesRoutes.openapi(recommendedRoute, async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = RecommendedBody.safeParse(body ?? {});
   if (!parsed.success) return c.json({ error: "Send { \"dry_run\": true } or nothing.", code: "invalid_body" }, 400);
-  const result = await applyRecommended(parsed.data.dry_run, sourceOf(c), remoteOf(c));
+  const result = await applyRecommended(parsed.data.dry_run, sourceOf(c), remoteOf(c), parsed.data.household_has_minors);
   return isRefusal(result) ? c.json({ error: result.error, code: result.code }, result.status) : c.json(result, 200) as never;
 });
 choicesRoutes.openapi(addModelRoute, async (c) => {

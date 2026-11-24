@@ -21,6 +21,8 @@ const DiskRowSchema = z.object({
   id: z.string(), label: z.string(), note: z.string(), kind: z.enum(["home", "model", "engine"]), need: z.enum(["required", "recommended", "optional"]), selectable: z.boolean(),
   download_bytes: z.number().int().nonnegative(), installed_bytes: z.number().int().nonnegative(), peak_temp_bytes: z.number().int().nonnegative(),
   model_ids: z.array(z.string()), engines: z.array(z.string()), installed: z.boolean(), basis: z.enum(["pins", "measured", "estimate"]),
+  minors_only: z.boolean().optional().describe("The row installs a model made for minors only; an adult-only home is never offered it."),
+  feature: z.string().nullable().optional().describe("The feature row (id in /choices) this row belongs to; null for Home itself and the shared helpers."),
 });
 const DiskTotalsSchema = z.object({ download_bytes: z.number().int(), installed_bytes: z.number().int(), peak_temp_bytes: z.number().int(), needed_bytes: z.number().int(), required_free_bytes: z.number().int() });
 const DiskPlanSchema = z.object({

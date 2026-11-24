@@ -219,3 +219,14 @@ test("Talking pictures (LivePortrait) is a plain, sized, licensed row with its e
     expect(buildDiskPlan(tier, row.model_ids).rows.find((candidate) => candidate.id === "talking-pictures")!.installed).toBe(true);
   }
 });
+
+test("every model row of every tier names the feature row it belongs to (null only for Home itself and the shared helpers)", async () => {
+  const features = new Set(((await import("@/rows/featureRows.json")).default as Array<{ id: string }>).map((row) => row.id));
+  for (const tier of PROFILE_TIERS) for (const row of buildDiskPlan(tier).rows) {
+    if (row.kind === "engine") continue;
+    expect(row.feature === null || features.has(row.feature as string)).toBe(true);
+    if (!["home", "judge", "ffmpeg", "search"].includes(row.id)) expect(row.feature, row.id).not.toBeNull();
+  }
+  expect(buildDiskPlan(PROFILE_TIERS[PROFILE_TIERS.length - 1]!).rows.find((row) => row.id === "video-ltx25")!.feature).toBe("video");
+  expect(buildDiskPlan(PROFILE_TIERS[PROFILE_TIERS.length - 1]!).rows.filter((row) => row.minors_only).map((row) => row.id)).toEqual(["video"]);
+});

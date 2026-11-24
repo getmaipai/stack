@@ -103,7 +103,7 @@ export const PickResult = z.object({
 export const OrderBody = z.object({ order: z.array(z.string().min(1).max(200)).max(60).describe("Candidate ids, tried first to last. Candidates left out keep their default place after these."), off: z.array(z.string().min(1).max(200)).max(60).optional().describe("The candidates switched off. Omitted leaves the off list as it is.") });
 export const OrderResult = z.object({ ok: z.literal(true), category: z.enum(CATEGORY_IDS), order: z.array(z.string()), disabled: z.array(z.string()) });
 
-export const RecommendedBody = z.object({ dry_run: z.boolean().default(false).describe("Answer what would change and write nothing.") });
+export const RecommendedBody = z.object({ dry_run: z.boolean().default(false).describe("Answer what would change and write nothing."), household_has_minors: z.boolean().default(false).describe("WAN-DEFAULT-01: the household has a child or teen. The parts made for minors only (the silent video model) are then installed too; for an adult-only home they are never listed or started. An installed copy is never removed.") });
 export const ChangeSchema = z.object({ category: z.enum(CATEGORY_IDS), tier: TierName, from: z.string().nullable(), to: z.string() });
 export const RecommendedResult = z.object({
   dry_run: z.boolean(), changed: z.array(ChangeSchema), unchanged: z.number().int(),

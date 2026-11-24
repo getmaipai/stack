@@ -49,7 +49,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "chat",
@@ -66,7 +68,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "chat",
+          "minors_only": false
         },
         {
           "id": "embed",
@@ -83,7 +87,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "embeddings",
+          "minors_only": false
         },
         {
           "id": "stt",
@@ -104,7 +110,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stt",
+          "minors_only": false
         },
         {
           "id": "voice",
@@ -126,7 +134,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "image-tools",
@@ -149,7 +159,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "tool-look",
@@ -170,7 +182,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "score-transcription",
@@ -188,7 +202,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "stems",
@@ -208,7 +224,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "stems-ft",
@@ -228,7 +246,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "stems-6s",
@@ -248,7 +268,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "align",
@@ -268,7 +290,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "voice-convert",
@@ -290,7 +314,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "recorded-speech",
@@ -310,7 +336,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "ffmpeg",
@@ -325,7 +353,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "shazam-signature",
@@ -340,7 +370,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "search",
@@ -355,7 +387,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:python",
@@ -370,7 +404,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice",
@@ -385,7 +421,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:image-tools",
@@ -400,7 +438,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:score",
@@ -415,7 +455,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:stems",
@@ -430,7 +472,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:align",
@@ -445,7 +489,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice-convert",
@@ -460,7 +506,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:recorded-speech",
@@ -475,7 +523,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         }
       ],
       "default": {
@@ -532,7 +582,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "chat",
@@ -549,7 +601,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "chat",
+          "minors_only": false
         },
         {
           "id": "judge",
@@ -566,7 +620,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "embed",
@@ -583,7 +639,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "embeddings",
+          "minors_only": false
         },
         {
           "id": "stt",
@@ -604,7 +662,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stt",
+          "minors_only": false
         },
         {
           "id": "voice",
@@ -626,7 +686,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "voice-voxcpm2-reduced",
@@ -654,7 +716,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "image-tools",
@@ -677,7 +741,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "tool-look",
@@ -698,7 +764,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "sound-effects",
@@ -718,7 +786,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "score-transcription",
@@ -736,7 +806,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "stems",
@@ -756,7 +828,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "stems-ft",
@@ -776,7 +850,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "stems-6s",
@@ -796,7 +872,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "align",
@@ -816,7 +894,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "voice-convert",
@@ -838,7 +918,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "recorded-speech",
@@ -858,7 +940,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "ffmpeg",
@@ -873,7 +957,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "shazam-signature",
@@ -888,7 +974,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "search",
@@ -903,7 +991,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:python",
@@ -918,7 +1008,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice",
@@ -933,7 +1025,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice-voxcpm2",
@@ -948,7 +1042,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:image-tools",
@@ -963,7 +1059,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:sound-effects",
@@ -978,7 +1076,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:score",
@@ -993,7 +1093,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:stems",
@@ -1008,7 +1110,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:align",
@@ -1023,7 +1127,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice-convert",
@@ -1038,7 +1144,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:recorded-speech",
@@ -1053,7 +1161,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         }
       ],
       "default": {
@@ -1111,7 +1221,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "chat",
@@ -1128,7 +1240,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "chat",
+          "minors_only": false
         },
         {
           "id": "chat-splash-qwen36-abliterated",
@@ -1146,7 +1260,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "chat",
+          "minors_only": false
         },
         {
           "id": "judge",
@@ -1163,7 +1279,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "coding",
@@ -1181,7 +1299,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "coding",
+          "minors_only": false
         },
         {
           "id": "embed",
@@ -1198,7 +1318,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "embeddings",
+          "minors_only": false
         },
         {
           "id": "stt",
@@ -1219,7 +1341,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stt",
+          "minors_only": false
         },
         {
           "id": "voice",
@@ -1242,7 +1366,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "voice-better",
@@ -1269,7 +1395,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "voice-voxcpm2",
@@ -1299,7 +1427,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "voice-voxcpm2-reduced",
@@ -1327,7 +1457,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "image-tools",
@@ -1350,7 +1482,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "tool-look",
@@ -1371,7 +1505,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "talking-pictures",
@@ -1396,7 +1532,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures",
@@ -1431,7 +1569,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-ernie",
@@ -1462,7 +1602,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-h3",
@@ -1486,7 +1628,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-klein3",
@@ -1521,7 +1665,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-clearer",
@@ -1542,7 +1688,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "music",
@@ -1563,7 +1711,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "music-transcribe",
@@ -1583,7 +1733,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "sound-effects",
@@ -1603,7 +1755,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "score-transcription",
@@ -1621,7 +1775,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "stems",
@@ -1641,7 +1797,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "stems-ft",
@@ -1661,7 +1819,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "stems-6s",
@@ -1681,7 +1841,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "align",
@@ -1701,7 +1863,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "voice-convert",
@@ -1723,7 +1887,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "recorded-speech",
@@ -1743,7 +1909,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "ffmpeg",
@@ -1758,7 +1926,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "shazam-signature",
@@ -1773,7 +1943,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "search",
@@ -1788,7 +1960,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:python",
@@ -1803,7 +1977,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice",
@@ -1818,7 +1994,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice-better",
@@ -1833,7 +2011,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice-voxcpm2",
@@ -1848,7 +2028,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:pictures",
@@ -1863,7 +2045,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:pictures-h3",
@@ -1878,7 +2062,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:image-tools",
@@ -1893,7 +2079,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:liveportrait",
@@ -1908,7 +2096,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:music",
@@ -1923,7 +2113,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:sound-effects",
@@ -1938,7 +2130,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:score",
@@ -1953,7 +2147,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:stems",
@@ -1968,7 +2164,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:align",
@@ -1983,7 +2181,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice-convert",
@@ -1998,7 +2198,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:recorded-speech",
@@ -2013,7 +2215,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         }
       ],
       "default": {
@@ -2077,7 +2281,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "chat",
@@ -2094,7 +2300,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "chat",
+          "minors_only": false
         },
         {
           "id": "chat-splash-qwen36-abliterated",
@@ -2112,7 +2320,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "chat",
+          "minors_only": false
         },
         {
           "id": "chat-splash-qwen38-flash-next",
@@ -2130,7 +2340,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "chat",
+          "minors_only": false
         },
         {
           "id": "vision",
@@ -2148,7 +2360,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "vision",
+          "minors_only": false
         },
         {
           "id": "judge",
@@ -2165,7 +2379,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "coding",
@@ -2183,7 +2399,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "coding",
+          "minors_only": false
         },
         {
           "id": "embed",
@@ -2200,7 +2418,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "embeddings",
+          "minors_only": false
         },
         {
           "id": "stt",
@@ -2221,7 +2441,9 @@
           ],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stt",
+          "minors_only": false
         },
         {
           "id": "voice",
@@ -2244,7 +2466,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "voice-better",
@@ -2271,7 +2495,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "voice-voxcpm2",
@@ -2301,7 +2527,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "voice-voxcpm2-reduced",
@@ -2329,7 +2557,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "image-tools",
@@ -2352,7 +2582,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "tool-look",
@@ -2373,7 +2605,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "talking-pictures",
@@ -2398,7 +2632,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures",
@@ -2433,7 +2669,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-ernie",
@@ -2464,7 +2702,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-h3",
@@ -2488,7 +2728,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-klein3",
@@ -2523,7 +2765,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-zimage",
@@ -2559,7 +2803,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-qwen",
@@ -2603,7 +2849,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "pictures-clearer",
@@ -2624,7 +2872,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "pictures",
+          "minors_only": false
         },
         {
           "id": "video",
@@ -2645,7 +2895,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "video",
+          "minors_only": true
         },
         {
           "id": "music",
@@ -2666,7 +2918,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "music-transcribe",
@@ -2686,7 +2940,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "music-boost",
@@ -2707,7 +2963,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "music-max",
@@ -2729,7 +2987,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "video-ltx25",
@@ -2749,7 +3009,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "video",
+          "minors_only": false
         },
         {
           "id": "video-ltx25-max",
@@ -2769,7 +3031,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "video",
+          "minors_only": false
         },
         {
           "id": "video-minimax-h3",
@@ -2789,7 +3053,9 @@
             "engine:swap-composite"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "video",
+          "minors_only": false
         },
         {
           "id": "video-mask",
@@ -2809,7 +3075,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "video",
+          "minors_only": false
         },
         {
           "id": "sound-effects",
@@ -2829,7 +3097,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "score-transcription",
@@ -2847,7 +3117,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "stems",
@@ -2867,7 +3139,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "stems-ft",
@@ -2887,7 +3161,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "stems-6s",
@@ -2907,7 +3183,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "stems",
+          "minors_only": false
         },
         {
           "id": "align",
@@ -2927,7 +3205,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "voice-convert",
@@ -2949,7 +3229,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "recorded-speech",
@@ -2969,7 +3251,9 @@
             "engine:python"
           ],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "voice",
+          "minors_only": false
         },
         {
           "id": "ffmpeg",
@@ -2984,7 +3268,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "shazam-signature",
@@ -2999,7 +3285,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "pins"
+          "basis": "pins",
+          "feature": "music",
+          "minors_only": false
         },
         {
           "id": "search",
@@ -3014,7 +3302,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:python",
@@ -3029,7 +3319,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice",
@@ -3044,7 +3336,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice-better",
@@ -3059,7 +3353,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice-voxcpm2",
@@ -3074,7 +3370,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:pictures",
@@ -3089,7 +3387,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:pictures-h3",
@@ -3104,7 +3404,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:image-tools",
@@ -3119,7 +3421,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:liveportrait",
@@ -3134,7 +3438,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:video",
@@ -3149,7 +3455,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:video-ltx25",
@@ -3164,7 +3472,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:video-ltx25-max",
@@ -3179,7 +3489,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:video-mask",
@@ -3194,7 +3506,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:music",
@@ -3209,7 +3523,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:sound-effects",
@@ -3224,7 +3540,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "measured"
+          "basis": "measured",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:score",
@@ -3239,7 +3557,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:swap-composite",
@@ -3254,7 +3574,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:stems",
@@ -3269,7 +3591,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:align",
@@ -3284,7 +3608,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:voice-convert",
@@ -3299,7 +3625,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         },
         {
           "id": "engine:recorded-speech",
@@ -3314,7 +3642,9 @@
           "model_ids": [],
           "engines": [],
           "installed": false,
-          "basis": "estimate"
+          "basis": "estimate",
+          "feature": null,
+          "minors_only": false
         }
       ],
       "default": {

@@ -11,6 +11,7 @@ import { PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
 import measured from "@/lib/diskPlanMeasured.json";
 import diskRoleRowsJson from "@/rows/diskRoleRows.json";
 import diskRowGatesJson from "@/rows/diskRowGates.json";
+import diskRowFeaturesJson from "@/rows/diskRowFeatures.json";
 import { partDef, partLabel } from "@/lib/partDefs";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
@@ -51,6 +52,10 @@ export interface DiskRow {
   installed: boolean;
   /** Where the number comes from: the pins' byte counts, a measurement on a real install, or an estimate. */
   basis: DiskBasis;
+  /** The feature row (rows/featureRows.json id) this row belongs to, so a client groups rows without its own table; null for Home itself and the shared helpers, and for engine environments. */
+  feature?: string | null;
+  /** WAN-DEFAULT-01: the row installs a model made for minors only (the silent video model); an adult-only home is never offered it, a home with a child or teen starts it on. */
+  minors_only?: boolean;
 }
 
 export interface DiskTotals {
@@ -99,6 +104,7 @@ const TIER_ORDER = ["p16", "p32", "p64", "p128"] as const;
 
 /** One entry of rows/diskRowGates.json: the smallest template that may offer the row, plus the feature the row belongs to when it has one. */
 interface DiskRowGate { minTier: string; feature?: string }
+const DISK_ROW_FEATURES: Record<string, string | null> = diskRowFeaturesJson;
 const DISK_ROW_GATES: Record<string, DiskRowGate> = diskRowGatesJson;
 
 /** DISKGATE-01: whether a hardware template may offer one of the gated optional disk-plan rows. The row is hidden when the template lists the row's feature as not available, or when the template sits below the row's minimum tier. */
@@ -250,8 +256,10 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   rows.push({ id: "search", label: "Search helper", note: "Looks up web search results for adults, when web search is turned on.", kind: "model", need: "recommended", selectable: false, download_bytes: search.download_bytes, installed_bytes: search.installed_bytes, peak_temp_bytes: search.peak_temp_bytes, model_ids: [], engines: [], installed: false, basis: search.basis });
   const used = new Set(rows.flatMap((row) => row.engines));
   for (const id of ["engine:python", ...PYTHON_ENGINES]) if (used.has(id)) rows.push(ENGINE_ROWS[id]!());
-  for (const row of rows) row.installed = row.model_ids.length > 0 && row.model_ids.every((id) => present.has(id));
+  for (const row of rows) row.installed = row.model_ids.some((id) => present.has(id));
   const all = new Set(rows.map((row) => row.id));
+  const featureOf = (id: string): string | null => (DISK_ROW_FEATURES[id] ?? null);
+  for (let index = 0; index < rows.length; index += 1) { const row = rows[index]!; rows[index] = { ...row, feature: featureOf(row.id), minors_only: row.model_ids.some((id) => partDef(id)?.minorOnly === true) }; }
   const byNeed = (...needs: DiskNeed[]) => new Set(rows.filter((row) => needs.includes(row.need) && row.kind !== "engine").map((row) => row.id));
   return {
     tier: tier.id, level: tier.level, margin_percent: table.margin_percent, headroom_warn_bytes: table.headroom_warn_bytes, rows,

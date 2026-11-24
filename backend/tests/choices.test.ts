@@ -238,6 +238,16 @@ test("recommended: a dry run writes nothing; the real run stores the picks, writ
   expect(isRoleDisabled("chat")).toBe(false);
 });
 
+test("recommended with household_has_minors starts the minors-only video part too; without it the part is never started (WAN-DEFAULT-01)", async () => {
+  memory = 48;
+  const adult = await (await call("POST", "/recommended", {})).json() as { installs: Array<{ model: string }> };
+  expect([...adult.installs.map((item) => item.model), ...partInstalls]).not.toContain("fastwan2-2-ti2v-5b-mlx-bf16");
+  const dry = await (await call("POST", "/recommended", { dry_run: true, household_has_minors: true })).json() as { installs: unknown[] };
+  expect(dry.installs).toEqual([]);
+  const home = await (await call("POST", "/recommended", { household_has_minors: true })).json() as { installs: Array<{ model: string }> };
+  expect([...home.installs.map((item) => item.model), ...partInstalls]).toContain("fastwan2-2-ti2v-5b-mlx-bf16");
+});
+
 test("unused: only installed models no level or order uses are listed; removal checks each id again and keeps what became used", async () => {
   installedParts = { "qwen3-vl-4b-instruct-q4-k-m": 3e9, "qwen3-vl-8b-instruct-q4-k-m": 5e9, "qwen3-8b-instruct-q4-k-m": 5e9, "qwen3-6-35b-a3b-ud-q4-k-xl": 22e9 };
   const list = await (await call("GET", "/unused")).json() as { items: Array<{ id: string; size_bytes: number; category: string; reason: string }>; total_bytes: number; tidy: { reclaimable_bytes: number } };

@@ -8,7 +8,7 @@ import { PROFILE_MODEL_BINDINGS, PROFILE_TIERS, sizeMachine, type ProfileTier } 
 import { reducedRoomBytes, tierRoomBytes } from "@/lib/governor";
 import { resolveTier, TIER_CANDIDATES, tierCandidateLists, tierCapBytes, type TierCandidate, type TierCategory } from "@/lib/tiers";
 import { effectivePriority, readPartChoices, writePartChoices, choicesRefusal, type Choices } from "@/lib/partChoices";
-import { partDef } from "@/lib/partDefs";
+import { PART_DEFS, partDef } from "@/lib/partDefs";
 import { listParts } from "@/lib/partsList";
 import { recommend, type ProfilePlan } from "@/lib/profilePlanner";
 import { isRoleDisabled, rolePriorityOf } from "@/lib/roleSwitches";
@@ -552,12 +552,14 @@ export async function setOrder(categoryName: string, body: { order: string[]; of
   return { ok: true, category: def.id, order: after.order, disabled: after.disabled };
 }
 
+/** WAN-DEFAULT-01: the model parts made for minors only (the silent video model), from the part rows. */
+const MINOR_ONLY_PARTS = PART_DEFS.filter((def) => def.kind === "model" && def.minorOnly);
 export interface RecommendedDone {
   dry_run: boolean; changed: Array<{ category: CategoryId; tier: ChoiceTier; from: string | null; to: string }>; unchanged: number;
   roles: Record<string, boolean | number | string>; installs: Array<{ model: string; job: string }>; skipped: Array<{ model: string; reason: string }>; needs_licence: Array<{ id: string; label: string }>;
 }
 /** Writes the recommended pick for every level this computer has one for (and, outside a dry run, the recommended role switches as `profiles/apply` does), starting the downloads of the Standard and Reduced picks that are missing. Never removes anything. */
-export async function applyRecommended(dryRun: boolean, source: ActionSource, remote: string): Promise<RecommendedDone | Refusal> {
+export async function applyRecommended(dryRun: boolean, source: ActionSource, remote: string, householdHasMinors = false): Promise<RecommendedDone | Refusal> {
   const state = await loadState();
   if (!state.profile) return refuse(409, "computer_too_small", "This computer's memory is below 16 GB, the least the Stack can run chat and voice on. Nothing was changed.");
   const profile = state.profile.id;
@@ -589,6 +591,15 @@ export async function applyRecommended(dryRun: boolean, source: ActionSource, re
   if (dryRun) return { dry_run: true, changed, unchanged, roles, installs, skipped, needs_licence: needsLicence };
   writePicks(picks);
   notifyChoicesChanged();
+  // WAN-DEFAULT-01: a home with a child or teen also gets the parts made for minors only; nothing already installed is touched.
+  // The adult parts list never carries them, so each is started by id: an installed one answers with no job and stays as it is.
+  if (householdHasMinors) for (const def of MINOR_ONLY_PARTS) {
+    try { const started = await choicesDeps.installPart(def.id); if (started.job) installs.push({ model: def.id, job: started.job }); }
+    catch (error) {
+      if (error instanceof ComponentError && error.code === "licence_required") needsLicence.push({ id: def.id, label: def.neutralLabel });
+      else skipped.push({ model: def.id, reason: error instanceof DiskRefusalError ? error.reason : error instanceof Error ? error.message : "The install could not start." });
+    }
+  }
   for (const id of toInstall) {
     const part = judged.parts.get(id);
     if (!part || statePlain(part).state !== "notInstalled" || installs.some((item) => item.model === id)) continue;

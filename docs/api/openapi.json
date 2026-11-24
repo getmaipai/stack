@@ -30386,6 +30386,15 @@
                                   "measured",
                                   "estimate"
                                 ]
+                              },
+                              "minors_only": {
+                                "type": "boolean",
+                                "description": "The row installs a model made for minors only; an adult-only home is never offered it."
+                              },
+                              "feature": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "The feature row (id in /choices) this row belongs to; null for Home itself and the shared helpers."
                               }
                             },
                             "required": [
@@ -33264,6 +33273,11 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Answer what would change and write nothing."
+                  },
+                  "household_has_minors": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "WAN-DEFAULT-01: the household has a child or teen. The parts made for minors only (the silent video model) are then installed too; for an adult-only home they are never listed or started. An installed copy is never removed."
                   }
                 }
               }
