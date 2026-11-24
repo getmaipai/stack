@@ -24,7 +24,7 @@
   "backend/src/lib/memoryWatchdog.ts": 3,
   "backend/src/lib/missingModels.ts": 3,
   "backend/src/lib/partsList.ts": 6,
-  "backend/src/lib/profilePlanner.ts": 12,
+  "backend/src/lib/profilePlanner.ts": 3,
   "backend/src/lib/readiness.ts": 2,
   "backend/src/lib/router.ts": 2,
   "backend/src/lib/supervisor.ts": 9,
