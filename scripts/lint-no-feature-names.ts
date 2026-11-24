@@ -90,6 +90,10 @@ export const ALLOWED_FILES = [
   // Data tables, not logic: the part catalog (pins with download urls and hashes), the helper's knowledge text, its eval set, a pack's pins, and test files beside source.
   "backend/src/roles.ts",
   "backend/src/lib/modelCatalog.ts",
+  // Data records: the engine-to-role table, the picture family specs (model records), and the choices API shape (its enum of feature ids).
+  "backend/src/lib/engineCatalog.ts",
+  "backend/src/images/models.ts",
+  "backend/src/lib/choicesSchema.ts",
   "backend/src/lib/helperKnowledge.ts",
   "backend/src/bench/helperEvalSet.ts",
   "backend/src/packs/h3/h3Pins.ts",
