@@ -31,6 +31,7 @@ import { SttEndpointResponse } from "@maipai/spec/stack/ts/stt-endpoint-response
 import { EndpointModelMissingError, scoreEndpoint } from "@/speech/endpoint";
 import { WaveFormatError } from "@/speech/audio";
 import { SPEAKER_EMBEDDING_PATH } from "@/speech/server";
+import { IMAGE_FAMILIES } from "@/images/models";
 
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
 const ChatRequestSchema = RoleRequest.extend({ messages: z.array(MessageSchema) });
@@ -383,7 +384,7 @@ async function ensureCloningLoaded(role: RoleId, signal: AbortSignal): Promise<v
 v1Routes.openapi(imagesRoute, (c) => {
   const body = c.req.valid("json") as ImageGenerationBody;
   const model = body.model ?? "image";
-  if (imageEngineActive() && (model === "image" || model === "flux2-klein-4b" || model === "flux3-image-klein" || model === "z-image-turbo" || model === "ernie-image-turbo" || model === "qwen-image-2512-q8" || model === "minimax-h3-image")) return generateImages(c, body) as never;
+  if (imageEngineActive() && (model === "image" || Object.hasOwn(IMAGE_FAMILIES, model))) return generateImages(c, body) as never;
   return reply(c, "job", { ...body, model }) as never;
 });
 

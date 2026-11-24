@@ -10,7 +10,7 @@ import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
 import { ROLES, HEAVY_ROLE, PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
-import type { ImageFamilyId } from "@/images/models";
+import { IMAGE_FAMILIES, type ImageFamilyId } from "@/images/models";
 
 export interface PlanModel {
   id: string; role: RoleId; repo?: string; url: string; sha256: string; approx_bytes: number; licence: string; revision: string;
@@ -135,7 +135,7 @@ export function recordedSpeechInstallModels(installedIds: Iterable<string> = [])
 /** The pins the picture generator needs, in the shape of a pull, for the image status route: Home installs a family when the person turns pictures on (the standard family by default; a higher-detail option is offered on the biggest computers). Klein is in the first-run plan on every tier that has image (AIMODELS-DATA-01); the other families are not. */
 export function imageInstallModels(family: ImageFamilyId, installedIds: Iterable<string> = []): PlanModel[] {
   const installed = new Set(installedIds);
-  const pins = family === "flux2-klein-4b" ? STACK_IMAGE_KLEIN_MODELS : family === "flux3-image-klein" ? STACK_IMAGE_KLEIN3_MODELS : family === "z-image-turbo" ? STACK_IMAGE_ZIMAGE_MODELS : family === "qwen-image-2512-q8" ? STACK_IMAGE_QWEN_MODELS : family === "minimax-h3-image" ? STACK_IMAGE_H3_MODELS : STACK_IMAGE_ERNIE_MODELS;
+  const pins = IMAGE_FAMILIES[family].pins;
   return pins.flatMap((pin) => view(pin, installed, false) ?? []);
 }
 

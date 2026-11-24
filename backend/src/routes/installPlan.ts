@@ -5,6 +5,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
+import { IMAGE_FAMILIES, type ImageFamilyId } from "@/images/models";
 import { buildInstallPlan, imageInstallModels, restoreInstallModels, talkingPicturesInstallModels, videoInstallModels, splashChatInstallModels } from "@/lib/installPlan";
 import { diskPlanForTier } from "@/lib/diskPlan";
 import { listModels } from "@/lib/modelStore";
@@ -12,6 +13,8 @@ import { modelView } from "@/routes/models";
 import { RoleIdSchema } from "@/roles";
 import { PROFILE_IDS } from "@/lib/profileIds";
 
+/** The picture families the plan route adds when their disk row is offered, in plan order (IMAGE_FAMILIES planOrder). */
+const PLAN_FAMILIES = (Object.keys(IMAGE_FAMILIES) as ImageFamilyId[]).filter((family) => IMAGE_FAMILIES[family].planOrder !== null).sort((a, b) => IMAGE_FAMILIES[a].planOrder! - IMAGE_FAMILIES[b].planOrder!);
 const PlanModelSchema = z.object({
   id: z.string(), role: RoleIdSchema, repo: z.string().optional(), url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative(), licence: z.string(), revision: z.string(),
   engine: z.string().optional(), archive: z.boolean().optional(), hub_file: z.string().optional(), component: z.string().optional(),
@@ -52,10 +55,7 @@ installPlanRoutes.openapi(planRoute, async (c) => {
   const disk = plan.tier ? diskPlanForTier(plan.tier, installedIds) : null;
   const rows = new Set(disk?.rows.map((row) => row.id) ?? []);
   const optional = [
-    ...(rows.has("pictures") ? imageInstallModels("flux2-klein-4b", installedIds) : []),
-    ...(rows.has("pictures-ernie") ? imageInstallModels("ernie-image-turbo", installedIds) : []),
-    ...(rows.has("pictures-zimage") ? imageInstallModels("z-image-turbo", installedIds) : []),
-    ...(rows.has("pictures-qwen") ? imageInstallModels("qwen-image-2512-q8", installedIds) : []),
+    ...PLAN_FAMILIES.filter((family) => rows.has(IMAGE_FAMILIES[family].diskRow)).flatMap((family) => imageInstallModels(family, installedIds)),
     ...(rows.has("pictures-clearer") ? restoreInstallModels(installedIds) : []),
     ...(rows.has("talking-pictures") ? talkingPicturesInstallModels(installedIds) : []),
     ...(rows.has("video") ? videoInstallModels(installedIds) : []),
