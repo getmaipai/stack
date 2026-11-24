@@ -51,7 +51,7 @@ import { AdmissionRefusedError, governorPeak, waitForAdmission, waitingReason } 
 import { emit } from "@/lib/events";
 import { MLX_PREFIX_CACHE_FLAG, mlxHeadroomBytes } from "@/lib/mlxMemory";
 import { raise, resolve as resolveHealth } from "@/lib/health";
-import { ROLES, ROLE_IDS, MODE_FOLLOWER_ROLES, rolesWith, type RoleId, type RoleState } from "@/roles";
+import { ROLES, ROLE_IDS, MODE_FOLLOWER_ROLES, PRIMARY_ROLE, HEAVY_ROLE, PICTURE_READER_ROLE, rolesWith, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
 import { metalHostFault } from "@/lib/hostProbe";
 import { classifyCrash, describeStartFailure, stderrEvidence, type CrashVerdict } from "@/lib/crashClassifier";
@@ -65,7 +65,7 @@ import { estimatorAvailable, largestAdmittedContext, placedOnProcessor, runGgufP
 import { getGovernorStatus } from "@/lib/governor";
 import { codingPauseBoundMs, heavyGate, isolationRules, PausableProcess, setProtectedPidProvider, type Lease, type PausableWorker } from "@/lib/heavyGate";
 import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
-import { currentHomeMode, homeModeEnteringCoding, homeModeLeavingCoding, homeModeSwitching } from "@/lib/homeMode";
+import { currentHomeMode, homeHeavyModeActive, homeModeEnteringCoding, homeModeLeavingCoding, homeModeSwitching } from "@/lib/homeMode";
 import { installedDiarizationFiles } from "@/speech/diarization";
 import { getReducedChatState, reducedChatForcesLight, reducedChatModels, resetReducedChatForTests, setReducedChatModels, setReducedChatState } from "@/lib/reducedChat";
 
@@ -157,7 +157,7 @@ export class EngineDoesNotFitError extends EngineUnavailableError {
 // The roles a llama-server process serves and the request each one's
 // post-load check sends. Roles that share chat's model run on chat's
 // process; embed has its own model and its own launch flag.
-const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === "chat");
+const CHAT_WIRE_ROLES: RoleId[] = ROLE_IDS.filter((role) => ROLES[role].wire === PRIMARY_ROLE);
 const SPAWNABLE_ROLES: RoleId[] = rolesWith("spawnable");
 /** The roles the speech worker serves: their runtime ships with the
  * Stack (sherpa-onnx-node in package.json), never as an engine build. */
@@ -179,10 +179,10 @@ export const SPEECH_PATH = "/tts";
 /** The role whose process serves this role: `coding`, `judge` and
  * `router` share chat's model and process unless bound elsewhere. */
 export function processRoleFor(role: RoleId): RoleId {
-  if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && MODE_FOLLOWER_ROLES.includes(role)) return "coding";
+  if (currentHomeMode() === HEAVY_ROLE && !homeModeLeavingCoding() && MODE_FOLLOWER_ROLES.includes(role)) return HEAVY_ROLE;
   const definition = ROLES[role] as { sharesModelWith?: RoleId };
   if (role === "judge" && machineTier && PROFILE_MODEL_BINDINGS[machineTier]?.judge) return role;
-  if (role === "judge" && !machineTier) return "chat";
+  if (role === "judge" && !machineTier) return PRIMARY_ROLE;
   return definition.sharesModelWith ?? role;
 }
 
@@ -193,7 +193,7 @@ function reducedLightModel(): ModelRecord | null {
     const record = id ? getModel(id) : null;
     return record && isModelSelectable(record) && !!record.modelPath && ["llama-server", "mlx-serve"].includes(String(record.engineRequirements.engine ?? "llama-server")) ? record : null;
   };
-  const picked = chosenToRun("chat", "reduced")?.model;
+  const picked = chosenToRun(PRIMARY_ROLE, "reduced")?.model;
   return startable(picked) ?? startable((machineTier ? PROFILE_MODEL_BINDINGS[machineTier]?.judge : undefined) ?? PROFILE_MODEL_BINDINGS.p32?.judge);
 }
 
@@ -218,7 +218,7 @@ export function reducedVoiceAllowed(): false { return false; }
 
 export function enterReducedChat(): Promise<{ ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string }> { return reducedSwapContext.run(true, enterReducedChatInner); }
 async function enterReducedChatInner(): Promise<{ ok: true; swapMs: number } | { ok: false; waiting: true } | { ok: false; reason: string }> {
-  if (currentHomeMode() === "coding") return { ok: false, reason: "Reduced chat is unavailable while coding mode is active." };
+  if (currentHomeMode() === HEAVY_ROLE) return { ok: false, reason: "Reduced chat is unavailable while coding mode is active." };
   if (getReducedChatState() !== "off") return { ok: false, reason: "A Reduced chat change is already in progress." };
   const light = reducedLightModel();
   if (!light) return { ok: false, reason: "The smaller chat model is not installed and selectable." };
@@ -463,7 +463,7 @@ export function probeRequest(role: RoleId): { path: string; body: Record<string,
   if (ROLES[role].wire === "job") return { path: "/object_info/CheckpointLoaderSimple", body: { model: role } };
   // The vision role's probe carries a picture, so "ready" means the
   // projector reads one, not only that the language model answers.
-  if (role === "vision") return { path: "/v1/chat/completions", body: { model: role, messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: VISION_PROBE_IMAGE } }, { type: "text", text: "What colour fills this picture? Reply with one word." }] }], max_tokens: 16 } };
+  if (role === PICTURE_READER_ROLE) return { path: "/v1/chat/completions", body: { model: role, messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: VISION_PROBE_IMAGE } }, { type: "text", text: "What colour fills this picture? Reply with one word." }] }], max_tokens: 16 } };
   // `enable_thinking: false` asks the template to answer in content; a
   // thinking model that answers in reasoning_content is still alive.
   return { path: "/v1/chat/completions", body: { model: role, messages: [{ role: "user", content: "Reply with just the word OK." }], max_tokens: 32, chat_template_kwargs: { enable_thinking: false } } };
@@ -504,10 +504,10 @@ export async function postLoadCheck(role: RoleId, client: EngineClient, pid: num
  * text (a picture reader never stops chat, rule 6) and the role row says
  * it does not read pictures. */
 export async function picturesProbeOk(client: EngineClient): Promise<boolean> {
-  const probe = probeRequest("vision");
+  const probe = probeRequest(PICTURE_READER_ROLE);
   try {
-    const result = await withTimeout(client.request(probe.path, { ...probe.body, model: "chat" }), timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS, () => new EngineUnavailableError("The picture check timed out."));
-    return probeReplyOk("vision", result);
+    const result = await withTimeout(client.request(probe.path, { ...probe.body, model: PRIMARY_ROLE }), timeoutOverrides.postLoadMs ?? DEFAULT_POST_LOAD_TIMEOUT_MS, () => new EngineUnavailableError("The picture check timed out."));
+    return probeReplyOk(PICTURE_READER_ROLE, result);
   } catch {
     return false;
   }
@@ -598,7 +598,7 @@ async function acquireRequestProcess(requested: RoleId, modelId?: string): Promi
     const processRecord = await getProcess(role, modelId);
     processRecord.activeRequests++;
     processRecord.owned?.refresh();
-    if (role === "coding") codingYieldBegin(processRecord);
+    if (role === HEAVY_ROLE) codingYieldBegin(processRecord);
     noteComponentUse(processRecord.modelId);
     // A request keeps a jit role's idle clock at zero.
     if (JIT_ROLES.includes(role)) touchGovernor(role);
@@ -632,7 +632,7 @@ function chatSplashEngineInstalled(): boolean {
 
 /** Whether a verified oMLX model record is on disk. */
 function omlxModelInstalled(): boolean {
-  return listModels().some((model) => model.roles.includes("chat") && model.engineRequirements.engine === "omlx" && isModelSelectable(model) && !!model.modelPath);
+  return listModels().some((model) => model.roles.includes(PRIMARY_ROLE) && model.engineRequirements.engine === "omlx" && isModelSelectable(model) && !!model.modelPath);
 }
 function chatEngineInstalled(id: ChatEngineId): boolean {
   return id === "omlx" ? omlxInstalled() && omlxModelInstalled() : id === "splash" ? chatSplashEngineInstalled() && splashModelPairInstalled() : engineInstalled(id);
@@ -649,7 +649,7 @@ function splashPairReady(id: string): boolean {
 }
 /** The model Splash serves for chat: the one Home chose (the stored setting) when it is a Splash model, else the household's Huihui Qwen3.8-27B. */
 function splashChatModelId(): string {
-  const stored = preferredModels.get("chat") ?? String(settingValues()["stack.engines.chat.model"] ?? "");
+  const stored = preferredModels.get(PRIMARY_ROLE) ?? String(settingValues()["stack.engines.chat.model"] ?? "");
   if (SPLASH_CHAT_IDS.includes(stored)) return stored;
   return STACK_CHAT_QWEN38_UNCENSORED_MODEL.id;
 }
@@ -665,7 +665,7 @@ function chatEngineAvailableForChoice(id: ChatEngineId): boolean {
 export function activeChatChoice(): ChatEngineChoice {
   const setting = settingValues()[CHAT_ENGINE_SETTING];
   // Home's "load this model" (preferModel) comes before the stored setting is written, so a Splash-only model must pick Splash on the preference too.
-  const stored = preferredModels.get("chat") ?? String(settingValues()["stack.engines.chat.model"] ?? "");
+  const stored = preferredModels.get(PRIMARY_ROLE) ?? String(settingValues()["stack.engines.chat.model"] ?? "");
   // `auto` picks Splash only when the stored chat model is one only Splash can run (the 35B, Flash Next); every other choice keeps its engine.
   const auto = setting === undefined || setting === "auto" || setting === "";
   return resolveChatEngine({
@@ -703,9 +703,9 @@ export function setCodingMachineFacts(facts: Omit<SplashFacts, "tier"> | null): 
 let forcedCodingEngine: CodingEngine | null = null;
 
 /** Whether Splash's draft is installed: the pinned component record, verified and on disk. */
-function splashDraftInstalled(): boolean { return componentModel("coding", "draft") !== null; }
+function splashDraftInstalled(): boolean { return componentModel(HEAVY_ROLE, "draft") !== null; }
 function codingModelInstalled(): boolean {
-  return listModels().some((model) => model.roles.includes("coding") && !isComponent(model) && isModelSelectable(model) && !!model.modelPath);
+  return listModels().some((model) => model.roles.includes(HEAVY_ROLE) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath);
 }
 
 /** Which engine the next coding start runs: the setting, then the machine (Apple M3 or newer, 36 GB or more, macOS 26.4 or later, the 64 and 128 GB tiers), then what is installed, then what failed to start this run. A start that fell back to llama-server for one request forces it for that start. */
@@ -725,17 +725,17 @@ export function splashInstalledForHomeMode(): boolean { return engineInstalled("
 /** The engine the model records are chosen for: a GGUF serves both coding engines, so the role's records are not filtered by engine. */
 // Splash serves the same GGUF records llama-server does (no record is tagged "splash"), so a chat
 // role on Splash must still list the llama-server records or it finds no model and falls back to the starter.
-function recordEngineFor(role: RoleId): string | null { if (role === "coding") return null; const engine = engineForRole(role); return engine === "splash" ? "llama-server" : engine; }
+function recordEngineFor(role: RoleId): string | null { if (role === HEAVY_ROLE) return null; const engine = engineForRole(role); return engine === "splash" ? "llama-server" : engine; }
 
 function engineForRole(role: RoleId): string | null {
-  if (role === "coding") return currentHomeMode() === "coding" || homeModeEnteringCoding() ? "splash" : activeCodingChoice().engine;
+  if (role === HEAVY_ROLE) return homeHeavyModeActive() ? "splash" : activeCodingChoice().engine;
   // The vision projector is a llama-server feature (mtmd); the MLX
   // engine choice for chat never moves it.
-  if (role === "vision" || role === "helper") return "llama-server";
+  if (role === PICTURE_READER_ROLE || role === "helper") return "llama-server";
   // A chat-wire role with a process of its own (the judge on the tiers that
   // bind a 4B model to it) runs on llama-server whatever engine chat uses:
   // the MLX pin is chat's model, not the judge's.
-  if (CHAT_WIRE_ROLES.includes(role)) return processRoleFor(role) === "chat" ? chatEngine() : "llama-server";
+  if (CHAT_WIRE_ROLES.includes(role)) return processRoleFor(role) === PRIMARY_ROLE ? chatEngine() : "llama-server";
   if (role === "embed") return "llama-server";
   // The voice role's records name the engine they are for; the engine in
   // effect (the setting, the tier, what is installed) decides which.
@@ -818,13 +818,13 @@ export function engineInstalledFor(role: RoleId): boolean {
   if (SPEECH_ROLES.includes(role)) return componentModel(role, "vad") !== null;
   if (role === "tts") return ttsEngineInstalled(activeTtsChoice().engine);
   if (role === "image") return comfyuiInstalled();
-  if (role === "coding") return engineForRole(role) === "splash" ? engineInstalled("splash") : engineInstalled("llama-server");
-  if (role === "vision") {
+  if (role === HEAVY_ROLE) return engineForRole(role) === "splash" ? engineInstalled("splash") : engineInstalled("llama-server");
+  if (role === PICTURE_READER_ROLE) {
     const model = selectedModel(role);
     return !!model && projectorFor(model) !== null && engineInstalled("llama-server");
   }
   const engine = engineForRole(role);
-  if (role === "chat" && engine === "splash") return chatEngineInstalled("splash");
+  if (role === PRIMARY_ROLE && engine === "splash") return chatEngineInstalled("splash");
   return engine === "omlx" ? chatEngineInstalled("omlx") : engineInstalled(engine === "mlx-serve" ? engine : "llama-server");
 }
 
@@ -853,7 +853,7 @@ function urlBindingFor(role: RoleId): { kind: EngineKind; url: string } | null {
 
 const preferredModels = new Map<RoleId, string>();
 // A stored choice (a pick, the order, a legacy setting Home wrote) replaces the session's "load this": the preference named the same model when Home wrote it, and a later change to the choice must not be shadowed by it.
-onChoicesChanged(() => { preferredModels.delete("chat"); preferredModels.delete("coding"); });
+onChoicesChanged(() => { preferredModels.delete(PRIMARY_ROLE); preferredModels.delete(HEAVY_ROLE); });
 /** Requests in flight on the process that serves the role (0 when nothing runs). */
 export function activeRequestsOf(requested: RoleId): number { return runtime(processRoleFor(requested)).process?.activeRequests ?? 0; }
 export function __setPreferredModelForTests(role: RoleId, modelId: string | null): void { if (modelId) preferredModels.set(role, modelId); else preferredModels.delete(role); }
@@ -902,7 +902,7 @@ export function declaresImageInput(model: ModelRecord): boolean {
  * not installed starts text-only and says so on its role row; a missing
  * picture reader never stops chat. */
 export function launchProjectorFor(role: RoleId, model: ModelRecord): ModelRecord | null {
-  if (role !== "vision" && role !== "chat") return null;
+  if (role !== PICTURE_READER_ROLE && role !== PRIMARY_ROLE) return null;
   return projectorFor(model);
 }
 
@@ -916,7 +916,7 @@ export function roleReadsPictures(requested: RoleId, model: ModelRecord | null):
   // The vision role's URL is explicitly bound as the vision engine, so
   // capability reporting follows that binding without claiming for any
   // other role's remote server.
-  if (role === "vision" && urlBindingFor(role)) return true;
+  if (role === PICTURE_READER_ROLE && urlBindingFor(role)) return true;
   if (urlBindingFor(role)) return false;
   const running = runtime(role).process;
   if (running && !running.retired) return running.imageInput === true;
@@ -951,10 +951,10 @@ export function projectorFor(model: ModelRecord): ModelRecord | null {
  * on disk, for the role's engine, and for `vision` declaring picture
  * input. */
 function servesRole(model: ModelRecord, role: RoleId, engine: string | null): boolean {
-  const selectedChatSplash = role === "chat" && SPLASH_CHAT_IDS.includes(model.id) && engineForRole(role) === "splash" && model.id === splashChatModelId();
+  const selectedChatSplash = role === PRIMARY_ROLE && SPLASH_CHAT_IDS.includes(model.id) && engineForRole(role) === "splash" && model.id === splashChatModelId();
   // The optional Splash-only chat models (the 35B, Flash Next) are ones `recordEngineFor` (which maps Splash to llama-server records) would hide: each is listed and loadable once it and its draft are installed, so Home's chooser can pick it. Never bound or recommended by a Standard or Boost tier.
-  const optionalSplashChat = role === "chat" && SPLASH_ONLY_CHAT_IDS.includes(model.id) && splashPairReady(model.id);
-  return model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (selectedChatSplash || optionalSplashChat || !engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine) && (role !== "vision" || declaresImageInput(model));
+  const optionalSplashChat = role === PRIMARY_ROLE && SPLASH_ONLY_CHAT_IDS.includes(model.id) && splashPairReady(model.id);
+  return model.roles.includes(role) && !isComponent(model) && isModelSelectable(model) && !!model.modelPath && (selectedChatSplash || optionalSplashChat || !engine || !model.engineRequirements.engine || model.engineRequirements.engine === engine) && (role !== PICTURE_READER_ROLE || declaresImageInput(model));
 }
 
 export function selectedModel(role: RoleId): ModelRecord | null {
@@ -963,25 +963,25 @@ export function selectedModel(role: RoleId): ModelRecord | null {
     const pinned = getModel(STACK_HELPER_MODEL_ID);
     return pinned && isModelSelectable(pinned) && !!pinned.modelPath ? pinned : null;
   }
-  if (currentHomeMode() === "coding" && !homeModeLeavingCoding() && MODE_FOLLOWER_ROLES.includes(role)) {
+  if (currentHomeMode() === HEAVY_ROLE && !homeModeLeavingCoding() && MODE_FOLLOWER_ROLES.includes(role)) {
     const heavy = getModel(codingModeHeavy().pin.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
   }
-  if (role === "coding" && currentHomeMode() === "coding") {
+  if (role === HEAVY_ROLE && currentHomeMode() === HEAVY_ROLE) {
     const heavy = getModel(codingModeHeavy().pin.id);
     return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null;
   }
   if (reducedChatForcesLight() && MODE_FOLLOWER_ROLES.includes(role)) {
     return reducedLightModel();
   }
-  if (role === "judge" && (!machineTier || !PROFILE_MODEL_BINDINGS[machineTier]?.judge)) return selectedModel("chat");
+  if (role === "judge" && (!machineTier || !PROFILE_MODEL_BINDINGS[machineTier]?.judge)) return selectedModel(PRIMARY_ROLE);
   // A record names the engine it is for; the chat wire's chosen engine
   // decides which records can serve it (a GGUF for llama-server, an MLX
   // directory for mlx-serve), both installed side by side.
   const engine = recordEngineFor(role);
   const selectable = listModels().filter((model) => servesRole(model, role, engine));
   // The session's "load this" first, then the choice Home stored in the setting (it survives a restart).
-  const stored = role === "chat" ? String(settingValues()["stack.engines.chat.model"] ?? "") : role === "coding" ? String(settingValues()["stack.engines.coding.model"] ?? "") : "";
+  const stored = role === PRIMARY_ROLE ? String(settingValues()["stack.engines.chat.model"] ?? "") : role === HEAVY_ROLE ? String(settingValues()["stack.engines.coding.model"] ?? "") : "";
   // docs/dev/choices.md, "What runs": the session's "load this", then the household's stored choice for the level (the pick, the order), then the
   // legacy setting, then the profile's binding. A choice that is not installed is not in `selectable`, so the model that was answering keeps answering.
   const category = categoryOfRole(role);
@@ -998,7 +998,7 @@ export function selectedModel(role: RoleId): ModelRecord | null {
  * Kept beside selection so the API and dispatcher share the same
  * provenance, file and engine-compatibility rules. */
 export function selectableModels(role: RoleId): Array<{ id: string; name: string }> {
-  if (currentHomeMode() === "coding" && MODE_FOLLOWER_ROLES.includes(role)) return selectedModel("chat") ? [{ id: codingModeHeavy().pin.id, name: codingModeHeavy().pin.id }] : [];
+  if (currentHomeMode() === HEAVY_ROLE && MODE_FOLLOWER_ROLES.includes(role)) return selectedModel(PRIMARY_ROLE) ? [{ id: codingModeHeavy().pin.id, name: codingModeHeavy().pin.id }] : [];
   const engine = recordEngineFor(role);
   return listModels()
     .filter((model) => servesRole(model, role, engine))
@@ -1009,7 +1009,7 @@ export function selectableModels(role: RoleId): Array<{ id: string; name: string
 export function selectableModel(role: RoleId, modelId: string): ModelRecord | null {
   if (reducedChatForcesLight() && MODE_FOLLOWER_ROLES.includes(role)) { const forced = selectedModel(role); if (forced?.id === modelId) return forced; }
   // The mode's big model may be a chat-role record (Flash Next): the mode starts it for coding, as selectedModel names it.
-  if (role === "coding" && modelId === codingModeHeavy().pin.id) { const heavy = getModel(modelId); return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null; }
+  if (role === HEAVY_ROLE && modelId === codingModeHeavy().pin.id) { const heavy = getModel(modelId); return heavy && isModelSelectable(heavy) && !!heavy.modelPath ? heavy : null; }
   const engine = recordEngineFor(role);
   return listModels().find((model) => model.id === modelId && servesRole(model, role, engine)) ?? null;
 }
@@ -1261,7 +1261,7 @@ export function codingKeepWarmSeconds(): number { return codingLaunchSettings().
 /** `stack.engines.coding.yield_to_chat` (default true), read live: an admin can turn the yield off and the engine continues at once. */
 export function codingYieldsToChat(values: Record<string, SettingValue> = settingValues()): boolean {
   // In Home's coding mode the coding process IS the chat process: yielding to chat would pause the engine that is answering it (a 20 second wait on every request, found by the end to end run).
-  if (currentHomeMode() === "coding" || homeModeEnteringCoding()) return false;
+  if (homeHeavyModeActive()) return false;
   return values["stack.engines.coding.yield_to_chat"] !== false;
 }
 
@@ -1272,7 +1272,7 @@ function codingYieldBegin(processRecord: RoleProcess): void {
   if (!processRecord.pausable) return;
   const held = codingYield.get(processRecord);
   if (held) { held.holds++; return; }
-  const lease = heavyGate.attach({ role: "coding", worker: processRecord.pausable, skipCoding: true, maxPauseMs: () => codingPauseBoundMs(processRecord.engine), enabled: () => codingYieldsToChat() });
+  const lease = heavyGate.attach({ role: HEAVY_ROLE, worker: processRecord.pausable, skipCoding: true, maxPauseMs: () => codingPauseBoundMs(processRecord.engine), enabled: () => codingYieldsToChat() });
   codingYield.set(processRecord, { lease, holds: 1 });
 }
 
@@ -1308,7 +1308,7 @@ function withActiveTimeout<T>(work: Promise<T>, ms: number, pausedMs: () => numb
 
 /** Pushes the keep-warm setting into the governor (a live setting). */
 export function applyCodingKeepWarm(values?: Record<string, SettingValue>): void {
-  setIdleTtlSeconds("coding", codingLaunchSettings(values).keepWarmMinutes * 60);
+  setIdleTtlSeconds(HEAVY_ROLE, codingLaunchSettings(values).keepWarmMinutes * 60);
 }
 
 /** The window the coding process starts with: the one asked for while the
@@ -1363,16 +1363,16 @@ export interface CodingEngineStatus {
 }
 
 export function codingEngineStatus(): CodingEngineStatus {
-  const current = runtime("coding");
+  const current = runtime(HEAVY_ROLE);
   const settings = codingLaunchSettings();
   const running = current.process && !current.process.retired ? current.process : null;
-  const base = getRoleStatus("coding");
-  const model = selectedModel("coding");
+  const base = getRoleStatus(HEAVY_ROLE);
+  const model = selectedModel(HEAVY_ROLE);
   let state: CodingEngineStatus["state"];
   if (running) state = running.activeRequests > 0 ? "busy" : "ready";
   else if (current.starting || base.state === "loading") state = "loading";
   else if (base.state === "offline") state = "offline";
-  else state = model && engineInstalledFor("coding") ? "installed" : "notInstalled";
+  else state = model && engineInstalledFor(HEAVY_ROLE) ? "installed" : "notInstalled";
   const lastEnd = current.lastRealRequestAt;
   return {
     state,
@@ -1395,24 +1395,24 @@ function codingEngineFields(running: RoleProcess | null): Pick<CodingEngineStatu
 
 /** The engine the coding role runs on, from what is configured and installed, without starting anything (S3: the wire check reads it before a request can start the engine). */
 let codingEngineForTests: string | null | undefined;
-export function codingEngineName(): string | null { return codingEngineForTests !== undefined ? codingEngineForTests : engineForRole("coding"); }
+export function codingEngineName(): string | null { return codingEngineForTests !== undefined ? codingEngineForTests : engineForRole(HEAVY_ROLE); }
 export function setCodingEngineForTests(engine: string | null | undefined): void { codingEngineForTests = engine; }
 
 /** What `GET /v1/models?role=coding` lists: the coding role's one served model, or null when none is bound. The window is the running engine's when loaded and the one the next start asks for otherwise; the ceiling is the live setting. Never starts the engine. */
 export function codingServedModel(): { id: string; context_length: number; thinking_budget_ceiling: number } | null {
-  const model = selectedModel("coding");
+  const model = selectedModel(HEAVY_ROLE);
   if (!model) return null;
   const settings = codingLaunchSettings();
-  const running = runtime("coding").process;
+  const running = runtime(HEAVY_ROLE).process;
   return { id: model.id, context_length: running && !running.retired && running.contextLength ? running.contextLength : settings.contextLength, thinking_budget_ceiling: settings.thinkingBudgetTokens };
 }
 
 /** Why coding cannot load right now, from facts at hand (no dry run, no process): the last refusal for memory, or a model whose estimated peak exceeds the model budget outright. */
 export function codingCannotFitReason(): string | null {
-  if (runtime("coding").process) return null;
-  const refused = runtime("coding").cannotFitReason ?? null;
+  if (runtime(HEAVY_ROLE).process) return null;
+  const refused = runtime(HEAVY_ROLE).cannotFitReason ?? null;
   if (refused) return refused;
-  const model = selectedModel("coding");
+  const model = selectedModel(HEAVY_ROLE);
   if (!model?.sizeBytes) return null;
   const peak = Math.ceil((model.measuredFootprintBytes ?? model.sizeBytes * 1.3));
   const status = getGovernorStatus();
@@ -1429,7 +1429,7 @@ export async function unloadJitForGovernor(id: string): Promise<boolean> {
   if (!JIT_ROLES.includes(role)) return false;
   const current = runtimes.get(role);
   if (!current?.process) return false;
-  if (role === "coding") {
+  if (role === HEAVY_ROLE) {
     if (current.process.activeRequests > 0) return false;
     const keepWarmMs = codingKeepWarmSeconds() * 1000;
     const idleLong = current.lastRealRequestAt !== null && Date.now() - current.lastRealRequestAt >= keepWarmMs - 6_000;
@@ -1447,7 +1447,7 @@ let chatWindowCapTokens: number | null = null;
 /** Applies the temporary chat window cap, never below the floor and
  * never to a role other than chat. */
 export function capChatWindow(role: RoleId, contextLength: number): number {
-  if (role !== "chat" || chatWindowCapTokens === null) return contextLength;
+  if (role !== PRIMARY_ROLE || chatWindowCapTokens === null) return contextLength;
   return Math.min(contextLength, Math.max(chatWindowCapTokens, CHAT_YIELD_FLOOR_TOKENS));
 }
 
@@ -1458,11 +1458,11 @@ export function chatWindowShrunk(): boolean { return chatWindowCapTokens !== nul
  * chat is not running, or when its window is already at the floor. */
 export async function shrinkChatForVideo(): Promise<boolean> {
   if (chatWindowCapTokens !== null) return true;
-  const current = runtimes.get("chat")?.process;
+  const current = runtimes.get(PRIMARY_ROLE)?.process;
   if (!current || current.kind !== "spawned" || current.retired || current.activeRequests > 0) return false;
   chatWindowCapTokens = CHAT_YIELD_FLOOR_TOKENS;
   logger.appendLine(JSON.stringify({ event: "chat.window", action: "shrink", cap_tokens: CHAT_YIELD_FLOOR_TOKENS, cause: "video" }));
-  await recycleRole("chat", "video-window-shrink");
+  await recycleRole(PRIMARY_ROLE, "video-window-shrink");
   void import("@/lib/warmup").then((module) => module.warmUp("video-window-shrink")).catch(() => {});
   return true;
 }
@@ -1471,12 +1471,12 @@ export async function shrinkChatForVideo(): Promise<boolean> {
  * while chat serves a request, so a conversation is never cut mid-answer. */
 export async function restoreChatWindow(): Promise<boolean> {
   if (chatWindowCapTokens === null) return true;
-  const current = runtimes.get("chat")?.process;
+  const current = runtimes.get(PRIMARY_ROLE)?.process;
   if (current && current.activeRequests > 0) return false;
   chatWindowCapTokens = null;
   if (current && !current.retired) {
     logger.appendLine(JSON.stringify({ event: "chat.window", action: "restore", cap_tokens: null, cause: "video" }));
-    await recycleRole("chat", "video-window-restore");
+    await recycleRole(PRIMARY_ROLE, "video-window-restore");
     void import("@/lib/warmup").then((module) => module.warmUp("video-window-restore")).catch(() => {});
   }
   return true;
@@ -1530,11 +1530,11 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const declared = engineSettingValues("engines.llama_server");
   const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
   // The coding role sizes its own window (codingContextFor) and never reaches the chat launch's context fit.
-  const codingRole = role === "coding";
+  const codingRole = role === HEAVY_ROLE;
   // A record with its own launch (vision) runs one slot, as its args say.
   const slots = role === "helper" || declaredLaunchContext(model) !== null ? 1 : typeof config.slots === "number" && config.slots > 0 ? config.slots : 1;
   const contextLength = capChatWindow(role, resolvedContextLength ?? (codingRole ? pinnedCodingWindow(model) ?? codingLaunchSettings().contextLength : role === "helper" ? HELPER_CONTEXT_TOKENS : null) ?? declaredLaunchContext(model) ?? (typeof config.contextLength === "number" && config.contextLength > 0 ? config.contextLength : engineForRole(role) === "omlx" ? omlxContextLength(model, config) : await contextForLaunch(model, config, slots, gpuLayersFor(role))));
-  if (role === "chat" && engineForRole(role) === "splash") return splashLaunchPlan(model, port, contextLength, "splash-chat");
+  if (role === PRIMARY_ROLE && engineForRole(role) === "splash") return splashLaunchPlan(model, port, contextLength, "splash-chat");
   if (codingRole && engineForRole(role) === "splash") return splashLaunchPlan(model, port, resolvedContextLength ?? pinnedCodingWindow(model) ?? codingLaunchSettings().contextLength);
   if (engineForRole(role) === "omlx") {
     // oMLX (ENGINE-MLX-01): an environment the Stack built, serving the one
@@ -1568,7 +1568,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const pin = installedEnginePin();
   if (!pin || !engineInstalled()) throw new EngineUnavailableError("No installed llama-server build is available for this machine.");
   const binary = launchBinary(pin);
-  if (role === "coding") {
+  if (role === HEAVY_ROLE) {
     // The coding role's own launch: thinking on under a server-side budget, q8_0 KV, one shared window, offline.
     const coding = codingLaunchSettings();
     const window = resolvedContextLength ?? coding.contextLength;
@@ -1576,9 +1576,9 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
     return { command: [binary, ...args], apiKey: newLaunchKey(), engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength: window, slots: coding.slots, contextScope: "total across slots", kind: "spawned", imageInput: false, pictureTokensMax: null };
   }
   const projector = launchProjectorFor(role, model);
-  if (role === "vision" && !projector?.modelPath) throw new EngineUnavailableError(`The ${model.id} projector is not installed.`);
+  if (role === PICTURE_READER_ROLE && !projector?.modelPath) throw new EngineUnavailableError(`The ${model.id} projector is not installed.`);
   const pictureTokensMax = projector?.modelPath ? declaredPictureTokensMax(model) : null;
-  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), gpuLayers: gpuLayersFor(role), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === "vision", imageMaxTokens: pictureTokensMax ?? undefined, chatTemplateKwargs: declaredChatTemplateKwargs(model) ?? undefined });
+  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), gpuLayers: gpuLayersFor(role), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === PICTURE_READER_ROLE, imageMaxTokens: pictureTokensMax ?? undefined, chatTemplateKwargs: declaredChatTemplateKwargs(model) ?? undefined });
   return { command: [binary, ...args], apiKey: newLaunchKey(), engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", imageInput: !!projector?.modelPath, pictureTokensMax };
 }
 
@@ -1598,9 +1598,9 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
   const values = settingValues();
   const coding = codingLaunchSettings(values);
   const tag = currentEngineTag(pinName) ?? pin.tag;
-  const modeCoding = currentHomeMode() === "coding" || homeModeEnteringCoding();
+  const modeCoding = homeHeavyModeActive();
   const governor = getGovernorStatus();
-  const stayingBytes = modeCoding ? governor.loaded.filter((item) => !["chat", "judge", "coding"].includes(item.id)).reduce((sum, item) => sum + item.peakBytes, 0) : 0;
+  const stayingBytes = modeCoding ? governor.loaded.filter((item) => ![PRIMARY_ROLE, "judge", HEAVY_ROLE].includes(item.id)).reduce((sum, item) => sum + item.peakBytes, 0) : 0;
   const draftRecord = getModel(pair.draftPin.id);
   const estimate = splashFootprintEstimateBytes({ weightsBytes: splashResidentWeightsBytes(model.id, model.sizeBytes ?? 0), draftBytes: draftRecord?.sizeBytes ?? pair.draftPin.download!.approx_bytes, contextTokens: contextLength });
   const chatRole = pinName === "splash-chat";
@@ -1623,12 +1623,12 @@ export function splashLaunchPlan(model: ModelRecord, port: number, contextLength
     client: (baseUrl) => chatRole ? new SplashChatClient(new OpenAIEngineClient(baseUrl, "/ready", apiKey), model.id, { ...(model.engineRequirements.sampling as Record<string, unknown> ?? {}), thinking_budget_ceiling: thinkingBudget }) : new ServedNameClient(new OpenAIEngineClient(baseUrl, "/ready", apiKey), model.id),
     // Splash has no /props: the Stack knows both what it launched and which file it linked.
     identity: { build: `splash-${tag}`, model: modelFileName(model.modelPath!) },
-    verifyServed: (baseUrl) => verifySplashServes(baseUrl, model.id, chatRole ? "chat" : "coding", apiKey),
+    verifyServed: (baseUrl) => verifySplashServes(baseUrl, model.id, chatRole ? PRIMARY_ROLE : HEAVY_ROLE, apiKey),
   };
 }
 
 /** The readiness identity check: the engine on this port lists the served name the Stack gave it and calls itself Splash. */
-export async function verifySplashServes(baseUrl: string, servedName: string, roleLabel = "coding", apiKey?: string): Promise<void> {
+export async function verifySplashServes(baseUrl: string, servedName: string, roleLabel = HEAVY_ROLE, apiKey?: string): Promise<void> {
   let listed: Array<{ id?: unknown; owned_by?: unknown }> = [];
   try {
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/models`, { headers: apiKey ? { authorization: `Bearer ${apiKey}` } : undefined, signal: AbortSignal.timeout(5_000) });
@@ -1739,9 +1739,9 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   if (!model?.modelPath) throw new EngineUnavailableError(modelMissingReason(role));
   const launchConfig = engineSettingValues("engines.llama_server") as Record<string, number | boolean | string | string[]>;
   // The coding role: its slots and its window come from its own settings, and the window steps down until the engine's dry run fits what the governor can admit without evicting anything.
-  const coding = role === "coding" ? codingLaunchSettings() : null;
+  const coding = role === HEAVY_ROLE ? codingLaunchSettings() : null;
   // On Splash there is no `llama-fit-params`: the window is the setting's (Splash's key-value cache is small) and the governor's figure is an estimate, until the post-load reading of the process tree replaces it.
-  const onChatSplash = role === "chat" && engineForRole(role) === "splash";
+  const onChatSplash = role === PRIMARY_ROLE && engineForRole(role) === "splash";
   const onSplash = (coding !== null && engineForRole(role) === "splash") || onChatSplash;
   const splashPair = onSplash ? splashPairFor(model.id) : null;
   const splashContext = onChatSplash ? declaredLaunchContext(model) ?? Math.max(32_768, Math.floor(Number(settingValues()["stack.engines.chat.context_length"] ?? model.measuredContextLength ?? 131_072))) : coding ? pinnedCodingWindow(model) ?? coding.contextLength : 0;
@@ -1793,7 +1793,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     const projectorBytes = launchProjectorFor(role, model)?.sizeBytes ?? 0;
   const pinMeasured = measuredPeakFromPin(model);
   const request = {
-    id: role, kind: JIT_ROLES.includes(role) && !(role === "coding" && (currentHomeMode() === "coding" || homeModeEnteringCoding())) ? "jit" as const : "resident" as const,
+    id: role, kind: JIT_ROLES.includes(role) && !(role === HEAVY_ROLE && (homeHeavyModeActive())) ? "jit" as const : "resident" as const,
     requestedBytes: managed && !generator ? (model.measuredFootprintBytes ?? TTS_ENGINES[activeTtsChoice().engine].estimatedFootprintBytes) : (model.sizeBytes ?? 0) + projectorBytes,
     modelFileBytes: managed && !generator ? null : (model.sizeBytes ?? 0) + projectorBytes || null,
     // A jit role's pin carries the whole-machine cost measured on a real
@@ -1808,10 +1808,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     engine: generator ? "comfyui" : managed ? TTS_ENGINES[activeTtsChoice().engine].catalogEngine : SPEECH_ROLES.includes(role) ? "sherpa-onnx-node" : engineForRole(role) === "mlx-serve" ? "mlx-serve" : engineForRole(role) === "omlx" ? "oMLX" : onChatSplash ? "splash-chat" : onSplash ? "splash" : "llama-server",
     pinned: pinnedModels.has(model.id),
     // The coding engine gives way to a generator job while it is idle (CODE-STACK-01 S2).
-    ...(role === "coding" ? { yieldsToGenerators: !(currentHomeMode() === "coding" || homeModeEnteringCoding()), pinned: currentHomeMode() === "coding" || homeModeEnteringCoding() || pinnedModels.has(model.id) } : {}),
+    ...(role === HEAVY_ROLE ? { yieldsToGenerators: !(homeHeavyModeActive()), pinned: homeHeavyModeActive() || pinnedModels.has(model.id) } : {}),
   };
   // The coding engine's own keep-warm limit replaces the governor-wide idle limit for it.
-  if (role === "coding") applyCodingKeepWarm();
+  if (role === HEAVY_ROLE) applyCodingKeepWarm();
   let timedOut = false;
   // A stop or a restart during the wait (the generation moves) means
   // nobody wants this admission any more.
@@ -1820,10 +1820,10 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   try {
     admission = await waitForAdmission(request, { stillWanted: () => !timedOut && !stoppingAll && runtime(role).generation === startGeneration, timeoutMs: START_WAIT_MS, onGaveUp: () => { timedOut = true; } });
   } catch (error) {
-    if ((role === "coding" || onChatSplash) && error instanceof AdmissionRefusedError) throw new EngineDoesNotFitError(codingRefusal(request));
+    if ((role === HEAVY_ROLE || onChatSplash) && error instanceof AdmissionRefusedError) throw new EngineDoesNotFitError(codingRefusal(request));
     throw new EngineUnavailableError(error instanceof AdmissionRefusedError ? error.message.replace(/^\S+ needs about/, `The ${role} engine needs about`) : (error as Error).message);
   }
-  if (!admission && (role === "coding" || onChatSplash) && !stoppingAll && runtime(role).generation === startGeneration) throw new EngineDoesNotFitError(codingRefusal(request));
+  if (!admission && (role === HEAVY_ROLE || onChatSplash) && !stoppingAll && runtime(role).generation === startGeneration) throw new EngineDoesNotFitError(codingRefusal(request));
   if (!admission) throw new EngineUnavailableError(stoppingAll ? "The Stack is stopping." : runtime(role).generation !== startGeneration ? `The ${role} engine was stopped while it waited for memory.` : `${waitingReason(role, request)} The ${role} engine waited ${Math.round(START_WAIT_MS / 1000)} s for memory and gave up.`);
 
   const port = await findFreePort();
@@ -1886,7 +1886,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     // A tree's weights are held by its native child: the reading is the whole tree's, and it is not stored on the model (the llama-server reading belongs to the same pin).
     if (tree) { tree.refresh(); check.actualBytes = treeMemoryBytes(handle.pid, (member) => getMemoryReader().processMemoryBytes(member)); }
     const keepsFootprint = tree ? false : keepsMeasuredFootprint(model, plan.imageInput === true);
-    const readsPictures = plan.imageInput === true && (role === "vision" || await picturesProbeOk(client));
+    const readsPictures = plan.imageInput === true && (role === PICTURE_READER_ROLE || await picturesProbeOk(client));
     if (plan.imageInput === true && !readsPictures) raise({ code: `picture-check-failed.${role}`, severity: "warning", title: "Chat cannot read pictures right now", text: `The ${model.id} projector loaded but did not read the check picture; chat answers text only until it restarts.`, cause: "picture check failed", fix: { label: "Restart engine", action: "restart_engine" } });
     else resolveHealth(`picture-check-failed.${role}`);
     check.loadMs = Math.round(performance.now() - loadStartedAt);
@@ -1904,12 +1904,12 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
     resolveHealth(`post-load-check-failed.${role}`);
     const loadedRevision = plan.kind === "managed" && !GENERATOR_ROLES.includes(role) ? (mlxTtsRepoFor(plan.engine) ? model.revision : loadedWeightsRepo()?.revision) ?? null : null;
     // The coding engine is the one engine the isolation gate may stop (it yields to chat); no other engine gets a pausable handle.
-    const codingPausable = role === "coding" && plan.kind === "spawned" ? new PausableProcess(handle.pid, handle.exited, { engine: true, tree: plan.tree === true }) : undefined;
+    const codingPausable = role === HEAVY_ROLE && plan.kind === "spawned" ? new PausableProcess(handle.pid, handle.exited, { engine: true, tree: plan.tree === true }) : undefined;
     const processRecord: RoleProcess = {
       role, kind: plan.kind, client, identity, engine: plan.engine, contextLength: plan.contextLength, slots: plan.slots, contextScope: plan.contextScope, modelId: model.id, modelRevision: loadedRevision ?? model.revision, imageInput: readsPictures, projectorLoaded: plan.imageInput === true, pictureTokensMax: readsPictures ? plan.pictureTokensMax ?? null : null, pid: handle.pid, port, activeRequests: 0, retired: false,
       governorHandle: admission,
       stopGovernor: watchProcessMemory(role, handle.pid, keepsFootprint ? { modelId: model.id, contextLength } : undefined, tree ? (pid) => Promise.resolve(treeMemoryBytes(pid, (member) => getMemoryReader().processMemoryBytes(member))) : undefined),
-      ...(role === "coding" && plan.kind === "spawned" ? { pausable: codingPausable } : {}),
+      ...(role === HEAVY_ROLE && plan.kind === "spawned" ? { pausable: codingPausable } : {}),
       // A stopped process holds SIGTERM until it runs again, so it continues first. A tree is asked to stop from its root, given a few seconds, and then every member that is still running is stopped, so nothing is left holding memory.
       owned,
       stop: async () => {
@@ -1950,7 +1950,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
 }
 
 const modelMissingReason = (role: RoleId): string => `No verified and installed ${role} model is available.`;
-const LLAMA_RESIDENTS: RoleId[] = ["chat", "embed", "judge", "router"];
+const LLAMA_RESIDENTS: RoleId[] = [PRIMARY_ROLE, "embed", "judge", "router"];
 /** Why a resident llama-server role cannot start now (no installed engine build, no verified model), or null. A scripted engine stands in for both. */
 export function residentStartBlocker(role: RoleId, modelId?: string): string | null {
   // A scripted engine stands in for an installed model, as it does for an installed engine, unless the test says it checks models.
@@ -1979,8 +1979,8 @@ async function startOne(role: RoleId, modelId?: string): Promise<RoleProcess> {
   const bound = urlBindingFor(role);
   if (bound) return startUrlProcess(role, bound.url);
   if (role === "tts") return startVoiceWithFallback(modelId);
-  if (role === "chat") return startChatWithFallback(modelId);
-  if (role === "coding") return currentHomeMode() === "coding" || homeModeEnteringCoding() ? startSpawnedProcess("coding", codingModeHeavy().pin.id) : startCodingWithFallback(modelId);
+  if (role === PRIMARY_ROLE) return startChatWithFallback(modelId);
+  if (role === HEAVY_ROLE) return homeHeavyModeActive() ? startSpawnedProcess(HEAVY_ROLE, codingModeHeavy().pin.id) : startCodingWithFallback(modelId);
   return startSpawnedProcess(role, modelId);
 }
 
@@ -1993,13 +1993,13 @@ async function startChatWithFallback(modelId?: string, start: (role: RoleId, mod
   const choice = activeChatChoice();
   if (choice.engine !== "omlx" && choice.engine !== "splash") {
     if (choice.requested === "splash" && choice.reason) raise({ code: "chat.engine-fallback", severity: "warning", title: "Splash is not running; chat is on llama-server", text: choice.reason, cause: choice.reason, fix: { label: "Restart engine", action: "restart_engine" } });
-    return start("chat", modelId);
+    return start(PRIMARY_ROLE, modelId);
   }
   const engine = choice.engine;
   let reason = "";
   for (let attempt = 1; attempt <= FALLBACK_AFTER_FAILURES; attempt++) {
     try {
-      const started = await start("chat", modelId);
+      const started = await start(PRIMARY_ROLE, modelId);
       resolveHealth("chat.engine-fallback");
       return started;
     } catch (error) {
@@ -2010,7 +2010,7 @@ async function startChatWithFallback(modelId?: string, start: (role: RoleId, mod
     }
   }
   raise({ code: "chat.engine-fallback", severity: "warning", title: `${engine} did not start; chat is on llama-server`, text: reason, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
-  return start("chat", modelId);
+  return start(PRIMARY_ROLE, modelId);
 }
 /** The fallback with the spawn replaced, for the suite. */
 export const startChatWithFallbackForTests = startChatWithFallback;
@@ -2025,10 +2025,10 @@ async function startCodingWithFallback(modelId?: string, start: (role: RoleId, m
       if (choice.requested === "splash" && choice.reason) raise({ code: "coding.engine-fallback", severity: "warning", title: "Splash is not running; coding is on llama-server", text: choice.reason, cause: choice.reason, fix: { label: "Restart engine", action: "restart_engine" } });
       else if (choice.requested !== "splash") resolveHealth("coding.engine-fallback");
     }
-    return start("coding", modelId);
+    return start(HEAVY_ROLE, modelId);
   }
   try {
-    const started = await start("coding", modelId);
+    const started = await start(HEAVY_ROLE, modelId);
     resolveHealth("coding.engine-fallback");
     return started;
   } catch (error) {
@@ -2038,7 +2038,7 @@ async function startCodingWithFallback(modelId?: string, start: (role: RoleId, m
     if (!noRoom) markCodingEngineFailed(reason);
     raise({ code: "coding.engine-fallback", severity: "warning", title: "Splash did not start; coding is on llama-server", text: `${/[.!?]$/.test(reason) ? reason : `${reason}.`} Coding is using the slower engine, llama-server, ${noRoom ? "for this request. Wait for the picture, video or song job to finish, or close a large app." : "until the coding engine is restarted. Restart the coding engine to try Splash again."}`, cause: reason, fix: { label: "Restart engine", action: "restart_engine" } });
     forcedCodingEngine = "llama-server";
-    try { return await start("coding", modelId); } finally { forcedCodingEngine = null; }
+    try { return await start(HEAVY_ROLE, modelId); } finally { forcedCodingEngine = null; }
   }
 }
 /** The fallback with the spawn replaced, for the suite. */
@@ -2161,7 +2161,7 @@ export function lastRealRequestAt(requested: RoleId): number | null {
 }
 
 export function lastInteractiveAt(): number | null {
-  return [lastRealRequestAt("chat"), lastRealRequestAt("stt"), lastRealRequestAt("tts")].filter((at): at is number => at !== null).sort((a, b) => b - a)[0] ?? null;
+  return [lastRealRequestAt(PRIMARY_ROLE), lastRealRequestAt("stt"), lastRealRequestAt("tts")].filter((at): at is number => at !== null).sort((a, b) => b - a)[0] ?? null;
 }
 
 /** The identity a role's process is expected to report, and whether it
@@ -2334,7 +2334,7 @@ async function retire(processRecord: RoleProcess, reason: string, cause: RetireC
  * restarted. */
 export async function restartForNewProjector(): Promise<RoleId[]> {
   const restarted: RoleId[] = [];
-  for (const role of ["chat"] as RoleId[]) {
+  for (const role of [PRIMARY_ROLE] as RoleId[]) {
     const running = runtime(role).process;
     const model = selectedModel(role);
     if (!running || running.retired || running.projectorLoaded === true || !model || running.modelId !== model.id) continue;
@@ -2351,10 +2351,10 @@ export async function restartForNewProjector(): Promise<RoleId[]> {
  * only when the engine in effect for a fresh start differs. Returns true
  * when it restarted chat. */
 export async function restartForNewChatEngine(): Promise<boolean> {
-  const running = runtime("chat").process;
+  const running = runtime(PRIMARY_ROLE).process;
   if (!running || running.retired || running.kind === "url" || running.activeRequests > 0) return false;
   if (running.engine === activeChatChoice().engine) return false;
-  await restartRole("chat", "new-chat-engine");
+  await restartRole(PRIMARY_ROLE, "new-chat-engine");
   return true;
 }
 
@@ -2387,7 +2387,7 @@ export async function restartRole(requested: RoleId, cause: RetireCause): Promis
  * between turns (no request in flight) and only when its Metal engine passes the host check; otherwise the governor asks
  * again later. Owner's ruling 2026-11-12. */
 export async function restartChatForOverage(): Promise<boolean> {
-  const current = runtime("chat").process;
+  const current = runtime(PRIMARY_ROLE).process;
   if (!current || current.kind !== "spawned" || current.activeRequests > 0) return false;
   const fault = await metalHostFault(current.engine ?? "splash");
   if (fault) { logger.appendLine(JSON.stringify({ event: "chat.overage-restart-skipped", reason: fault })); return false; }
@@ -2397,14 +2397,14 @@ export async function restartChatForOverage(): Promise<boolean> {
 
 /** HOST-GUARD-05: recycle chat for a guarded memory-ceiling or maintenance restart. R1 remains in force for every other reserved role. */
 export async function restartChatForHostGuard(cause: Extract<RetireCause, "memory-ceiling" | "maintenance-restart">): Promise<void> {
-  await recycleRole("chat", cause);
+  await recycleRole(PRIMARY_ROLE, cause);
   // The reason rides on the existing loading row (Home's chat "starting" line, RULES S6): plain words, nothing about memory.
-  runtime("chat").status.reason = cause === "memory-ceiling" ? "Chat is restarting to keep room for other work." : "Chat is restarting for its scheduled refresh.";
-  void getProcess("chat").catch((error: unknown) => logger.appendLine(JSON.stringify({ event: "chat.host-guard-restart-failed", cause, message: error instanceof Error ? error.message : String(error) })));
+  runtime(PRIMARY_ROLE).status.reason = cause === "memory-ceiling" ? "Chat is restarting to keep room for other work." : "Chat is restarting for its scheduled refresh.";
+  void getProcess(PRIMARY_ROLE).catch((error: unknown) => logger.appendLine(JSON.stringify({ event: "chat.host-guard-restart-failed", cause, message: error instanceof Error ? error.message : String(error) })));
 }
 
 export function chatProcessRuntime(): { pid: number | null; uptimeMs: number | null; engine: string | null; activeRequests: number; kind: EngineKind | null } {
-  const current = runtime("chat");
+  const current = runtime(PRIMARY_ROLE);
   const processRecord = current.process;
   const startedAt = processRecord ? spawnedAtOf.get(processRecord) ?? null : null;
   return { pid: processRecord?.pid ?? null, uptimeMs: startedAt === null ? null : Date.now() - startedAt, engine: processRecord?.engine ?? null, activeRequests: processRecord?.activeRequests ?? 0, kind: processRecord?.kind ?? null };
@@ -2412,11 +2412,11 @@ export function chatProcessRuntime(): { pid: number | null; uptimeMs: number | n
 
 /** Metal memory ceiling passed to Splash chat at launch, for the memory watchdog's process-size comparison. */
 export function chatSplashMemoryCapBytes(): number | null {
-  const model = runtime("chat").process ? getModel(runtime("chat").process!.modelId ?? "") : selectedModel("chat");
-  if (!model || engineForRole("chat") !== "splash") return null;
+  const model = runtime(PRIMARY_ROLE).process ? getModel(runtime(PRIMARY_ROLE).process!.modelId ?? "") : selectedModel(PRIMARY_ROLE);
+  if (!model || engineForRole(PRIMARY_ROLE) !== "splash") return null;
   const pair = splashPairFor(model.id);
   const draft = getModel(pair.draftPin.id);
-  const contextLength = runtime("chat").process?.contextLength ?? Number(settingValues()["stack.engines.chat.context_length"] ?? 131072);
+  const contextLength = runtime(PRIMARY_ROLE).process?.contextLength ?? Number(settingValues()["stack.engines.chat.context_length"] ?? 131072);
   const estimate = splashFootprintEstimateBytes({ weightsBytes: model.sizeBytes ?? 0, draftBytes: draft?.sizeBytes ?? pair.draftPin.download!.approx_bytes, contextTokens: contextLength });
   // The same definition splashLaunchPlan passed as `--max-memory` (SPLASH-MEM-01).
   return splashChatMemoryPlan({ estimateBytes: estimate, measuredBytes: model.measuredFootprintBytes ?? null, headroomBytes: chatHeadroomBytes(settingValues()) }).capBytes;
@@ -2431,8 +2431,8 @@ function chatHeadroomBytes(values: Record<string, unknown>): number {
 export async function recycleRole(requested: RoleId, cause: RetireCause): Promise<void> {
   const role = processRoleFor(requested);
   if (role === "tts") clearTtsEngineFailures();
-  if (role === "chat") clearChatEngineFailures();
-  if (role === "coding") clearCodingEngineFailures();
+  if (role === PRIMARY_ROLE) clearChatEngineFailures();
+  if (role === HEAVY_ROLE) clearCodingEngineFailures();
   const current = runtime(role);
   current.generation++;
   const previous = current.process;
@@ -2492,7 +2492,7 @@ export interface IdleUnloadOptions { now?: Date; onBattery: boolean; idleMinutes
 
 export async function unloadIdleRole(requested: RoleId, options: IdleUnloadOptions): Promise<boolean> {
   const role = processRoleFor(requested);
-  if (role === "coding" && (currentHomeMode() === "coding" || homeModeEnteringCoding())) return false;
+  if (role === HEAVY_ROLE && (homeHeavyModeActive())) return false;
   if (!options.onBattery && options.keep?.includes(role)) return false;
   const current = runtime(role);
   const processRecord = current.process;
@@ -2599,12 +2599,12 @@ export function withPinSampling(modelId: string | null, body: Record<string, unk
  * role keeps its rule: the pin fills only what the request left out, on
  * `/v1/chat/completions` when not streaming and on any path when streaming. */
 function samplingFor(role: RoleId, requested: RoleId, path: string, modelId: string | null, body: Record<string, unknown>, streaming: boolean): Record<string, unknown> {
-  if (role === "coding" && requested === "coding") return CODING_GENERATION_PATHS.includes(path) ? withPinSampling(modelId, dropClientSampling(body)) : body;
+  if (role === HEAVY_ROLE && requested === HEAVY_ROLE) return CODING_GENERATION_PATHS.includes(path) ? withPinSampling(modelId, dropClientSampling(body)) : body;
   return withPinSampling(streaming || path === "/v1/chat/completions" ? modelId : null, body);
 }
 
 function splashChatRequestBody(role: RoleId, processRecord: RoleProcess, body: Record<string, unknown>): Record<string, unknown> {
-  if (role !== "chat" || processRecord.engine !== "splash-chat") return body;
+  if (role !== PRIMARY_ROLE || processRecord.engine !== "splash-chat") return body;
   const out = clampThinking(Array.isArray(body.messages) ? defaultThinkingOff(body) : body, Math.max(0, Math.floor(Number(settingValues()["stack.engines.chat.thinking_budget_ceiling"] ?? settingValues()["stack.engines.coding.thinking_budget_ceiling"] ?? 2000))));
   if (out.reasoning_effort === "none" || out.chat_template_kwargs && typeof out.chat_template_kwargs === "object" && (out.chat_template_kwargs as Record<string, unknown>).enable_thinking === false) {
     out.chat_template_kwargs = { ...(out.chat_template_kwargs && typeof out.chat_template_kwargs === "object" ? out.chat_template_kwargs as Record<string, unknown> : {}), enable_thinking: false };
@@ -2613,7 +2613,7 @@ function splashChatRequestBody(role: RoleId, processRecord: RoleProcess, body: R
 }
 
 export function applyHomeModeCodingDefaults(requested: RoleId, body: Record<string, unknown>): Record<string, unknown> {
-  if (requested !== "coding" || currentHomeMode() !== "coding") return body;
+  if (requested !== HEAVY_ROLE || currentHomeMode() !== HEAVY_ROLE) return body;
   const out = { ...body };
   if (out.reasoning_effort === undefined) out.reasoning_effort = "medium";
   if (out.thinking_budget_tokens === undefined) out.thinking_budget_tokens = codingLaunchSettings().thinkingBudgetTokens;
@@ -2621,7 +2621,7 @@ export function applyHomeModeCodingDefaults(requested: RoleId, body: Record<stri
 }
 
 export async function requestRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleReply> {
-  if (homeModeSwitching() && ["chat", "judge", "router", "coding"].includes(requested)) throw new EngineUnavailableError("Home is changing modes. Try the request again in a few seconds.");
+  if (homeModeSwitching() && [PRIMARY_ROLE, "judge", "router", HEAVY_ROLE].includes(requested)) throw new EngineUnavailableError("Home is changing modes. Try the request again in a few seconds.");
   const role = processRoleFor(requested);
   const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
   const processRecord = await acquireRequestProcess(requested, requestedModel);
@@ -2631,7 +2631,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
   const dispatchBody = splashChatRequestBody(role, processRecord, samplingFor(role, requested, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...applyHomeModeCodingDefaults(requested, body), model: role } : applyHomeModeCodingDefaults(requested, body), false));
     const timedOut = () => new EngineUnavailableError(`Engine request timed out after ${Math.ceil(completionMs / 1000)}s.`);
     const answered = processRecord.client.request(path, dispatchBody, signal);
-    const result = await (role === "coding" ? withActiveTimeout(answered, completionMs, () => codingPausedMs(processRecord), timedOut) : withTimeout(answered, completionMs, timedOut));
+    const result = await (role === HEAVY_ROLE ? withActiveTimeout(answered, completionMs, () => codingPausedMs(processRecord), timedOut) : withTimeout(answered, completionMs, timedOut));
     if (result.status >= 500 && (continueForHealth(processRecord), !await processRecord.client.health())) {
       throw new EngineUnavailableError(`Engine returned HTTP ${result.status} and is no longer healthy.`);
     }
@@ -2654,7 +2654,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
     throw unavailable;
   } finally {
     processRecord.activeRequests--;
-    if (role === "coding") { codingYieldEnd(processRecord); touchGovernor(role); }
+    if (role === HEAVY_ROLE) { codingYieldEnd(processRecord); touchGovernor(role); }
     if (current.process === processRecord && processRecord.activeRequests === 0) current.status = { ...current.status, state: "ready" };
   }
 }
@@ -2663,7 +2663,7 @@ function finishStream(role: RoleId, processRecord: RoleProcess): void {
   const current = runtime(role);
   processRecord.activeRequests--;
   // The coding engine's keep-warm clock counts from the end of its last request, not from its start.
-  if (role === "coding") { codingYieldEnd(processRecord); touchGovernor(role); }
+  if (role === HEAVY_ROLE) { codingYieldEnd(processRecord); touchGovernor(role); }
   if (current.process === processRecord) {
     if (processRecord.activeRequests === 0) current.status = { ...current.status, state: "ready" };
     current.lastRealRequestAt = Date.now();
@@ -2688,7 +2688,7 @@ function trackedStream(role: RoleId, processRecord: RoleProcess, upstream: Reada
 }
 
 export async function streamRole(requested: RoleId, path: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<RoleStreamReply> {
-  if (homeModeSwitching() && ["chat", "judge", "router", "coding"].includes(requested)) throw new EngineUnavailableError("Home is changing modes. Try the request again in a few seconds.");
+  if (homeModeSwitching() && [PRIMARY_ROLE, "judge", "router", HEAVY_ROLE].includes(requested)) throw new EngineUnavailableError("Home is changing modes. Try the request again in a few seconds.");
   const role = processRoleFor(requested);
   const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
   const processRecord = await acquireRequestProcess(requested, requestedModel);

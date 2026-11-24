@@ -49,6 +49,12 @@ export interface RoleDefinition {
   // True on the roles that share chat's model, move with Home mode coding,
   // and take the Reduced chat swap. Collected into MODE_FOLLOWER_ROLES.
   followsHomeMode?: true;
+  // The household's main model role: the one the others share, the Splash chat engine and the context-window shrink apply to.
+  primary?: true;
+  // Loads its own large model in its own process, can be paused while others generate, and takes over in Home's heavy mode.
+  ownHeavyProcess?: true;
+  // Answers questions about pictures it is given.
+  readsPictures?: true;
   /** The role's process can be spawned by the supervisor (SPAWNABLE_ROLES). */
   spawnable?: true;
   /** The speech worker serves this role (SPEECH_ROLES). */
@@ -71,6 +77,7 @@ export const ROLES = {
     quality: ["fast", "everyday", "best"],
     followsHomeMode: true,
     spawnable: true,
+    primary: true,
   },
   // CODE-STACK-01: its own model (Qwen3.8-27B, bound on p64 and p128),
   // loaded only while someone is coding and never chat's process. S2: the
@@ -87,6 +94,7 @@ export const ROLES = {
     quality: ["fast", "everyday", "best"],
     spawnable: true,
     jitAdmitted: true,
+    ownHeavyProcess: true,
   },
   judge: {
     label: "Judge",
@@ -138,6 +146,7 @@ export const ROLES = {
     quality: ["fast", "everyday", "best"],
     spawnable: true,
     jitAdmitted: true,
+    readsPictures: true,
   },
   stt: {
     label: "Voice in",
@@ -215,7 +224,7 @@ export const ROLES = {
 export const MODE_FOLLOWER_ROLES: RoleId[] = ROLE_IDS.filter((role) => (ROLES[role] as RoleDefinition).followsHomeMode);
 /** The role-group flags declared on the rows above; the supervisor derives
  * its role lists from these instead of hard-coding them. */
-export type RoleFlag = "spawnable" | "speechWorker" | "managedEngine" | "generator" | "jitAdmitted";
+export type RoleFlag = "spawnable" | "speechWorker" | "managedEngine" | "generator" | "jitAdmitted" | "primary" | "ownHeavyProcess" | "readsPictures";
 
 /** The role ids carrying this flag, in ROLE_IDS order. */
 export function rolesWith(flag: RoleFlag): RoleId[] {
@@ -256,3 +265,10 @@ export const RoleRecordSchema = RoleDefinitionSchema.extend({
   reason: z.string().nullable(),
   model: z.object({ id: z.string(), sizeBytes: z.number().int().nullable(), measuredFootprintBytes: z.number().int().nullable(), measuredContextLength: z.number().int().nullable(), estimated: z.boolean(), imageInput: z.boolean().optional() }).nullable().optional(),
 });
+
+/** The role each behavior flag names (a flag is on exactly one role). Code reads these, never the role's id. */
+export const PRIMARY_ROLE: RoleId = rolesWith("primary")[0]!;
+export const HEAVY_ROLE: RoleId = rolesWith("ownHeavyProcess")[0]!;
+export const PICTURE_READER_ROLE: RoleId = rolesWith("readsPictures")[0]!;
+/** The Home mode in which the heavy role takes the machine. */
+export const HEAVY_HOME_MODE = "coding" as const;

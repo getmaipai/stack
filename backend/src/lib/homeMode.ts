@@ -1,5 +1,6 @@
 // The Home mode transaction. Runtime operations are injected so the same
 // ordering and rollback rules can be exercised without starting engines.
+import { HEAVY_HOME_MODE } from "@/roles";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -76,6 +77,8 @@ export function initializeHomeMode(initial: HomeMode): void {
 export function currentHomeMode(): HomeMode { return mode; }
 export function homeModeTarget(): HomeMode { return target; }
 export function homeModeEnteringCoding(): boolean { return target === "coding" && state === "switching"; }
+/** True while Home is in, or moving into, its heavy mode (the one where the heavy role takes the machine). */
+export function homeHeavyModeActive(): boolean { return mode === HEAVY_HOME_MODE || homeModeEnteringCoding(); }
 export function homeModeLeavingCoding(): boolean { return target === "normal" && state === "switching"; }
 export function homeModeSwitching(): boolean { return running && state === "switching"; }
 export function homeModeFailure(reasonText: string, category: HomeModeFailure = "start_failed"): void {

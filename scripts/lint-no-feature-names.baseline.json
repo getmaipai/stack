@@ -45,7 +45,7 @@
   "backend/src/lib/sandbox.ts": 1,
   "backend/src/lib/selfHeal.ts": 2,
   "backend/src/lib/splashStore.ts": 1,
-  "backend/src/lib/supervisor.ts": 135,
+  "backend/src/lib/supervisor.ts": 10,
   "backend/src/lib/sweeps.ts": 4,
   "backend/src/lib/tidy.ts": 3,
   "backend/src/lib/tiers.ts": 22,
