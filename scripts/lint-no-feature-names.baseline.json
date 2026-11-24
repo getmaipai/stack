@@ -6,7 +6,7 @@
   "backend/src/lib/choiceRuntime.ts": 7,
   "backend/src/lib/choices.ts": 6,
   "backend/src/lib/clipRoute.ts": 2,
-  "backend/src/lib/components.ts": 56,
+  "backend/src/lib/components.ts": 39,
   "backend/src/lib/componentsDoc.ts": 1,
   "backend/src/lib/diskPlan.ts": 10,
   "backend/src/lib/engineIdle.ts": 2,
