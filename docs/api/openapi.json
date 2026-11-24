@@ -15139,6 +15139,36 @@
                               "helper"
                             ]
                           },
+                          "spawnable": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ]
+                          },
+                          "speechWorker": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ]
+                          },
+                          "managedEngine": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ]
+                          },
+                          "generator": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ]
+                          },
+                          "jitAdmitted": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ]
+                          },
                           "id": {
                             "type": "string",
                             "enum": [
