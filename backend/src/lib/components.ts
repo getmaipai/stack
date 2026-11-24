@@ -12,6 +12,8 @@ import { basename, join } from "node:path";
 import { lastUsedOf } from "@/lib/componentUse";
 import roleUnitRows from "@/rows/roleUnits.json";
 import pictureFamilyRows from "@/rows/pictureFamilies.json";
+import unitMetaRows from "@/rows/unitMeta.json";
+import type { RoleId } from "@/roles";
 import { partDef, partLabel, registerPartUnits } from "@/lib/parts";
 import { detectHardware, knownAppleChip, type HardwareInfo } from "@/lib/hardware";
 import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/lib/jobs";
@@ -111,6 +113,16 @@ export interface UnitDef {
   alwaysRequired?: string;
   /** A licence with terms beyond the open ones: the install waits for an admin to accept it once (Home sends the notice id). */
   licenceNotice?: LicenceNotice;
+}
+
+/** A row of rows/unitMeta.json: the group, role and tiers a unit ships with (data, not logic). */
+type UnitMetaRow = { group: string; role: string; tiers?: string[] };
+
+/** The metadata row for a unit id (its group, role and running tiers); throws when the id has no row. */
+export function unitMeta(id: string): { group: ComponentGroup; role: RoleId; tiers?: Tier[] } {
+  const row = (unitMetaRows as Record<string, UnitMetaRow | undefined>)[id];
+  if (!row) throw new Error("no unit metadata for " + id);
+  return { group: row.group as ComponentGroup, role: row.role as RoleId, tiers: row.tiers as Tier[] | undefined };
 }
 
 const GB = 1_000_000_000;
@@ -321,7 +333,7 @@ export function componentDefs(): UnitDef[] {
   const lookPins = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");
   if (lookPins.length) units.push({ id: "tool-look", label: partLabel("tool-look"), summary: partDef("tool-look")!.description, group: "tools", role: "image", pins: lookPins, envs: [envTools], usedBy: () => ["Look at a picture"], busy: () => null });
   units.push({
-    id: STACK_VIDEO_MODELS[0]!.id, label: partLabel(STACK_VIDEO_MODELS[0]!.id), summary: partDef(STACK_VIDEO_MODELS[0]!.id)!.description, group: "video", role: "video", pins: STACK_VIDEO_MODELS, envs: [envVideo], tiers: ["p128"],
+    id: STACK_VIDEO_MODELS[0]!.id, label: partLabel(STACK_VIDEO_MODELS[0]!.id), summary: partDef(STACK_VIDEO_MODELS[0]!.id)!.description, ...unitMeta(STACK_VIDEO_MODELS[0]!.id), pins: STACK_VIDEO_MODELS, envs: [envVideo],
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
     usedBy: () => { const count = listVideoLoras().filter((lora) => lora.base_model === "wan2.2-ti2v-5b" || lora.base_model === "ltx-2.5").length; return ["The Video app", ...(count ? [`${count} video style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
     busy: () => {
@@ -331,7 +343,7 @@ export function componentDefs(): UnitDef[] {
     },
   });
   units.push({
-    id: STACK_VIDEO_LTX25_MODEL_ID, label: partLabel(STACK_VIDEO_LTX25_MODEL_ID), summary: partDef(STACK_VIDEO_LTX25_MODEL_ID)!.description, group: "video", role: "video", pins: STACK_VIDEO_LTX25_MODELS, envs: [envLtx25], tiers: ["p128"], licenceNotice: LTX_LICENCE_NOTICE,
+    id: STACK_VIDEO_LTX25_MODEL_ID, label: partLabel(STACK_VIDEO_LTX25_MODEL_ID), summary: partDef(STACK_VIDEO_LTX25_MODEL_ID)!.description, ...unitMeta(STACK_VIDEO_LTX25_MODEL_ID), pins: STACK_VIDEO_LTX25_MODELS, envs: [envLtx25], licenceNotice: LTX_LICENCE_NOTICE,
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
     usedBy: () => ["LTX-2.5 videos with sound in chat and the Video app"],
     busy: () => {
@@ -340,9 +352,9 @@ export function componentDefs(): UnitDef[] {
       return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
     },
   });
-  units.push({ id: STACK_VIDEO_H3_MODEL_ID, label: partLabel(STACK_VIDEO_H3_MODEL_ID), summary: partDef(STACK_VIDEO_H3_MODEL_ID)!.description, group: "video", role: "video", pins: [STACK_VIDEO_H3_MODEL], envs: [envCompositeSwap], tiers: ["p16", "p32", "p64", "p128"], licenceNotice: H3_VIDEO_LICENSE_NOTICE, usedBy: () => ["Videos with sound in chat and the Video app"], busy: () => activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null });
+  units.push({ id: STACK_VIDEO_H3_MODEL_ID, label: partLabel(STACK_VIDEO_H3_MODEL_ID), summary: partDef(STACK_VIDEO_H3_MODEL_ID)!.description, ...unitMeta(STACK_VIDEO_H3_MODEL_ID), pins: [STACK_VIDEO_H3_MODEL], envs: [envCompositeSwap], licenceNotice: H3_VIDEO_LICENSE_NOTICE, usedBy: () => ["Videos with sound in chat and the Video app"], busy: () => activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null });
   units.push({
-    id: STACK_VIDEO_LTX25_MAX_MODEL_ID, label: partLabel(STACK_VIDEO_LTX25_MAX_MODEL_ID), summary: partDef(STACK_VIDEO_LTX25_MAX_MODEL_ID)!.description, group: "video", role: "video", pins: STACK_VIDEO_LTX25_MAX_MODELS, envs: [envLtx25Max], tiers: ["p128"], licenceNotice: LTX_LICENCE_NOTICE,
+    id: STACK_VIDEO_LTX25_MAX_MODEL_ID, label: partLabel(STACK_VIDEO_LTX25_MAX_MODEL_ID), summary: partDef(STACK_VIDEO_LTX25_MAX_MODEL_ID)!.description, ...unitMeta(STACK_VIDEO_LTX25_MAX_MODEL_ID), pins: STACK_VIDEO_LTX25_MAX_MODELS, envs: [envLtx25Max], licenceNotice: LTX_LICENCE_NOTICE,
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
     usedBy: () => ["LTX-2.5 Max videos with sound in chat and the Video app"],
     busy: () => {
@@ -351,7 +363,7 @@ export function componentDefs(): UnitDef[] {
       return activeJobFor((kind) => kind.startsWith("video")) ? "A video clip is waiting or being made right now." : null;
     },
   });
-  units.push({ id: STACK_VIDEO_MASK_MODEL_ID, label: partLabel(STACK_VIDEO_MASK_MODEL_ID), summary: partDef(STACK_VIDEO_MASK_MODEL_ID)!.description, group: "video", role: "video", pins: STACK_VIDEO_MASK_MODELS, envs: [envMask], tiers: ["p64", "p128"], platformBlock: () => maskRequirementsFileFor() ? null : `SAM 2.1 masks are not available on ${process.platform} ${process.arch} yet.`, usedBy: () => ["Cutouts and background removal on clips", "Still-picture masks on image edits"], busy: () => activeJobFor((kind, input) => kind === "media.edit" && JSON.stringify(input ?? {}).includes('"cutout"')) ? "A clip cutout is running right now." : null });
+  units.push({ id: STACK_VIDEO_MASK_MODEL_ID, label: partLabel(STACK_VIDEO_MASK_MODEL_ID), summary: partDef(STACK_VIDEO_MASK_MODEL_ID)!.description, ...unitMeta(STACK_VIDEO_MASK_MODEL_ID), pins: STACK_VIDEO_MASK_MODELS, envs: [envMask], platformBlock: () => maskRequirementsFileFor() ? null : `SAM 2.1 masks are not available on ${process.platform} ${process.arch} yet.`, usedBy: () => ["Cutouts and background removal on clips", "Still-picture masks on image edits"], busy: () => activeJobFor((kind, input) => kind === "media.edit" && JSON.stringify(input ?? {}).includes('"cutout"')) ? "A clip cutout is running right now." : null });
   units.push({ id: "htdemucs", label: partLabel("htdemucs"), summary: partDef("htdemucs")!.description, group: "stems", role: "music", pins: [STACK_STEMS_MODELS[0]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({ id: "htdemucs-ft", label: partLabel("htdemucs-ft"), summary: partDef("htdemucs-ft")!.description, group: "stems", role: "music", pins: [STACK_STEMS_MODELS[1]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({ id: "mms-fa-align", label: partLabel("mms-fa-align"), summary: partDef("mms-fa-align")!.description, group: "stems", role: "music", pins: STACK_ALIGN_MODELS, envs: [envAlign], usedBy: () => ["Word-by-word lyrics on a song card"], busy: () => activeJobFor((kind) => kind === "align_generation") ? "A song's lyrics are being timed right now." : null });

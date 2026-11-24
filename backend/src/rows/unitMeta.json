@@ -1,0 +1,7 @@
+{
+  "fastwan2-2-ti2v-5b-mlx-bf16": { "group": "video", "role": "video", "tiers": ["p128"] },
+  "ltx-2-5-q8-distilled-mlx": { "group": "video", "role": "video", "tiers": ["p128"] },
+  "minimax-h3": { "group": "video", "role": "video", "tiers": ["p16", "p32", "p64", "p128"] },
+  "ltx-2-5-bf16-distilled-mlx-max": { "group": "video", "role": "video", "tiers": ["p128"] },
+  "sam2.1-hiera-small": { "group": "video", "role": "video", "tiers": ["p64", "p128"] }
+}
