@@ -11,6 +11,7 @@ import { existsSync, lstatSync, readdirSync, rmSync, statSync, unlinkSync } from
 import { basename, join } from "node:path";
 import { lastUsedOf } from "@/lib/componentUse";
 import roleUnitRows from "@/rows/roleUnits.json";
+import pictureFamilyRows from "@/rows/pictureFamilies.json";
 import { partDef, partLabel, registerPartUnits } from "@/lib/parts";
 import { detectHardware, knownAppleChip, type HardwareInfo } from "@/lib/hardware";
 import { createJob, finishJob, getJob, jobSignal, listJobs, updateJob } from "@/lib/jobs";
@@ -263,19 +264,21 @@ export function componentDefs(): UnitDef[] {
     if (state === "running" || state === "building") return "A picture is being made right now.";
     return activeJobFor((kind) => kind === "image_generation" || kind === "image" || kind.startsWith("image")) ? "A picture is waiting or being made right now." : null;
   };
-  const familyUnit = (id: "flux2-klein-4b" | "flux3-image-klein" | "z-image-turbo" | "ernie-image-turbo" | "qwen-image-2512-q8" | "minimax-h3-image", pins: CatalogModelLike[], tiers: Tier[], usedBy: string, extra: Partial<UnitDef> = {}): UnitDef => ({
+  const familyUnit = (id: string, pins: CatalogModelLike[], tiers: Tier[], usedBy: string, extra: Partial<UnitDef> = {}): UnitDef => ({
     id, label: partLabel(id), summary: partDef(id)!.description, group: "pictures", role: "image", pins, envs: [envImage], tiers, ...extra,
     platformBlock: () => imageGen.supported() ? null : "Pictures are not available on this kind of computer yet.",
     usedBy: () => { const count = imageLoras.list().filter((lora) => lora.base_model === id).length; return [usedBy, ...(count ? [`${count} picture style${count === 1 ? "" : "s"} (LoRAs)`] : [])]; },
     busy: pictureBusy,
   });
-  units.push(familyUnit("flux2-klein-4b", STACK_IMAGE_KLEIN_MODELS, ["p32", "p64", "p128"], "Pictures in chat and the Pictures app"));
-  units.push(familyUnit(STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, ["p64", "p128"], "Pictures, when chosen as the model", { licenceNotice: KLEIN3_LICENCE_NOTICE }));
-  units.push(familyUnit("z-image-turbo", STACK_IMAGE_ZIMAGE_MODELS, ["p128"], "Pictures, when chosen as the model"));
-  units.push(familyUnit("ernie-image-turbo", STACK_IMAGE_ERNIE_MODELS, ["p64", "p128"], "Pictures, when chosen as the model"));
-  units.push(familyUnit("qwen-image-2512-q8", STACK_IMAGE_QWEN_MODELS, ["p128"], "Max pictures"));
-  // H3-IMAGE-STACK-01: its own environment, and the maker's licence accepted once before the download.
-  units.push(familyUnit(STACK_IMAGE_H3_ID, STACK_IMAGE_H3_MODELS, ["p16", "p32", "p64", "p128"], "Pictures in chat and the Pictures app", { envs: [envH3], licenceNotice: H3_LICENCE_NOTICE }));
+  // PICTURE-FAMILY-ROWS: the six picture families are data (rows/pictureFamilies.json); the pin sets, the licence notices and the H3 environment are resolved here. H3-IMAGE-STACK-01: H3 has its own environment, and the maker's licence accepted once before the download.
+  const familyPins: Record<string, CatalogModelLike[]> = { klein: STACK_IMAGE_KLEIN_MODELS, klein3: STACK_IMAGE_KLEIN3_MODELS, zimage: STACK_IMAGE_ZIMAGE_MODELS, ernie: STACK_IMAGE_ERNIE_MODELS, qwen: STACK_IMAGE_QWEN_MODELS, h3: STACK_IMAGE_H3_MODELS };
+  const familyLicences: Record<string, LicenceNotice> = { klein3: KLEIN3_LICENCE_NOTICE, h3: H3_LICENCE_NOTICE };
+  for (const row of pictureFamilyRows as { id: string; pins: string; tiers: Tier[]; usedBy: string; licence?: "klein3" | "h3"; envs?: "h3" }[]) {
+    const extra: Partial<UnitDef> = {};
+    if (row.licence) extra.licenceNotice = familyLicences[row.licence];
+    if (row.envs === "h3") extra.envs = [envH3];
+    units.push(familyUnit(row.id, familyPins[row.pins]!, row.tiers, row.usedBy, extra));
+  }
   // MAKE-CLEARER-2026-11-13: the Best level of Make clearer. Optional, and recommended only where a 12 GB peak fits beside chat (the 64 GB tier and up).
   units.push({
     id: STACK_IMAGE_RESTORE_ID, label: partLabel(STACK_IMAGE_RESTORE_ID), summary: partDef(STACK_IMAGE_RESTORE_ID)!.description, group: "tools", role: "image", pins: STACK_IMAGE_RESTORE_MODELS, envs: [envImage], tiers: ["p64", "p128"],

@@ -1,0 +1,8 @@
+[
+  { "id": "flux2-klein-4b", "pins": "klein", "tiers": ["p32", "p64", "p128"], "usedBy": "Pictures in chat and the Pictures app" },
+  { "id": "flux3-image-klein", "pins": "klein3", "tiers": ["p64", "p128"], "usedBy": "Pictures, when chosen as the model", "licence": "klein3" },
+  { "id": "z-image-turbo", "pins": "zimage", "tiers": ["p128"], "usedBy": "Pictures, when chosen as the model" },
+  { "id": "ernie-image-turbo", "pins": "ernie", "tiers": ["p64", "p128"], "usedBy": "Pictures, when chosen as the model" },
+  { "id": "qwen-image-2512-q8", "pins": "qwen", "tiers": ["p128"], "usedBy": "Max pictures" },
+  { "id": "minimax-h3-image", "pins": "h3", "tiers": ["p16", "p32", "p64", "p128"], "usedBy": "Pictures in chat and the Pictures app", "licence": "h3", "envs": "h3" }
+]
