@@ -34,7 +34,7 @@ import { log, logger } from "@/lib/log";
 import { engineTagRoot } from "@/lib/store/layout";
 import { ensureUvEnvironment, managedEnv, uvEnvironmentReady, uvVenvPath, uvVenvPython, type UvEnvironmentSpec } from "@/lib/uvEnvironment";
 import { READY_TTL_MS, type RoleStateRecord } from "@/roles";
-import { familyInstalled, familySnapshot, IMAGE_FAMILIES, IMAGE_MAX_SIDE, IMAGE_MIN_SIDE, IMAGE_SIZE_STEP, imageAvailability, installedFamilies, peakBytes, type ImageFamilyId } from "@/images/models";
+import { DEFAULT_FAMILY, familyInstalled, familySnapshot, IMAGE_FAMILIES, IMAGE_MAX_SIDE, IMAGE_MIN_SIDE, IMAGE_SIZE_STEP, imageAvailability, installedFamilies, peakBytes, type ImageFamily, type ImageFamilyId } from "@/images/models";
 import { ImageError } from "@/images/errors";
 import { defaultH3Deps, h3EditPrompt, h3ModeFor, runH3, takeH3Mode, type H3Deps } from "@/images/h3Runner";
 import { STACK_IMAGE_H3_ID } from "@/lib/modelCatalog";
@@ -47,7 +47,7 @@ import workerScript from "./mflux_worker.py" with { type: "file" };
 export const IMAGE_GEN_NAME = "image-gen";
 export const IMAGE_GEN_VERSION = MANAGED_RUNTIMES.find((runtime) => runtime.name === IMAGE_GEN_NAME)?.version ?? "0.23.0";
 const idleMs = (): number => engineIdleMs("image");
-const deadlineMs = (family: ImageFamilyId | RestoreFamilyId, count: number): number => Number(process.env.IMAGE_DEADLINE_MS ?? (family === "qwen-image-2512-q8" ? 8 : family === "z-image-turbo" ? 4 : 2) * 60_000 * Math.max(1, count));
+const deadlineMs = (family: ImageFamilyId | RestoreFamilyId, count: number): number => Number(process.env.IMAGE_DEADLINE_MS ?? ((IMAGE_FAMILIES[family as ImageFamilyId] as ImageFamily | undefined)?.deadlineMinutes ?? 2) * 60_000 * Math.max(1, count));
 
 export { ImageError };
 const STATUS_BY_CODE: Record<string, number> = { bad_request: 422, unsupported_edit: 422, mask_empty: 422, model_missing: 503, out_of_memory: 507, timeout: 504, cancelled: 499, worker_stopped: 500, failed: 500 };
@@ -316,7 +316,7 @@ export class ImageGenService {
       mkdirSync(input.outDir, { recursive: true, mode: 0o700 });
       const request: WorkerRequest = {
         id: options.jobId, op: input.op, family: input.family, quantize: input.quantize, model_dir: modelDir, loras: input.loras, prompt: input.prompt, steps: input.steps, seed: input.seed, out_dir: input.outDir,
-        create_family: input.family as ImageFamilyId, edit_family: input.family === "flux3-image-klein" ? "flux3-image-klein" : "flux2-klein-4b", pool_strategy: (this.deps.poolGrowthFits?.(input.op === "restore" ? RESTORE_PEAK_BYTES : peakBytes(input.family as ImageFamilyId, input.op, input.quantize, input.loras.length)) ?? getGovernorStatus().loaded.some((item) => item.id === "image-pool" && item.peakBytes >= IMAGE_POOL_PEAK_BYTES)) ? "pool" : "single",
+        create_family: input.family as ImageFamilyId, edit_family: ((IMAGE_FAMILIES[input.family as ImageFamilyId] as ImageFamily | undefined)?.editFamily ?? DEFAULT_FAMILY) as ImageFamilyId, pool_strategy: (this.deps.poolGrowthFits?.(input.op === "restore" ? RESTORE_PEAK_BYTES : peakBytes(input.family as ImageFamilyId, input.op, input.quantize, input.loras.length)) ?? getGovernorStatus().loaded.some((item) => item.id === "image-pool" && item.peakBytes >= IMAGE_POOL_PEAK_BYTES)) ? "pool" : "single",
         ...(input.width !== undefined ? { width: input.width, height: input.height } : {}), ...(input.count !== undefined ? { count: input.count } : {}),
         ...(input.preview && input.op === "generate" ? { preview: true } : {}), ...(input.initImage ? { init_image: input.initImage, strength: input.strength } : {}), ...(input.image ? { image: input.image } : {}), ...(input.mask ? { mask: input.mask } : {}), ...(input.references && input.references.length > 0 ? { references: input.references } : {}), ...(input.region ? { region: input.region } : {}), ...(input.feather !== undefined ? { feather: input.feather } : {}),
         ...(input.op === "restore" ? { resolution: input.resolution, low_ram: true } : {}),

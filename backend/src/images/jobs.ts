@@ -15,7 +15,7 @@ import { heavyGate } from "@/lib/heavyGate";
 import { recordGeneratedImage } from "@/video/provenance";
 import { commitResult, workDir, type ImageResultMeta } from "@/images/results";
 import { ImageError, imageGen, overallPercent } from "@/images/imageEngine";
-import { IMAGE_FAMILIES, isFamilyId, peakBytes } from "@/images/models";
+import { IMAGE_FAMILIES, isFamilyId, peakBytes, DEFAULT_FAMILY } from "@/images/models";
 import { decideH3Mode } from "@/images/h3Runner";
 import { H3_IMAGE_ENGINE, STACK_IMAGE_H3_ID } from "@/lib/modelCatalog";
 import { RESTORE_FAMILY, RESTORE_PEAK_BYTES } from "@/images/restore";
@@ -96,7 +96,7 @@ export interface ImageJobResult { job: string; model: string; mode: string; ms: 
 function memoryFor(job: Job) {
   const input = (job.input ?? {}) as { family?: string; mode?: string; quantize?: number | null; lora_ids?: string[]; count?: number };
   if (input.mode === "restore") return { requestedBytes: RESTORE_PEAK_BYTES, measuredPeakBytes: RESTORE_PEAK_BYTES, engine: "image-gen" };
-  const family = isFamilyId(input.family ?? "") ? input.family as keyof typeof IMAGE_FAMILIES : "flux2-klein-4b";
+  const family = isFamilyId(input.family ?? "") ? input.family as keyof typeof IMAGE_FAMILIES : DEFAULT_FAMILY;
   // MiniMax H3-Image: resident when the governor can hold it now, streaming otherwise; the runner takes the mode chosen here.
   if (family === STACK_IMAGE_H3_ID) { const { peakBytes: held } = decideH3Mode(job.id, input.mode === "edit" ? "edit" : "generate"); return { requestedBytes: held, measuredPeakBytes: held, engine: H3_IMAGE_ENGINE }; }
   const peak = peakBytes(family, input.mode === "edit" ? "edit" : "generate", input.quantize ?? null, input.lora_ids?.length ?? 0);

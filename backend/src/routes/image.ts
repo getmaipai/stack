@@ -19,7 +19,6 @@ import { modelView } from "@/routes/models";
 import { getGovernorStatus } from "@/lib/governor";
 import { LORA_CLASSES, LoraError, MAX_LORA_BYTES, MAX_LORA_STRENGTH, isLoraId } from "@/lib/media/loraLibrary";
 import { IMAGE_LORA_BASES, imageLoras, MAX_LORAS_PER_IMAGE, startLoraInstall } from "@/images/loras";
-import { STACK_IMAGE_H3_ID } from "@/lib/modelCatalog";
 import { referencesMaxFor, IMAGE_FAMILIES, IMAGE_FEATHER_DEFAULT, IMAGE_FEATHER_MAX, IMAGE_REFERENCES_MAX, IMAGE_MAX_COUNT, IMAGE_MAX_EDIT_MEGAPIXELS, IMAGE_MAX_INPUT_BYTES, IMAGE_MAX_PROMPT_CHARS, IMAGE_MAX_SIDE, IMAGE_MIN_SIDE, IMAGE_QUEUE_MAX, IMAGE_SIZE_STEP, DEFAULT_FAMILY, familyInstalled, imageAvailability, isFamilyId, peakBytes, quantizeFor, type ImageFamilyId } from "@/images/models";
 import { IMAGE_GEN_NAME, IMAGE_GEN_VERSION, imageGen, imageGenEnvironmentReady, memoryVerdict } from "@/images/imageEngine";
 import { startImageInstall } from "@/images/install";
@@ -112,7 +111,7 @@ imageRoutes.openapi(statusRoute, async (c) => {
     const info = IMAGE_FAMILIES[family];
     const pins = imageInstallModels(family, installedIds);
     return {
-      id: info.id, family: info.id, label: info.label, licence: info.licence, installed: familyInstalled(family), default: family === defaultModel, loras: family !== STACK_IMAGE_H3_ID && family !== "flux3-image-klein", edit: info.edit, text_capable: info.textCapable ?? false, steps_default: info.stepsDefault, ...(info.stepsMax === info.stepsDefault ? { steps_fixed: true } : {}), ...(info.edit ? { max_references: referencesMaxFor(family) } : {}),
+      id: info.id, family: info.id, label: info.label, licence: info.licence, installed: familyInstalled(family), default: family === defaultModel, loras: info.acceptsLoras, edit: info.edit, text_capable: info.textCapable ?? false, steps_default: info.stepsDefault, ...(info.stepsMax === info.stepsDefault ? { steps_fixed: true } : {}), ...(info.edit ? { max_references: referencesMaxFor(family) } : {}),
       peak_gb: Math.round(peakBytes(family, "generate", quantizeFor(family, "generate", tier), 0) / 1e8) / 10, ...(info.peak.stream !== undefined ? { stream_peak_gb: Math.round(info.peak.stream / 1e8) / 10 } : {}), warm_seconds: info.warmSeconds, available: availability.available && (info.tiers as string[]).includes(tier), quantize: quantizeFor(family, "generate", tier),
       install: { models: pins, remaining_bytes: pins.filter((pin) => !pin.installed).reduce((sum, pin) => sum + pin.approx_bytes, 0) },
     };

@@ -41,17 +41,27 @@ export interface ImageFamily {
   warmSeconds: number;
   /** The model is known to render prompted words inside the picture. */
   textCapable?: boolean;
+  /** Minutes one 1024 x 1024 picture gets before the deadline fires (per extra picture the wall clock scales with the count). */
+  deadlineMinutes: number;
+  /** Whether picture styles (LoRAs) can be applied to this family. */
+  acceptsLoras: boolean;
+  /** A request that names picture styles is refused outright for this family (422 unsupported_lora). */
+  rejectsLoraRequests: boolean;
+  /** Whether a generation may start from a given picture (init image). */
+  acceptsInitImage: boolean;
+  /** The family whose weights do edits for this one; null means the default edit family. */
+  editFamily: string | null;
 }
 
 const GB = 1_000_000_000;
 export const IMAGE_FAMILIES: Record<ImageFamilyId, ImageFamily> = {
-  "flux2-klein-4b": { id: "flux2-klein-4b", catalogId: STACK_IMAGE_KLEIN_ID, label: partLabel("flux2-klein-4b"), licence: "Apache-2.0", stepsDefault: 4, stepsMax: 12, peak: { gen8: 15 * GB, gen4: 13 * GB, edit: 18 * GB }, loraExtraBytes: 1 * GB, edit: true, tiers: ["p32", "p64", "p128"], warmSeconds: 4.0 },
-  "z-image-turbo": { id: "z-image-turbo", catalogId: STACK_IMAGE_ZIMAGE_ID, label: partLabel("z-image-turbo"), licence: "Apache-2.0", stepsDefault: 9, stepsMax: 20, peak: { gen8: 34 * GB, gen4: 34 * GB, edit: 0 }, loraExtraBytes: 1 * GB, edit: false, tiers: ["p128"], warmSeconds: 12.9 },
-  "ernie-image-turbo": { id: "ernie-image-turbo", catalogId: STACK_IMAGE_ERNIE_ID, label: partLabel("ernie-image-turbo"), licence: "Apache-2.0", stepsDefault: 8, stepsMax: 20, peak: { gen8: 21 * GB, gen4: 21 * GB, edit: 0 }, loraExtraBytes: 1 * GB, edit: false, tiers: ["p64", "p128"], warmSeconds: 22 },
-  [STACK_IMAGE_QWEN_ID]: { id: STACK_IMAGE_QWEN_ID, catalogId: STACK_IMAGE_QWEN_ID, label: partLabel(STACK_IMAGE_QWEN_ID), licence: "Apache-2.0", stepsDefault: 30, stepsMax: 50, peak: { gen8: 41 * GB, gen4: 41 * GB, edit: 0 }, loraExtraBytes: 0, edit: false, tiers: ["p128"], warmSeconds: 190 },
+  "flux2-klein-4b": { id: "flux2-klein-4b", catalogId: STACK_IMAGE_KLEIN_ID, label: partLabel("flux2-klein-4b"), licence: "Apache-2.0", stepsDefault: 4, stepsMax: 12, peak: { gen8: 15 * GB, gen4: 13 * GB, edit: 18 * GB }, loraExtraBytes: 1 * GB, edit: true, tiers: ["p32", "p64", "p128"], warmSeconds: 4.0, deadlineMinutes: 2, acceptsLoras: true, rejectsLoraRequests: false, acceptsInitImage: true, editFamily: null },
+  "z-image-turbo": { id: "z-image-turbo", catalogId: STACK_IMAGE_ZIMAGE_ID, label: partLabel("z-image-turbo"), licence: "Apache-2.0", stepsDefault: 9, stepsMax: 20, peak: { gen8: 34 * GB, gen4: 34 * GB, edit: 0 }, loraExtraBytes: 1 * GB, edit: false, tiers: ["p128"], warmSeconds: 12.9, deadlineMinutes: 4, acceptsLoras: true, rejectsLoraRequests: false, acceptsInitImage: true, editFamily: null },
+  "ernie-image-turbo": { id: "ernie-image-turbo", catalogId: STACK_IMAGE_ERNIE_ID, label: partLabel("ernie-image-turbo"), licence: "Apache-2.0", stepsDefault: 8, stepsMax: 20, peak: { gen8: 21 * GB, gen4: 21 * GB, edit: 0 }, loraExtraBytes: 1 * GB, edit: false, tiers: ["p64", "p128"], warmSeconds: 22, deadlineMinutes: 2, acceptsLoras: true, rejectsLoraRequests: false, acceptsInitImage: true, editFamily: null },
+  [STACK_IMAGE_QWEN_ID]: { id: STACK_IMAGE_QWEN_ID, catalogId: STACK_IMAGE_QWEN_ID, label: partLabel(STACK_IMAGE_QWEN_ID), licence: "Apache-2.0", stepsDefault: 30, stepsMax: 50, peak: { gen8: 41 * GB, gen4: 41 * GB, edit: 0 }, loraExtraBytes: 0, edit: false, tiers: ["p128"], warmSeconds: 190, deadlineMinutes: 8, acceptsLoras: true, rejectsLoraRequests: false, acceptsInitImage: true, editFamily: null },
   // Studio bakeoff 2026-11-15, 1024 x 1024, 6 steps, no CFG: resident 11 to 15 s and 19.7 GB (whole process tree) plus ten percent; streaming 27 to 33 s and 1.8 GB. Steps are fixed at 6. The streaming figure also holds for edits (not measured apart).
-  [STACK_IMAGE_H3_ID]: { id: STACK_IMAGE_H3_ID, catalogId: STACK_IMAGE_H3_ID, label: partLabel(STACK_IMAGE_H3_ID), licence: H3_LICENCE, stepsDefault: 6, stepsMax: 6, peak: { gen8: 22 * GB, gen4: 22 * GB, edit: 24 * GB, stream: 2.5 * GB }, loraExtraBytes: 0, edit: true, tiers: ["p16", "p32", "p64", "p128"], warmSeconds: 13, textCapable: true },
-  [STACK_IMAGE_KLEIN3_ID]: { id: STACK_IMAGE_KLEIN3_ID, catalogId: STACK_IMAGE_KLEIN3_ID, label: partLabel(STACK_IMAGE_KLEIN3_ID), licence: "FLUX Kommunity License", stepsDefault: 16, stepsMax: 16, peak: { gen8: 37_400_000_000, gen4: 37_400_000_000, edit: 37_400_000_000 }, loraExtraBytes: 0, edit: true, tiers: ["p64", "p128"], warmSeconds: 25, textCapable: true },
+  [STACK_IMAGE_H3_ID]: { id: STACK_IMAGE_H3_ID, catalogId: STACK_IMAGE_H3_ID, label: partLabel(STACK_IMAGE_H3_ID), licence: H3_LICENCE, stepsDefault: 6, stepsMax: 6, peak: { gen8: 22 * GB, gen4: 22 * GB, edit: 24 * GB, stream: 2.5 * GB }, loraExtraBytes: 0, edit: true, tiers: ["p16", "p32", "p64", "p128"], warmSeconds: 13, textCapable: true, deadlineMinutes: 2, acceptsLoras: false, rejectsLoraRequests: false, acceptsInitImage: true, editFamily: null },
+  [STACK_IMAGE_KLEIN3_ID]: { id: STACK_IMAGE_KLEIN3_ID, catalogId: STACK_IMAGE_KLEIN3_ID, label: partLabel(STACK_IMAGE_KLEIN3_ID), licence: "FLUX Kommunity License", stepsDefault: 16, stepsMax: 16, peak: { gen8: 37_400_000_000, gen4: 37_400_000_000, edit: 37_400_000_000 }, loraExtraBytes: 0, edit: true, tiers: ["p64", "p128"], warmSeconds: 25, textCapable: true, deadlineMinutes: 2, acceptsLoras: false, rejectsLoraRequests: true, acceptsInitImage: false, editFamily: STACK_IMAGE_KLEIN3_ID },
 };
 export const DEFAULT_FAMILY: ImageFamilyId = "flux2-klein-4b";
 

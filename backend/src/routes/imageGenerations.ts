@@ -246,7 +246,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   if ("error" in chosen) return fail(c, chosen.error.status, chosen.error.code, chosen.error.message);
   const family = chosen.family;
   const info = IMAGE_FAMILIES[family];
-  if (family === "flux3-image-klein" && requests.length > 0) return fail(c, 422, "unsupported_lora", `${info.label} does not support picture styles.`);
+  if (info.rejectsLoraRequests && requests.length > 0) return fail(c, 422, "unsupported_lora", `${info.label} does not support picture styles.`);
   const tier = getGovernorStatus().tier;
   if (!(info.tiers as string[]).includes(tier)) return fail(c, 503, "not_available_on_this_computer", `${info.label} needs a computer with more memory than this one. Use FLUX.2 Klein 4B instead.`);
   // A fixed-step model (MiniMax H3-Image) ignores a different `steps` and says so; it is not an error.
@@ -258,7 +258,7 @@ export async function generateImages<T extends Context>(c: T, body: ImageGenerat
   let initImage: Uint8Array | null = null;
   let derived = false;
   if (body.init_image !== undefined && family === STACK_IMAGE_H3_ID) return fail(c, 422, "unsupported_init_image", `${info.label} does not start from a picture. Send the picture and what to change to /v1/images/edits instead.`);
-  if (body.init_image !== undefined && family === "flux3-image-klein") return fail(c, 422, "unsupported_init_image", `${info.label} does not start from a picture.`);
+  if (body.init_image !== undefined && !info.acceptsInitImage) return fail(c, 422, "unsupported_init_image", `${info.label} does not start from a picture.`);
   if (body.init_image !== undefined) {
     initImage = decodeImage(body.init_image);
     if (!initImage || !looksLikePicture(initImage)) return fail(c, 422, "bad_image", "The starting picture could not be read. Send a PNG, JPEG or WebP as base64.");
@@ -319,7 +319,7 @@ export async function editImages<T extends Context>(c: T, form: EditForm) {
   // The model that makes the edit: FLUX.2 Klein 4B unless MiniMax H3-Image is named (H3-IMAGE-STACK-01).
   const asked = form.model && form.model !== "image" ? form.model : null;
   if (asked !== null && !isFamilyId(asked)) return fail(c, 422, "unknown_model", `Unknown picture model "${asked.slice(0, 60)}". Edits use flux2-klein-4b or ${STACK_IMAGE_H3_ID}.`);
-  const family: ImageFamilyId = asked ?? "flux2-klein-4b";
+  const family: ImageFamilyId = asked ?? DEFAULT_FAMILY;
   if (!IMAGE_FAMILIES[family].edit) return fail(c, 422, "unsupported_edit", `${IMAGE_FAMILIES[family].label} cannot edit a picture. Edits use FLUX.2 Klein 4B or MiniMax H3-Image.`);
   const h3 = family === STACK_IMAGE_H3_ID;
   if (h3 && (form.operation === "edit_masked" || form.mask || region)) return fail(c, 422, "unsupported_edit", `${IMAGE_FAMILIES[family].label} changes a picture by instruction only. Leave out the mask and region, or use FLUX.2 Klein 4B for a masked edit.`);
