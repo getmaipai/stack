@@ -47,6 +47,15 @@ export const TierRowSchema = z.object({
 }).openapi("ChoiceLevelRow");
 export type TierRow = z.infer<typeof TierRowSchema>;
 
+export const RequiresEntrySchema = z.object({
+  id: z.string(), kind: z.enum(["engine", "draft"]).describe("`engine` is an engine a candidate runs on; `draft` is a companion model a candidate needs alongside it."),
+  label: z.string(), state: CandidateState, reason: z.string().nullable().describe("The plain sentence for the state, or null when it is installed and fine."),
+  size_bytes: z.number().int().nonnegative().describe("On disk when installed, else what installing it downloads."),
+  can_install: z.boolean(), can_uninstall: z.boolean(),
+  needed_by: z.array(z.string()).describe("The candidate ids of this category that use it."),
+}).openapi("ChoiceRequires");
+export type RequiresEntry = z.infer<typeof RequiresEntrySchema>;
+
 export const ProfileAssignmentSchema = z.object({
   profile: ProfileName, memory_gb: z.number(), current: z.boolean().describe("True for this computer's own profile."),
   assignments: z.array(z.object({ tier: TierName, model: z.string(), customization: OptionsValue.nullable() })),
@@ -58,6 +67,7 @@ export const CategorySchema = z.object({
   role: z.string().nullable(), role_enabled: z.boolean().nullable(), role_priority: z.number().int().nullable(),
   role_plan: RolePlanSchema.nullable().describe("What the profile planner says about this category's role on this computer (state, fit, reason)."),
   steps: z.array(z.object({ id: z.enum(["installed", "loaded", "ready"]), label: z.string(), status: z.enum(["done", "current", "waiting", "failed"]), reason: z.string().nullable() })).describe("Readiness of the feature in order; empty when the category has no role."),
+  requires: z.array(RequiresEntrySchema).describe("The engines and drafts this category's candidates need, with the candidate ids using each; sorted engine first, then by id."),
   available: z.boolean(), unavailable_reason: z.string().nullable(),
   tiered: z.boolean().describe("False for single-model categories, which have only the `standard` level."),
   order: z.array(z.string()).describe("Every candidate id, tried first to last."), disabled: z.array(z.string()),

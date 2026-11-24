@@ -14,7 +14,7 @@ import { recommend, type ProfilePlan } from "@/lib/profilePlanner";
 import { isRoleDisabled, rolePriorityOf } from "@/lib/roleSwitches";
 import { ROLE_IDS, type RoleId, type RoleState } from "@/roles";
 import { getRoleStatus } from "@/lib/supervisor";
-import { stepsFromState } from "@/lib/choiceRequires";
+import { requiresFor, stepsFromState, type RequiresPart } from "@/lib/choiceRequires";
 import { settingValues, updateSettings } from "@/settings";
 import { startModelInstall } from "@/lib/installJobs";
 import { ComponentError, componentDefs, startComponentInstall, uninstallComponent } from "@/lib/components";
@@ -140,6 +140,12 @@ function statePlain(part: StackPartView): { state: Candidate["state"]; reason: s
     case "unsupported": return { state: "unsupported", reason: part.fits.reason ?? "This computer cannot run it." };
     default: return { state: "notInstalled", reason: part.install_block ?? (part.download_bytes > 0 ? `Not installed. Installing downloads ${gb(part.download_bytes)}.` : "Not installed.") };
   }
+}
+
+/** A part's facts for a category's `requires` entry: the same state words a candidate gets, sized from disk else from the download. */
+export function partRequires(part: StackPartView): RequiresPart {
+  const view = statePlain(part);
+  return { label: part.label, state: view.state, reason: view.reason, size_bytes: part.size_bytes > 0 ? part.size_bytes : part.download_bytes, can_install: part.can_install ?? false, can_uninstall: part.can_uninstall ?? false };
 }
 
 function peakOf(row: TierCandidate): { bytes: number; verified: boolean } {
@@ -316,6 +322,7 @@ function buildCategories(state: State): Category[] {
     return {
       id: def.id, label: def.label, icon: def.icon, description: def.description, role: def.role, role_enabled: def.role ? !isRoleDisabled(def.role) : null, role_priority: def.role ? rolePriorityOf(def.role) : null,
       role_plan: rolePlanFor(planned, def.role), steps: def.role ? stepsForRole(def.role) : [],
+      requires: requiresFor(candidates, (id) => { const part = state.parts.get(id); return part ? partRequires(part) : undefined; }, (candidateId) => state.pins.get(candidateId)?.pin?.companions ?? []),
       available: unavailable === null, unavailable_reason: unavailable, tiered: def.levels.length > 1,
       order: candidates.map((candidate) => candidate.id), disabled: off.filter((id) => candidates.some((candidate) => candidate.id === id)),
       candidates, tiers: unavailable ? [] : tiers, profiles,
