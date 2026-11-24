@@ -13,7 +13,9 @@ import { STACK_MODELS } from "@/lib/modelCatalog";
 import { defaultRolePriority } from "@/lib/roleSwitches";
 import { reducedFreedBytes, resolveLadder, resolveTier, TIER_CANDIDATES, type ProfileId, type TierCategory } from "@/lib/tiers";
 import { ROLE_IDS, ROLES, type RoleId, PRIMARY_ROLE } from "@/roles";
-import { PROFILE_IDS, templateBehavior, workingMarginBytes } from "@/lib/profileIds";
+import { PROFILE_IDS, SMALLEST_PROFILE, templateBehavior, workingMarginBytes } from "@/lib/profileIds";
+import plannerExcludedChat from "@/rows/plannerExcludedChat.json";
+import featureRows from "@/rows/featureRows.json";
 
 const GIB = 1_073_741_824;
 const GB = 1_000_000_000;
@@ -35,7 +37,7 @@ const SMALL_ROLE_BYTES: Partial<Record<RoleId, number>> = { embed: 0.7 * GB, rer
 const STT_BYTES = { small: 0.2 * GB, large: 0.9 * GB };
 
 /** Uncensored builds are never chosen automatically; a person picks one by hand in Custom. */
-export const PLANNER_EXCLUDED_CHAT: readonly string[] = ["qwen3-8-27b-huihui-abliterated-iq4-xs", "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m", "qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs"];
+export const PLANNER_EXCLUDED_CHAT: readonly string[] = plannerExcludedChat;
 
 export interface PlanRole {
   role: RoleId;
@@ -91,7 +93,8 @@ export interface Recommendation {
 
 const gb1 = (bytes: number): string => String(Math.round(bytes / GB * 10) / 10);
 const upProfile = (tier: ProfileTier): ProfileId | null => PROFILE_TIERS[PROFILE_TIERS.findIndex((item) => item.id === tier.id) + 1]?.id ?? null;
-const GENERATORS: Array<{ role: RoleId; category: TierCategory }> = [{ role: "image", category: "pictures" }, { role: "video", category: "video" }, { role: "music", category: "music" }];
+/** The features that run as jobs on demand (rows with `generator`): their role and tier category. */
+const GENERATORS: Array<{ role: RoleId; category: TierCategory }> = (featureRows as unknown as Array<{ role: RoleId; tierCategory?: string; generator?: true }>).filter((row) => row.generator && row.tierCategory).map((row) => ({ role: row.role, category: row.tierCategory! }));
 
 function candidatePeak(id: string, measured: Record<string, number> | undefined): { bytes: number; basis: Basis } | null {
   const candidate = TIER_CANDIDATES.find((item) => item.id === id);
@@ -151,7 +154,7 @@ export function planFor(input: PlannerInput, options: PlanOptions = { upgrade: t
 
   // Resident set: the tier's template roles the person left on. The template is the shipped, known-to-run floor, so it is kept even when the estimates read tight.
   let resident = 0;
-  const chatId = bindings.chat ?? "qwen3-8b-instruct-q4-k-m";
+  const chatId = bindings.chat ?? PROFILE_MODEL_BINDINGS[SMALLEST_PROFILE]!.chat!;
   let chat = candidatePeak(chatId, input.measuredPeaks) ?? { bytes: 7 * GB, basis: "estimated" as Basis };
   let chosenChat = chatId;
   const need = (role: RoleId): { model: string | null; bytes: number; basis: Basis } => {
