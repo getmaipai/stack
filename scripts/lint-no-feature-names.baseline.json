@@ -1,7 +1,5 @@
 {
   "backend/src/daemon.ts": 2,
-  "backend/src/images/imageEngine.ts": 4,
-  "backend/src/images/jobs.ts": 1,
   "backend/src/images/loras.ts": 2,
   "backend/src/lib/choiceRuntime.ts": 7,
   "backend/src/lib/choices.ts": 6,
@@ -40,8 +38,8 @@
   "backend/src/routes/beats.ts": 1,
   "backend/src/routes/capabilities.ts": 1,
   "backend/src/routes/homeMode.ts": 4,
-  "backend/src/routes/image.ts": 6,
-  "backend/src/routes/imageGenerations.ts": 4,
+  "backend/src/routes/image.ts": 5,
+  "backend/src/routes/imageGenerations.ts": 1,
   "backend/src/routes/installPlan.ts": 4,
   "backend/src/routes/jobsMake.ts": 1,
   "backend/src/routes/models.ts": 2,
