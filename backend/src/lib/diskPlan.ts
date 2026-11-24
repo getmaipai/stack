@@ -10,13 +10,14 @@
 import { PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
 import measured from "@/lib/diskPlanMeasured.json";
 import diskRoleRowsJson from "@/rows/diskRoleRows.json";
+import diskModelRowsJson from "@/rows/diskModelRows.json";
 import diskRowGatesJson from "@/rows/diskRowGates.json";
 import diskRowFeaturesJson from "@/rows/diskRowFeatures.json";
 import { partDef, partLabel } from "@/lib/partDefs";
 import { PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import {
   SPLASH_LOCAL_CHAT_MODELS, voxcpm2PackFor, VOXCPM2_ENGINE, VOXCPM2_REDUCED_ENGINE,
-  CHATTERBOX_ENGINE, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_ID, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
+  CHATTERBOX_ENGINE, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS,
   STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_ALIGN_MODELS, STACK_SFX_MODELS, STACK_STEMS_MODELS, STACK_RECORDED_SPEECH_MODELS, STACK_VIDEO_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_H3_MODELS, STACK_VIDEO_MASK_MODELS,
 } from "@/lib/modelCatalog";
 import { plannedPinsFor } from "@/lib/installPlan";
@@ -90,6 +91,17 @@ export interface DiskPlan {
 /** One plain-role install-plan row from rows/diskRoleRows.json: the part whose partLabel is the label, the need, the engines, and a fixed note only when the note is not the part's own description. */
 interface DiskRoleRow { id: string; role: string; part: string; need: DiskNeed; engines: string[]; note?: string }
 const DISK_ROLE_ROWS = diskRoleRowsJson as DiskRoleRow[];
+
+/** One entry of rows/diskModelRows.json: an optional model row. The part gives the label and the default note, `pins` names the pin set the row installs. Any of `unlessNotAvailable` (a feature this template does without), `gate` (a gated row id) and `family` (a picture family that lists the templates it runs on) may be present; every guard the row carries has to pass before the template is offered it. `noteExtra` is appended to the default note and `recommendedFrom` turns the row recommended at that template and above. */
+interface DiskModelRow { id: string; part: string; need: DiskNeed; engines: string[]; pins: string; unlessNotAvailable?: string; gate?: string; family?: string; noteExtra?: string; recommendedFrom?: string }
+const DISK_MODEL_ROWS = diskModelRowsJson as DiskModelRow[];
+
+/** The pin sets a model row installs, under the names rows/diskModelRows.json gives them. A single pin is listed as a one-item set. */
+const PIN_SETS: Record<string, readonly CatalogModelLike[]> = {
+  STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_ZIMAGE_MODELS,
+  STACK_LIVEPORTRAIT_MODELS, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER: [STACK_MUSIC_WHISPER], STACK_MUSIC_XL_MODELS, STACK_SFX_MODELS,
+  STACK_VIDEO_H3_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MODELS,
+};
 
 type PinSizes = Record<string, { download_bytes: number; installed_bytes: number }>;
 type EngineSizes = Record<string, { installed_bytes: number; download_bytes: number; peak_temp_bytes: number; basis: DiskBasis }>;
@@ -219,29 +231,24 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (tools.length) rows.push(modelRow({ id: "image-tools", label: partLabel("image-tools"), note: partDef("image-tools")!.description, need: "recommended", engines: ["engine:image-tools", "engine:python"] }, tools));
   const look = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");
   if (look.length) rows.push(modelRow({ id: "tool-look", label: partLabel("tool-look"), note: partDef("tool-look")!.description, need: "optional", engines: ["engine:image-tools", "engine:python"] }, look));
-  if (!tier.notAvailable.includes("image")) rows.push(modelRow({ id: TALKING_PICTURES_ROW, label: partLabel("liveportrait"), note: `${partDef("liveportrait")!.description} MIT licence; about 0.6 GB of model files plus a 1.5 GB engine, built on this computer. Mac with Apple silicon only.`, need: "recommended", engines: ["engine:liveportrait", "engine:python"] }, STACK_LIVEPORTRAIT_MODELS));
-  if (!tier.notAvailable.includes("image")) {
-    rows.push(modelRow({ id: "pictures", label: partLabel("flux2-klein-4b"), note: partDef("flux2-klein-4b")!.description, need: "required", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN_MODELS));
-    if (IMAGE_FAMILIES["ernie-image-turbo"].tiers.some((supportedTier) => supportedTier === tier.id)) rows.push(modelRow({ id: "pictures-ernie", label: partLabel("ernie-image-turbo"), note: partDef("ernie-image-turbo")!.description, need: "recommended", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ERNIE_MODELS));
-    // H3-IMAGE-STACK-01: one model for new pictures and edits. Recommended where it can stay resident (64 GB and up), optional below, where it streams from disk and takes about half a minute a picture.
-    if (IMAGE_FAMILIES["minimax-h3-image"].tiers.some((supportedTier) => supportedTier === tier.id)) rows.push(modelRow({ id: "pictures-h3", label: partLabel("minimax-h3-image"), note: partDef("minimax-h3-image")!.description, need: TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf("p64") ? "recommended" : "optional", engines: ["engine:pictures-h3", "engine:python"] }, STACK_IMAGE_H3_MODELS));
-    if ((IMAGE_FAMILIES[STACK_IMAGE_KLEIN3_ID].tiers as string[]).includes(tier.id)) rows.push(modelRow({ id: "pictures-klein3", label: partLabel("flux3-image-klein"), note: partDef("flux3-image-klein")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_KLEIN3_MODELS));
-    if (rowAllowed(tier, "pictures-zimage")) rows.push(modelRow({ id: "pictures-zimage", label: partLabel("z-image-turbo"), note: partDef("z-image-turbo")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_ZIMAGE_MODELS));
-    if (rowAllowed(tier, "pictures-qwen")) rows.push(modelRow({ id: "pictures-qwen", label: partLabel("qwen-image-2512-q8"), note: partDef("qwen-image-2512-q8")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_QWEN_MODELS));
+  // The model rows come from rows/diskModelRows.json, in the order they are listed there: the part names the label and
+  // the note, the pin set names what the row installs, and each row's own guard says which templates may offer it. A row
+  // the builder picks out another way (a voice, a picture tool, or one of the score, stem, aligner and singer helpers,
+  // which every template offers and that therefore carry no guard) stays here, in the place it always held in the order.
+  for (const entry of DISK_MODEL_ROWS) {
+    if (entry.unlessNotAvailable !== undefined && (tier.notAvailable as readonly string[]).includes(entry.unlessNotAvailable)) continue;
+    if (entry.gate !== undefined && !rowAllowed(tier, entry.gate)) continue;
+    if (entry.family !== undefined) {
+      const family = IMAGE_FAMILIES[entry.family as keyof typeof IMAGE_FAMILIES];
+      if (!family) throw new Error(`diskPlan: row "${entry.id}" names the picture family "${entry.family}", which the family table does not have.`);
+      if (!(family.tiers as string[]).includes(tier.id)) continue;
+    }
+    const pins = PIN_SETS[entry.pins];
+    if (!pins) throw new Error(`diskPlan: row "${entry.id}" names the pin set "${entry.pins}", which diskPlan.ts does not know.`);
+    // A row with recommendedFrom is recommended once the template reaches that size; below it the row keeps its own need.
+    const need: DiskNeed = entry.recommendedFrom !== undefined && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf(entry.recommendedFrom) ? "recommended" : entry.need;
+    rows.push(modelRow({ id: entry.id, label: partLabel(entry.part), note: partDef(entry.part)!.description + (entry.noteExtra ?? ""), need, engines: entry.engines }, [...pins]));
   }
-  // MAKE-CLEARER-2026-11-13: the Best level of Make clearer for pictures. Optional; its 12 GB peak is recommended only from the 64 GB tier up.
-  if (rowAllowed(tier, "pictures-clearer")) rows.push(modelRow({ id: "pictures-clearer", label: partLabel("seedvr2-3b"), note: partDef("seedvr2-3b")!.description, need: "optional", engines: ["engine:pictures", "engine:python"] }, STACK_IMAGE_RESTORE_MODELS));
-  if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video", label: partLabel("fastwan2-2-ti2v-5b-mlx-bf16"), note: partDef("fastwan2-2-ti2v-5b-mlx-bf16")!.description, need: "optional", engines: ["engine:video", "engine:python"] }, STACK_VIDEO_MODELS));
-  if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music", label: partLabel("ace-step-1-5-turbo"), note: partDef("ace-step-1-5-turbo")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MODELS));
-  if (!tier.notAvailable.includes("music")) rows.push(modelRow({ id: "music-transcribe", label: partLabel("whisper-large-v3-turbo"), note: partDef("whisper-large-v3-turbo")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, [STACK_MUSIC_WHISPER]));
-  if (rowAllowed(tier, "music-boost")) rows.push(modelRow({ id: "music-boost", label: partLabel("ace-step-1-5-xl-turbo-bf16"), note: partDef("ace-step-1-5-xl-turbo-bf16")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_XL_MODELS));
-  if (rowAllowed(tier, "music-max")) rows.push(modelRow({ id: "music-max", label: partLabel("ace-step-1-5-xl-sft-bf16"), note: partDef("ace-step-1-5-xl-sft-bf16")!.description, need: "optional", engines: ["engine:music", "engine:python"] }, STACK_MUSIC_MAX_MODELS));
-  if (rowAllowed(tier, "video-ltx25")) rows.push(modelRow({ id: "video-ltx25", label: partLabel("ltx-2-5-q8-distilled-mlx"), note: partDef("ltx-2-5-q8-distilled-mlx")!.description, need: "optional", engines: ["engine:video-ltx25", "engine:python"] }, STACK_VIDEO_LTX25_MODELS));
-  if (rowAllowed(tier, "video-ltx25-max")) rows.push(modelRow({ id: "video-ltx25-max", label: partLabel("ltx-2-5-bf16-distilled-mlx-max"), note: partDef("ltx-2-5-bf16-distilled-mlx-max")!.description, need: "optional", engines: ["engine:video-ltx25-max", "engine:python"] }, STACK_VIDEO_LTX25_MAX_MODELS));
-  if (!tier.notAvailable.includes("video")) rows.push(modelRow({ id: "video-minimax-h3", label: partLabel("minimax-h3"), note: partDef("minimax-h3")!.description, need: "optional", engines: ["engine:minimax-h3-video-gen", "engine:swap-composite"] }, STACK_VIDEO_H3_MODELS));
-  if (rowAllowed(tier, "video-mask")) rows.push(modelRow({ id: "video-mask", label: partLabel("sam2.1-hiera-small"), note: partDef("sam2.1-hiera-small")!.description, need: "optional", engines: ["engine:video-mask", "engine:python"] }, STACK_VIDEO_MASK_MODELS));
-  // MP-07: sound effects, optional, on every tier with 32 GB or more (about 6.5 GB while a sound is made); the maker's licence is accepted at install.
-  if (rowAllowed(tier, "sound-effects")) rows.push(modelRow({ id: "sound-effects", label: partLabel("stable-audio-3-small-sfx"), note: partDef("stable-audio-3-small-sfx")!.description, need: "optional", engines: ["engine:sound-effects", "engine:python"] }, STACK_SFX_MODELS));
   rows.push({ id: "score-transcription", label: partLabel("score-gen"), note: partDef("score-gen")!.description, kind: "model", need: "optional", selectable: true, download_bytes: 0, installed_bytes: 0, peak_temp_bytes: 0, model_ids: [], engines: ["engine:score", "engine:python"], installed: false, basis: "measured" });
   rows.push(modelRow({ id: "stems", label: partLabel("htdemucs"), note: partDef("htdemucs")!.description, need: "recommended", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[0]!]));
   rows.push(modelRow({ id: "stems-ft", label: partLabel("htdemucs-ft"), note: partDef("htdemucs-ft")!.description, need: "optional", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[1]!]));
