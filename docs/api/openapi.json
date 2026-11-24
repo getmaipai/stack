@@ -872,6 +872,45 @@
             ],
             "description": "What the profile planner says about this category's role on this computer (state, fit, reason)."
           },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "installed",
+                    "loaded",
+                    "ready"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "done",
+                    "current",
+                    "waiting",
+                    "failed"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "status",
+                "reason"
+              ]
+            },
+            "description": "Readiness of the feature in order; empty when the category has no role."
+          },
           "available": {
             "type": "boolean"
           },
@@ -978,6 +1017,7 @@
           "role_enabled",
           "role_priority",
           "role_plan",
+          "steps",
           "available",
           "unavailable_reason",
           "tiered",
