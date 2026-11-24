@@ -4,12 +4,10 @@ import { imageInstallModels } from "@/lib/installPlan";
 
 const families = Object.keys(IMAGE_FAMILIES) as ImageFamilyId[];
 
-test("every image family names its pins and its install-plan row", () => {
+test("every image family names its pins", () => {
   for (const family of families) {
     expect(IMAGE_FAMILIES[family].pins.length).toBeGreaterThan(0);
-    expect(IMAGE_FAMILIES[family].diskRow.startsWith("pictures")).toBe(true);
   }
-  expect(new Set(families.map((family) => IMAGE_FAMILIES[family].diskRow)).size).toBe(families.length);
 });
 
 test("imageInstallModels lists a family's own pins", () => {
@@ -20,5 +18,5 @@ test("imageInstallModels lists a family's own pins", () => {
 
 test("plan order covers the four families the plan route adds", () => {
   const ordered = families.filter((family) => IMAGE_FAMILIES[family].planOrder !== null).sort((a, b) => IMAGE_FAMILIES[a].planOrder! - IMAGE_FAMILIES[b].planOrder!);
-  expect(ordered.map((family) => IMAGE_FAMILIES[family].diskRow)).toEqual(["pictures", "pictures-ernie", "pictures-zimage", "pictures-qwen"]);
+  expect(ordered).toEqual(["flux2-klein-4b", "ernie-image-turbo", "z-image-turbo", "qwen-image-2512-q8"]);
 });

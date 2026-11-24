@@ -5,6 +5,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { detectHardware } from "@/lib/hardware";
+import diskModelRows from "@/rows/diskModelRows.json";
 import { IMAGE_FAMILIES, type ImageFamilyId } from "@/images/models";
 import { buildInstallPlan, imageInstallModels, restoreInstallModels, talkingPicturesInstallModels, videoInstallModels, splashChatInstallModels } from "@/lib/installPlan";
 import { diskPlanForTier } from "@/lib/diskPlan";
@@ -13,6 +14,8 @@ import { modelView } from "@/routes/models";
 import { RoleIdSchema } from "@/roles";
 import { PROFILE_IDS } from "@/lib/profileIds";
 
+/** The install-plan row that offers a family: the row of rows/diskModelRows.json whose part is the family. */
+const diskRowOfFamily = (family: string): string => (diskModelRows as Array<{ id: string; part: string }>).find((row) => row.part === family)?.id ?? "";
 /** The picture families the plan route adds when their disk row is offered, in plan order (IMAGE_FAMILIES planOrder). */
 const PLAN_FAMILIES = (Object.keys(IMAGE_FAMILIES) as ImageFamilyId[]).filter((family) => IMAGE_FAMILIES[family].planOrder !== null).sort((a, b) => IMAGE_FAMILIES[a].planOrder! - IMAGE_FAMILIES[b].planOrder!);
 const PlanModelSchema = z.object({
@@ -55,7 +58,7 @@ installPlanRoutes.openapi(planRoute, async (c) => {
   const disk = plan.tier ? diskPlanForTier(plan.tier, installedIds) : null;
   const rows = new Set(disk?.rows.map((row) => row.id) ?? []);
   const optional = [
-    ...PLAN_FAMILIES.filter((family) => rows.has(IMAGE_FAMILIES[family].diskRow)).flatMap((family) => imageInstallModels(family, installedIds)),
+    ...PLAN_FAMILIES.filter((family) => rows.has(diskRowOfFamily(family))).flatMap((family) => imageInstallModels(family, installedIds)),
     ...(rows.has("pictures-clearer") ? restoreInstallModels(installedIds) : []),
     ...(rows.has("talking-pictures") ? talkingPicturesInstallModels(installedIds) : []),
     ...(rows.has("video") ? videoInstallModels(installedIds) : []),
