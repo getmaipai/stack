@@ -12,7 +12,9 @@ import { partDef } from "@/lib/partDefs";
 import { listParts } from "@/lib/partsList";
 import { recommend, type ProfilePlan } from "@/lib/profilePlanner";
 import { isRoleDisabled, rolePriorityOf } from "@/lib/roleSwitches";
-import { ROLE_IDS, type RoleId } from "@/roles";
+import { ROLE_IDS, type RoleId, type RoleState } from "@/roles";
+import { getRoleStatus } from "@/lib/supervisor";
+import { stepsFromState } from "@/lib/choiceRequires";
 import { settingValues, updateSettings } from "@/settings";
 import { startModelInstall } from "@/lib/installJobs";
 import { ComponentError, componentDefs, startComponentInstall, uninstallComponent } from "@/lib/components";
@@ -51,7 +53,14 @@ export interface ChoicesDeps {
   inspect: typeof inspectModel;
   parts: (hardware: HardwareInfo) => Promise<StackPartView[]>;
   uninstallPart: typeof uninstallComponent;
+  roleStatus: (role: RoleId) => { state: RoleState; reason: string | null };
 }
+/** The supervisor's engine state narrowed to the role states the steps use (loading and stopped are not loaded yet; busy is answering, which is ready). */
+const roleStatusDefault = (role: RoleId): { state: RoleState; reason: string | null } => {
+  const status = getRoleStatus(role);
+  const state: RoleState = status.state === "busy" ? "ready" : status.state === "loading" || status.state === "stopped" ? "installed" : status.state;
+  return { state, reason: status.reason ?? null };
+};
 export const choicesDeps: ChoicesDeps = {
   probe: detectHardware,
   installPart: async (id) => { const started = await startComponentInstall(id); return { job: started.job }; },
@@ -59,6 +68,7 @@ export const choicesDeps: ChoicesDeps = {
   inspect: inspectModel,
   parts: async (hardware) => (await listParts({ audience: "adult" }, hardware)).parts,
   uninstallPart: uninstallComponent,
+  roleStatus: roleStatusDefault,
 };
 export function __setChoicesDepsForTests(next: Partial<ChoicesDeps> | null): void {
   choicesDeps.probe = next?.probe ?? detectHardware;
@@ -67,6 +77,7 @@ export function __setChoicesDepsForTests(next: Partial<ChoicesDeps> | null): voi
   choicesDeps.inspect = next?.inspect ?? inspectModel;
   choicesDeps.parts = next?.parts ?? (async (hardware) => (await listParts({ audience: "adult" }, hardware)).parts);
   choicesDeps.uninstallPart = next?.uninstallPart ?? uninstallComponent;
+  choicesDeps.roleStatus = next?.roleStatus ?? roleStatusDefault;
 }
 
 interface PoolEntry { id: string; kind: "shipped" | "added"; family: string | null; vetting: string | null; row: TierCandidate | null; added: AddedModel | null }
@@ -279,6 +290,12 @@ function rolePlanFor(plan: ProfilePlan | null, role: RoleId | null): Category["r
   return row ? { state: row.state, fit: row.fit, reason: row.reason } : null;
 }
 
+/** The category's readiness steps from the role's live state (the same supervisor the role view reads). */
+function stepsForRole(role: RoleId): ReturnType<typeof stepsFromState> {
+  const status = choicesDeps.roleStatus(role);
+  return stepsFromState(status.state, status.reason);
+}
+
 function buildCategories(state: State): Category[] {
   const planned = recommend({ hardware: state.hardware, disabled: ROLE_IDS.filter((role) => isRoleDisabled(role)), priority: Object.fromEntries(ROLE_IDS.map((role) => [role, rolePriorityOf(role)])) }).custom_recommended?.plan ?? null;
   return CATEGORY_DEFS.map((def): Category => {
@@ -298,7 +315,8 @@ function buildCategories(state: State): Category[] {
     const off = state.partChoices[def.partCategory]?.off ?? [];
     return {
       id: def.id, label: def.label, icon: def.icon, description: def.description, role: def.role, role_enabled: def.role ? !isRoleDisabled(def.role) : null, role_priority: def.role ? rolePriorityOf(def.role) : null,
-      role_plan: rolePlanFor(planned, def.role), available: unavailable === null, unavailable_reason: unavailable, tiered: def.levels.length > 1,
+      role_plan: rolePlanFor(planned, def.role), steps: def.role ? stepsForRole(def.role) : [],
+      available: unavailable === null, unavailable_reason: unavailable, tiered: def.levels.length > 1,
       order: candidates.map((candidate) => candidate.id), disabled: off.filter((id) => candidates.some((candidate) => candidate.id === id)),
       candidates, tiers: unavailable ? [] : tiers, profiles,
     };

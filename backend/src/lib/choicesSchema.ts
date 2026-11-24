@@ -57,6 +57,7 @@ export const CategorySchema = z.object({
   id: z.enum(CATEGORY_IDS), label: z.string(), icon: z.string(), description: z.string(),
   role: z.string().nullable(), role_enabled: z.boolean().nullable(), role_priority: z.number().int().nullable(),
   role_plan: RolePlanSchema.nullable().describe("What the profile planner says about this category's role on this computer (state, fit, reason)."),
+  steps: z.array(z.object({ id: z.enum(["installed", "loaded", "ready"]), label: z.string(), status: z.enum(["done", "current", "waiting", "failed"]), reason: z.string().nullable() })).describe("Readiness of the feature in order; empty when the category has no role."),
   available: z.boolean(), unavailable_reason: z.string().nullable(),
   tiered: z.boolean().describe("False for single-model categories, which have only the `standard` level."),
   order: z.array(z.string()).describe("Every candidate id, tried first to last."), disabled: z.array(z.string()),
