@@ -1,8 +1,9 @@
 import { partDef } from "@/lib/partDefs";
 import rows from "@/rows/tierCandidates.json";
+import featureRows from "@/rows/featureRows.json";
 
 export type TierId = "reduced" | "standard" | "boost" | "max";
-export type TierCategory = "chat" | "pictures" | "video" | "music" | "voice" | "stems";
+export type TierCategory = string;
 export type { ProfileId } from "@/lib/profileIds";
 import type { ProfileId } from "@/lib/profileIds";
 export type SwitchCost = "option" | "family" | "cross";
@@ -68,7 +69,7 @@ export function resolveTier(input: ResolveInput): Resolved | null {
     return candidate && peak && peak.peakBytes <= cap ? toResolved(candidate, tier, peak, below) : null;
   }
   for (const candidate of available) {
-    const peak = candidate.peaks.find((item) => item.peakBytes <= cap && (tier !== "boost" || category !== "chat" || item.options.thinking === true));
+    const peak = candidate.peaks.find((item) => item.peakBytes <= cap && (tier !== "boost" || !rowOfCategory(category)?.boostThinking || item.options.thinking === true));
     if (peak) return toResolved(candidate, tier, peak, below);
   }
   return null;
@@ -88,7 +89,12 @@ export function resolveLadder(category: TierCategory, profile: ProfileId, roomBy
 }
 
 export interface BudgetSlot { category: TierCategory; tier: TierId; model: string | null; peak_bytes: number | null; basis: "measured" | "estimated" | null; verified: boolean; resident_bytes: number | null; fits_ever: boolean }
-const BUDGET_CATEGORIES: TierCategory[] = ["chat", "pictures", "video", "music", "voice", "stems"];
+interface TierFeatureRow { id: string; tierCategory?: string; levels: string[]; residentHost?: true; boostThinking?: true }
+const FEATURE_ROWS = featureRows as unknown as TierFeatureRow[];
+const rowOfCategory = (category: string): TierFeatureRow | undefined => FEATURE_ROWS.find((row) => row.tierCategory === category);
+const BUDGET_CATEGORIES: TierCategory[] = FEATURE_ROWS.flatMap((row) => row.tierCategory ? [row.tierCategory] : []);
+/** The categories that have a Reduced level (chat and voice): the ones the Reduced swap frees memory from. */
+const REDUCED_CATEGORIES: TierCategory[] = FEATURE_ROWS.flatMap((row) => row.tierCategory && row.levels.includes("reduced") ? [row.tierCategory] : []);
 const BUDGET_TIERS: TierId[] = ["reduced", "standard", "boost", "max"];
 /**
  * TIER-BUDGET-01: what each level of each category needs on this profile, from the tier room (what the machine can ever hold), never from memory free now; fit-now is the governor's call at admission. A category appears when the profile has a candidate for it; inside it every level is listed, with nulls when no model is catalogued. Resolution ignores the cap so an oversized model still shows its peak; `fits_ever` compares it with the level's cap. `resident_bytes` is null: no design footprint is catalogued yet. TIER-ROOM-01 (the "max" mode of tierRoomBytes) is where the Max cells would use the Max room.
@@ -101,7 +107,7 @@ export function budgetSlots(profile: ProfileId | null | undefined, roomBytes = 0
     const ladder = resolveLadder(category, profile, Number.MAX_SAFE_INTEGER);
     for (const tier of BUDGET_TIERS) {
       const resolved = tier === "reduced" ? resolveTier({ category, tier, profile, roomBytes: Number.MAX_SAFE_INTEGER }) : ladder.find((row) => row.tier === tier)?.resolved ?? null;
-      if (tier === "reduced" && !resolved && category !== "chat" && category !== "voice") continue;
+      if (tier === "reduced" && !resolved && !REDUCED_CATEGORIES.includes(category)) continue;
       rows.push({ category, tier, model: resolved?.model ?? null, peak_bytes: resolved?.peakBytes ?? null, basis: resolved ? (resolved.verified ? "measured" : "estimated") : null, verified: resolved?.verified ?? false, resident_bytes: null, fits_ever: resolved ? resolved.peakBytes <= (tier === "reduced" ? roomBytes : tierCapBytes(tier, roomBytes)) : false });
     }
   }
@@ -120,10 +126,10 @@ export function customPickRefusal(input: ResolveInput & { model: string; options
 
 /** What the Reduced swap of chat and voice frees on this profile: each category's Standard peak minus its Reduced peak (zero when either is missing). Max may use it (TIER-STACK-02). */
 export function reducedFreedBytes(profile: ProfileId, roomBytes: number, loadedChatPeakBytes?: number | null): number {
-  return (["chat", "voice"] as const).reduce((sum, category) => {
+  return REDUCED_CATEGORIES.reduce((sum, category) => {
     const standard = resolveTier({ category, tier: "standard", profile, roomBytes });
     const reduced = resolveTier({ category, tier: "reduced", profile, roomBytes });
-    const standardPeak = category === "chat" && loadedChatPeakBytes != null ? loadedChatPeakBytes : standard?.peakBytes;
+    const standardPeak = rowOfCategory(category)?.residentHost && loadedChatPeakBytes != null ? loadedChatPeakBytes : standard?.peakBytes;
     return sum + (standardPeak !== undefined && reduced ? Math.max(0, standardPeak - reduced.peakBytes) : 0);
   }, 0);
 }
