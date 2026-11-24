@@ -19,7 +19,7 @@ import { ROLE_IDS, type RoleId, PRIMARY_ROLE } from "@/roles";
 export interface RoleChoiceInput { role: RoleId; enabled?: boolean; priority?: number }
 export interface ApplyInput {
   mode: ProfileMode;
-  tier?: "p16" | "p32" | "p64" | "p128";
+  tier?: string;
   vram_gb?: number;
   plan?: { roles: RoleChoiceInput[] };
 }

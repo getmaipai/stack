@@ -58,6 +58,7 @@ import { ensurePocketTtsEnvironment, pocketTtsInstalled, pocketTtsRoot } from "@
 import { ensureMlxAudioEnvironment, mlxAudioInstalled, mlxAudioRoot } from "@/speech/mlxAudio";
 import { ensureVoxcpm2Environment, voxcpm2Installed, voxcpm2Root, VOXCPM2_RUNTIME_NAME } from "@/speech/voxcpm2";
 import { RECORDED_SPEECH_NAME, ensureRecordedSpeechEnvironment, recordedSpeech, recordedSpeechEnvironmentReady, recordedSpeechRoot } from "@/recordedSpeech/recordedSpeech";
+import { profileRank, templateBehavior } from "@/lib/profileIds";
 import { ensureMaskEnvironment, maskEnvironmentReady, maskGenRoot, maskRequirementsFileFor, MASK_GEN_NAME } from "@/video/mask";
 import { compositeSwapEnvironmentReady, compositeSwapRoot, ensureCompositeSwapEnvironment, COMPOSITE_SWAP_NAME } from "@/video/compositeSwap";
 
@@ -70,8 +71,7 @@ export const DISK_MARGIN_BYTES = 5_000_000_000;
 export type ComponentGroup = "chat" | "voice" | "pictures" | "video" | "music" | "stems" | "tools" | "loras";
 export type ComponentState = "installed" | "installing" | "notInstalled" | "failed";
 export type ComponentRequirement = "required" | "optional" | "unsupported";
-type Tier = "p16" | "p32" | "p64" | "p128";
-const TIER_RANK: Record<Tier, number> = { p16: 0, p32: 1, p64: 2, p128: 3 };
+type Tier = string;
 
 export class ComponentError extends Error {
   constructor(readonly code: "unknown_component" | "not_available" | "not_enough_space" | "in_use" | "required" | "only_chat_model" | "chat_model_in_use" | "shared_by_others" | "licence_required", message: string, readonly status: 404 | 409) { super(message); }
@@ -526,9 +526,9 @@ function requirementFor(unit: UnitDef, tier: Tier | null, planned: Set<string>):
   if (platform) return { requirement: "unsupported", reason: platform };
   if (unit.alwaysRequired) return { requirement: "required", reason: unit.alwaysRequired };
   const primary = unit.pins[0];
-  if (unit.id === "htdemucs" && tier && TIER_RANK[tier] < TIER_RANK.p64) return { requirement: "unsupported", reason: "Stem splitting needs a computer with 64 GB of memory or more." };
+  if (unit.id === "htdemucs" && tier && templateBehavior(tier).minUnifiedGb < 64) return { requirement: "unsupported", reason: "Stem splitting needs a computer with 64 GB of memory or more." };
   const profile = (primary?.sizing as { profile?: string } | undefined)?.profile as Tier | undefined;
-  const tooBig = tier && ((unit.tiers && !unit.tiers.includes(tier)) || (!unit.tiers && profile && TIER_RANK[profile] > TIER_RANK[tier]));
+  const tooBig = tier && ((unit.tiers && !unit.tiers.includes(tier)) || (!unit.tiers && profile && profileRank(profile) > profileRank(tier)));
   if (tooBig) return { requirement: "unsupported", reason: unit.group === "video" ? "Video needs a computer with 128 GB of memory." : unit.id === "htdemucs" ? "Stem splitting needs a computer with 64 GB of memory or more." : unit.group === "music" ? "Music needs a computer with 64 GB of memory or more." : unit.tiers ? "This needs a computer with more memory than this one." : "This model needs more memory than this computer has." };
   if (primary && planned.has(primary.id)) return { requirement: "required", reason: "Home installs this on a computer of this size." };
   return { requirement: "optional", reason: null };

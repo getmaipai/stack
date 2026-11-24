@@ -13,8 +13,9 @@ import { ROLE_PRIORITY_MAX, ROLE_PRIORITY_MIN } from "@/lib/roleSwitches";
 import { remoteOf, sourceOf } from "@/lib/adminActions";
 import { startModelInstall } from "@/lib/installJobs";
 import { RoleIdSchema } from "@/roles";
+import { PROFILE_IDS } from "@/lib/profileIds";
 
-const TierId = z.enum(["p16", "p32", "p64", "p128"]);
+const TierId = z.enum(PROFILE_IDS);
 const Mode = z.enum(["matched", "custom_recommended", "custom"]);
 const RoleChoice = z.object({ role: RoleIdSchema, enabled: z.boolean().optional(), priority: z.number().int().min(ROLE_PRIORITY_MIN).max(ROLE_PRIORITY_MAX).optional() });
 

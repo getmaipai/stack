@@ -10,11 +10,12 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
+import { PROFILE_IDS } from "@/lib/profileIds";
 
 export const CHOICE_TIERS = ["reduced", "standard", "boost", "max"] as const;
 export type ChoiceTier = typeof CHOICE_TIERS[number];
-export const CHOICE_PROFILES = ["p16", "p32", "p64", "p128"] as const;
-export type ChoiceProfile = typeof CHOICE_PROFILES[number];
+export const CHOICE_PROFILES = PROFILE_IDS;
+export type ChoiceProfile = string;
 
 const OptionValue = z.union([z.string(), z.number(), z.boolean()]);
 export const PickSchema = z.object({ model: z.string().min(1).max(200), options: z.record(z.string(), OptionValue).optional() }).strict();

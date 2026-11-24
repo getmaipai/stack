@@ -22,6 +22,7 @@ import { ImageError } from "@/images/errors";
 import { ensureH3GenEnvironment, h3GenBin, h3GenPython, h3GenRoot } from "@/images/h3Engine";
 import { H3_MAX_PICTURES, IMAGE_FAMILIES } from "@/images/models";
 import { STACK_IMAGE_H3_ID } from "@/lib/modelCatalog";
+import { LARGEST_PROFILE } from "@/lib/profileIds";
 
 export type H3Mode = "resident" | "stream";
 export type H3Op = "generate" | "edit";
@@ -37,7 +38,7 @@ export function h3PeakBytes(mode: H3Mode, op: H3Op): number {
 type RoomStatus = Pick<GovernorStatus, "tier" | "capBytes" | "freeMemoryBytes" | "marginBytes" | "loaded">;
 /** Resident when this is a 128 GB computer and the governor can hold the resident peak beside what is loaded now, else streaming. A warm picture worker that is only idle counts as free: the governor puts it away to make room. */
 export function h3ModeFor(status: RoomStatus, op: H3Op): H3Mode {
-  if (status.tier !== "p128") return "stream";
+  if (status.tier !== LARGEST_PROFILE) return "stream";
   const peak = h3PeakBytes("resident", op);
   const pool = status.loaded.find((item) => item.id === "image-pool")?.peakBytes ?? 0;
   const others = status.loaded.reduce((sum, item) => sum + item.peakBytes, 0) - pool;

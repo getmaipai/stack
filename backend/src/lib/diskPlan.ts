@@ -22,6 +22,7 @@ import {
 import { plannedPinsFor } from "@/lib/installPlan";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { IMAGE_FAMILIES } from "@/images/models";
+import { PROFILE_IDS } from "@/lib/profileIds";
 
 export const TALKING_PICTURES_ROW = "talking-pictures";
 export type DiskNeed = "required" | "recommended" | "optional";
@@ -100,7 +101,7 @@ export function engineDownloadBytes(key: string): number | null { return table.e
 export const DISK_MEASURED_ON = table.measured_on;
 
 const GIB = 1_073_741_824;
-const TIER_ORDER = ["p16", "p32", "p64", "p128"] as const;
+const TIER_ORDER = PROFILE_IDS;
 
 /** One entry of rows/diskRowGates.json: the smallest template that may offer the row, plus the feature the row belongs to when it has one. */
 interface DiskRowGate { minTier: string; feature?: string }
@@ -112,7 +113,7 @@ export function rowAllowed(tier: { id: string; notAvailable: readonly string[] }
   const gate = DISK_ROW_GATES[rowId];
   if (!gate) throw new Error("no disk row gate for " + rowId);
   if (gate.feature !== undefined && tier.notAvailable.includes(gate.feature)) return false;
-  return TIER_ORDER.indexOf(tier.id as (typeof TIER_ORDER)[number]) >= TIER_ORDER.indexOf(gate.minTier as (typeof TIER_ORDER)[number]);
+  return TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf(gate.minTier);
 }
 
 function pinBytes(pin: CatalogModelLike): { download: number; installed: number; temp: number } {

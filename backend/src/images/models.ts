@@ -17,6 +17,7 @@ import { buildH3ModelsDir } from "@/images/h3Layout";
 import { h3GenRoot } from "@/images/h3Engine";
 import { IMAGE_LORA_BASES, type ImageLoraBase } from "@/images/loras";
 import type { CatalogModelLike } from "@/lib/modelStore";
+import { PROFILE_IDS, templateBehavior, SMALLEST_PROFILE } from "@/lib/profileIds";
 
 /** Qwen-Image runs prebuilt 8-bit weights (INSTALL-EVERYTHING-01) and MiniMax H3-Image prebuilt int8 weights (H3-IMAGE-STACK-01); picture styles (LoRAs) are not offered for either yet, so neither is an ImageLoraBase. */
 export type ImageFamilyId = ImageLoraBase | typeof STACK_IMAGE_QWEN_ID | typeof STACK_IMAGE_H3_ID | typeof STACK_IMAGE_KLEIN3_ID;
@@ -35,7 +36,7 @@ export interface ImageFamily {
   loraExtraBytes: number;
   edit: boolean;
   /** Tiers that run it. */
-  tiers: Array<"p16" | "p32" | "p64" | "p128">;
+  tiers: string[];
   /** The seconds a 1024 x 1024 picture takes warm (measured), for the status route. */
   warmSeconds: number;
   /** The model is known to render prompted words inside the picture. */
@@ -112,7 +113,7 @@ export function installPlanFor(family?: ImageFamilyId): CatalogModelLike[] {
   return STACK_IMAGE_ENGINE_MODELS.filter((pin) => recordsOf(DEFAULT_FAMILY).includes(pin));
 }
 
-export type Tier = "p16" | "p32" | "p64" | "p128";
+export type Tier = string;
 export function runsOnTier(family: ImageFamilyId, tier: string): boolean { return (IMAGE_FAMILIES[family].tiers as string[]).includes(tier); }
 
 /** Bits the weights are quantized to at load; null for bf16. */
@@ -135,7 +136,7 @@ export function peakBytes(family: ImageFamilyId, mode: "generate" | "edit", quan
 export interface Availability { available: boolean; code: string | null; reason: string | null; tier: string; }
 export function imageAvailability(supported: boolean, tier = getGovernorStatus().tier, totalMemoryBytes = getGovernorStatus().totalMemoryBytes): Availability {
   if (!supported) return { available: false, code: "unsupported", reason: `The picture generator is not available on ${process.platform} ${process.arch} yet.`, tier };
-  if (tier === "p16") return { available: false, code: "not_available_on_this_computer", reason: `Pictures need a computer with 32 GB of memory or more; this one has ${Math.round(totalMemoryBytes / 1_073_741_824)} GB.`, tier };
+  if (!templateBehavior(tier).pictures) return { available: false, code: "not_available_on_this_computer", reason: `Pictures need a computer with 32 GB of memory or more; this one has ${Math.round(totalMemoryBytes / 1_073_741_824)} GB.`, tier };
   return { available: true, code: null, reason: null, tier };
 }
 

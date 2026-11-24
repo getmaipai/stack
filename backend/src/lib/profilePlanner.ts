@@ -13,6 +13,7 @@ import { STACK_MODELS } from "@/lib/modelCatalog";
 import { defaultRolePriority } from "@/lib/roleSwitches";
 import { reducedFreedBytes, resolveLadder, resolveTier, TIER_CANDIDATES, type ProfileId, type TierCategory } from "@/lib/tiers";
 import { ROLE_IDS, ROLES, type RoleId, PRIMARY_ROLE } from "@/roles";
+import { PROFILE_IDS, templateBehavior, workingMarginBytes } from "@/lib/profileIds";
 
 const GIB = 1_073_741_824;
 const GB = 1_000_000_000;
@@ -24,7 +25,7 @@ export type Basis = "measured" | "estimated";
 
 /** A tier is a good match while the computer is no more than 25 percent above its floor (plan, 2026-11-21). The plan's own example puts a 24 GB computer on p16, which the 25 percent rule alone (20 GB) would not, so p16 carries an explicit ceiling: its design target includes 24 GB machines (the vision note in profiles.ts measured on one). Chosen default, written in the plan. */
 export const MATCH_PERCENT = 25;
-export const MATCH_CEILING_GB: Record<ProfileTier["id"], number> = { p16: 24, p32: 40, p64: 80, p128: 160 };
+export const MATCH_CEILING_GB: Record<string, number> = Object.fromEntries(PROFILE_IDS.map((id) => [id, templateBehavior(id).matchCeilingGb]));
 
 /** A custom upgrade (a larger chat model) must leave at least this much room after the resident set. Chosen default, written in the plan. */
 export const UPGRADE_HEADROOM_BYTES = 4 * GIB;
@@ -138,7 +139,7 @@ export function planFor(input: PlannerInput, options: PlanOptions = { upgrade: t
   if (!tier || !size.tier) return null;
   const totalBytes = Math.round(size.memoryGb * GIB);
   const osReserve = GovernorRules.osMarginBytes;
-  const margin = GovernorRules.tiers[tier.id].workingMarginBytes;
+  const margin = workingMarginBytes(tier.id);
   const residentCap = Math.max(0, totalBytes - osReserve);
   const disabled = new Set<RoleId>(input.disabled ?? []);
   const priorityOf = (role: RoleId): number => input.priority?.[role] ?? defaultRolePriority(role);
@@ -157,7 +158,7 @@ export function planFor(input: PlannerInput, options: PlanOptions = { upgrade: t
     if (role === PRIMARY_ROLE) return { model: chosenChat, bytes: chat.bytes, basis: chat.basis };
     if (role === "judge") { const id = bindings.judge; const peak = id ? candidatePeak(id, input.measuredPeaks) : null; return peak ? { model: id!, bytes: peak.bytes, basis: peak.basis } : { model: null, bytes: 0, basis: "measured" }; }
     if (role === "tts") { const slot = resolveTier({ category: "voice", tier: "standard", profile: tier.id, roomBytes: Number.MAX_SAFE_INTEGER }); return slot ? { model: slot.model, bytes: input.measuredPeaks?.[slot.model] ?? slot.peakBytes, basis: input.measuredPeaks?.[slot.model] !== undefined || slot.verified ? "measured" : "estimated" } : { model: null, bytes: 1.6 * GB, basis: "estimated" }; }
-    if (role === "stt") return { model: bindings.stt ?? null, bytes: tier.id === "p16" || tier.id === "p32" ? STT_BYTES.small : STT_BYTES.large, basis: "estimated" };
+    if (role === "stt") return { model: bindings.stt ?? null, bytes: templateBehavior(tier.id).smallSpeech ? STT_BYTES.small : STT_BYTES.large, basis: "estimated" };
     return { model: null, bytes: SMALL_ROLE_BYTES[role] ?? 0, basis: "estimated" };
   };
   const residentRoles = ROLE_IDS.filter((role) => tier.resident.includes(role) && !disabled.has(role));
@@ -241,7 +242,7 @@ export function explainPlan(plan: ProfilePlan, memoryGb: number): string[] {
 export function templateRows(memoryGb: number, source: MemorySource): TemplateRow[] {
   return PROFILE_TIERS.map((tier) => {
     const floor = source === "unified" ? tier.minUnifiedGb : tier.minVramGb;
-    return { tier: tier.id, label: tier.label, min_gb: floor, cleared: Math.round(memoryGb) >= floor, match: Math.round(memoryGb) >= floor && Math.round(memoryGb) <= MATCH_CEILING_GB[tier.id], resident: tier.resident, on_demand: tier.onDemand, not_available: tier.notAvailable };
+    return { tier: tier.id, label: tier.label, min_gb: floor, cleared: Math.round(memoryGb) >= floor, match: Math.round(memoryGb) >= floor && Math.round(memoryGb) <= MATCH_CEILING_GB[tier.id]!, resident: tier.resident, on_demand: tier.onDemand, not_available: tier.notAvailable };
   });
 }
 

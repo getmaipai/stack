@@ -10,6 +10,7 @@ import { diskPlanForTier } from "@/lib/diskPlan";
 import { listModels } from "@/lib/modelStore";
 import { modelView } from "@/routes/models";
 import { RoleIdSchema } from "@/roles";
+import { PROFILE_IDS } from "@/lib/profileIds";
 
 const PlanModelSchema = z.object({
   id: z.string(), role: RoleIdSchema, repo: z.string().optional(), url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative(), licence: z.string(), revision: z.string(),
@@ -26,11 +27,11 @@ const DiskRowSchema = z.object({
 });
 const DiskTotalsSchema = z.object({ download_bytes: z.number().int(), installed_bytes: z.number().int(), peak_temp_bytes: z.number().int(), needed_bytes: z.number().int(), required_free_bytes: z.number().int() });
 const DiskPlanSchema = z.object({
-  tier: z.enum(["p16", "p32", "p64", "p128"]), level: z.enum(["minimal", "moderate", "recommended"]), margin_percent: z.number(), headroom_warn_bytes: z.number().int(),
+  tier: z.enum(PROFILE_IDS), level: z.enum(["minimal", "moderate", "recommended"]), margin_percent: z.number(), headroom_warn_bytes: z.number().int(),
   rows: z.array(DiskRowSchema), default: DiskTotalsSchema, minimum: DiskTotalsSchema, everything: DiskTotalsSchema, measured_on: z.string(), default_selected: z.array(z.string()),
 }).openapi({ description: "What each install costs on disk, per component, from the pins' byte counts and a measured table. required_free_bytes is the installed size plus the safety margin plus the peak temporary space: the free space a plan asks for." });
 const PlanSchema = z.object({
-  level: z.enum(["minimal", "moderate", "recommended"]).nullable(), tier: z.enum(["p16", "p32", "p64", "p128"]).nullable(), label: z.string(),
+  level: z.enum(["minimal", "moderate", "recommended"]).nullable(), tier: z.enum(PROFILE_IDS).nullable(), label: z.string(),
   memory_gb: z.number(), memory_source: z.enum(["unified", "graphics", "override", "unknown"]),
   models: z.array(PlanModelSchema), total_bytes: z.number().int(), remaining_bytes: z.number().int(), free_disk_bytes: z.number().int().nullable(), fits_disk: z.boolean().nullable(),
   disk: DiskPlanSchema.nullable(),

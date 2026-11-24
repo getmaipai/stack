@@ -13,6 +13,7 @@ import { ROLE_CANDIDATES, STACK_HELPER_MODEL_ID, STACK_MODELS, type RoleCandidat
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { PROFILE_MODEL_BINDINGS, PROFILE_TIERS, type ProfileTier } from "@/profiles";
 import { ROLE_IDS, ROLES, type RoleId, HEAVY_ROLE, PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
+import { PROFILE_IDS } from "@/lib/profileIds";
 
 export interface ComponentsCatalog {
   roles: RoleId[];
@@ -36,7 +37,7 @@ export function collectComponentsCatalog(): ComponentsCatalog {
   return { roles: [...ROLE_IDS], labels: Object.fromEntries(ROLE_IDS.map((role) => [role, ROLES[role].label])), engines: ENGINE_BINARIES, profiles: PROFILE_TIERS, models: STACK_MODELS, candidates: ROLE_CANDIDATES, runtimes, managed: MANAGED_RUNTIMES, shares, bindings: PROFILE_MODEL_BINDINGS };
 }
 
-const PROFILE_ORDER = ["p16", "p32", "p64", "p128"] as const;
+const PROFILE_ORDER = PROFILE_IDS;
 const LLAMA_ROLES = new Set<string>([PRIMARY_ROLE, HEAVY_ROLE, "judge", "router", PICTURE_READER_ROLE, "embed"]);
 
 function gb(bytes: number | undefined): string { return !bytes ? "unknown" : bytes < 104_857_600 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${(bytes / 1_073_741_824).toFixed(2)} GB`; }
@@ -51,7 +52,7 @@ function stance(profile: ProfileTier, role: RoleId): string {
 // never make a model appear to fit every machine.
 function minimumProfileIndex(model: CatalogModelLike): number {
   const named = typeof model.sizing === "object" && model.sizing !== null && "profile" in model.sizing ? String((model.sizing as { profile: unknown }).profile) : "";
-  const index = PROFILE_ORDER.indexOf(named as typeof PROFILE_ORDER[number]);
+  const index = PROFILE_ORDER.indexOf(named);
   return index < 0 ? PROFILE_ORDER.length - 1 : index;
 }
 function fits(model: CatalogModelLike, profile: ProfileTier): boolean {

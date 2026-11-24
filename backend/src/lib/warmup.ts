@@ -18,6 +18,7 @@ import { currentMachineTier, engineInstalledFor, getProcess, processRoleFor, req
 import type { RoleId } from "@/roles";
 import { settingValues } from "@/settings";
 import { currentHomeMode, homeModeEnteringCoding } from "@/lib/homeMode";
+import { workingMarginBytes } from "@/lib/profileIds";
 
 /** Most important first: a role later in the list is dropped first when
  * the machine cannot hold them all. */
@@ -116,7 +117,7 @@ async function run(trigger: string): Promise<WarmupStatus> {
   const loaded = getGovernorStatus().loaded;
   const candidates = candidatesNow();
   const residentBytes = loaded.filter((item) => candidates.every((c) => processRoleFor(c.role) !== item.id)).reduce((sum, item) => sum + item.peakBytes, 0);
-  const plan = planWarmSet(candidates, defaultModelBudgetBytes(), GovernorRules.tiers[tier].workingMarginBytes, residentBytes);
+  const plan = planWarmSet(candidates, defaultModelBudgetBytes(), workingMarginBytes(tier), residentBytes);
   status = {
     state: "warming", startedAt: new Date().toISOString(), finishedAt: null, trigger,
     roles: candidates.map((c) => {

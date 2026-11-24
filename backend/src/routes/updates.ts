@@ -6,10 +6,11 @@ import { checkCatalog, modelRecommendations, updatesState } from "@/updates/cata
 import { applyAvailableEngineUpdate, rollbackEngine } from "@/updates/engines";
 import { restartRole, stopRole } from "@/lib/supervisor";
 import { checkEngineUpdates } from "@/lib/engineUpdates";
+import { PROFILE_IDS } from "@/lib/profileIds";
 
 const EngineStateSchema = z.object({ name: z.string(), installed: z.string().nullable(), available: z.string().nullable(), availableKnown: z.boolean(), lastChecked: z.string().nullable(), notes: z.string().nullable() });
 const ModelStateSchema = z.object({ id: z.string(), installed: z.string(), available: z.string().nullable() });
-const RecommendationSchema = z.object({ id: z.string(), role: z.string(), profile: z.enum(["p16", "p32", "p64", "p128"]), quality: z.number().int(), repo: z.string().optional(), license: z.string().optional(), revision: z.string(), engine: z.string().optional(), download: z.object({ url: z.string(), sha256: z.string(), approx_bytes: z.number().int() }), sentence: z.string() });
+const RecommendationSchema = z.object({ id: z.string(), role: z.string(), profile: z.enum(PROFILE_IDS), quality: z.number().int(), repo: z.string().optional(), license: z.string().optional(), revision: z.string(), engine: z.string().optional(), download: z.object({ url: z.string(), sha256: z.string(), approx_bytes: z.number().int() }), sentence: z.string() });
 const UpdatesSchema = z.object({ checksEnabled: z.boolean(), engines: z.array(EngineStateSchema), models: z.object({ lastChecked: z.string().nullable(), entries: z.array(ModelStateSchema) }), recommendations: z.array(RecommendationSchema) });
 const nameParam = z.object({ name: z.string().openapi({ param: { name: "name", in: "path" }, example: "llama-server" }) });
 

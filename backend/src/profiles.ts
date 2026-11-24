@@ -6,7 +6,7 @@ import type { RoleId } from "@/roles";
 export type { RoleId } from "@/roles";
 
 export interface ProfileTier {
-  id: "p16" | "p32" | "p64" | "p128";
+  id: string;
   level: "minimal" | "moderate" | "recommended";
   label: string;
   minUnifiedGb: number;
@@ -34,7 +34,7 @@ export function budgetPercent(): number { return currentBudgetPercent; }
  * from p32 it has its own 4B pin and process. The coding role has its own
  * model from p64 (CODE-STACK-01 S1): Qwen3.8-27B at UD-Q4_K_M, loaded only
  * while someone is coding; p16 and p32 have no coding. */
-export const PROFILE_MODEL_BINDINGS: Partial<Record<ProfileTier["id"], Partial<Record<RoleId, string>>>> = {
+export const PROFILE_MODEL_BINDINGS: Record<string, Partial<Record<RoleId, string>>> = {
   p16: { chat: "qwen3-8b-instruct-q4-k-m", stt: "moonshine-tiny-en-int8" },
   p32: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m", stt: "moonshine-tiny-en-int8" },
   p64: { chat: "qwen3-8b-instruct-q4-k-m", judge: "qwen3-4b-q4-k-m", coding: "qwen3.8-27b-ud-q4-k-m", stt: "parakeet-tdt-0.6b-v2-int8" },

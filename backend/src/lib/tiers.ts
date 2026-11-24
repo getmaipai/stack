@@ -3,7 +3,8 @@ import rows from "@/rows/tierCandidates.json";
 
 export type TierId = "reduced" | "standard" | "boost" | "max";
 export type TierCategory = "chat" | "pictures" | "video" | "music" | "voice" | "stems";
-export type ProfileId = "p16" | "p32" | "p64" | "p128";
+export type { ProfileId } from "@/lib/profileIds";
+import type { ProfileId } from "@/lib/profileIds";
 export type SwitchCost = "option" | "family" | "cross";
 export type OptionSet = Record<string, string | number | boolean>;
 export type PeakStatus = "measured" | "unverified";

@@ -10,6 +10,7 @@
 import type { GovernorTier } from "@/lib/governor";
 import { CHATTERBOX_ENGINE, VOXCPM2_ENGINE, VOXCPM2_REDUCED_ENGINE } from "@/lib/modelCatalog";
 import { partLabel } from "@/lib/partDefs";
+import { PROFILE_IDS, templateBehavior, SMALLEST_PROFILE } from "@/lib/profileIds";
 
 const pocketLabel = partLabel("pocket-tts-english");
 
@@ -69,7 +70,7 @@ export const TTS_ENGINE_CHOICES: TtsEngineId[] = (Object.keys(TTS_ENGINES) as Tt
  * the judge and embeddings leave little room beside them for a voice. The
  * voice can still be chosen by hand there; the governor refuses a load
  * that does not fit and the voice falls back to Pocket. */
-export const TTS_DEFAULT_BY_TIER: Record<GovernorTier, TtsEngineId> = { p16: "pocket", p32: "pocket", p64: "chatterbox-turbo", p128: "chatterbox-turbo" };
+export const TTS_DEFAULT_BY_TIER: Record<GovernorTier, TtsEngineId> = Object.fromEntries(PROFILE_IDS.map((id) => [id, templateBehavior(id).defaultTts as TtsEngineId]));
 
 /** Engines run by the VoxCPM2 runtime (a clip's words and the 300 ms pause are its own; no tokenizer helper is fetched for a clip). */
 export function isVoxcpm2Engine(id: TtsEngineId): boolean { return TTS_ENGINES[id].runtime === "voxcpm2"; }

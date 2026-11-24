@@ -12,6 +12,7 @@ import { decode, looksAudio } from "@/routes/stems";
 import { recordedSpeech, RECORDED_SPEECH_MAX_REFERENCE_BYTES, RECORDED_SPEECH_MAX_TEXT, RECORDED_SPEECH_PEAK_BYTES } from "@/recordedSpeech/recordedSpeech";
 import { RECORDED_SPEECH_JOB_KIND, recordedSpeechFailure, recordedSpeechStage, recordedSpeechTracker, stashRecordedSpeech, unstashRecordedSpeech } from "@/recordedSpeech/jobs";
 import { getReducedChatState } from "@/lib/reducedChat";
+import { PROFILE_IDS, templateBehavior, SMALLEST_PROFILE } from "@/lib/profileIds";
 
 const WAIT = 30_000, MAX_WAIT = 30 * 60_000;
 const Clip = z.object({ reference: z.string().max(56_000_000), reference_text: z.string().max(12_000).optional(), reference_sha256: z.string().regex(/^[0-9a-fA-F]{64}$/).optional() });
@@ -53,7 +54,7 @@ recordedSpeechV1Routes.openapi(post, async (c) => {
   if (!recordedSpeech.installed) return fail(c, "not_installed", "Install Fish Audio Drama 3 from Home's Engines page, then try again.", 503);
   if (!hasJobRunner(RECORDED_SPEECH_JOB_KIND)) return fail(c, "unsupported", "Recorded speech is not available on this machine.", 503);
   const governor = getGovernorStatus();
-  if (getReducedChatState() === "reduced" || governor.tier === "p16" || governor.tier === "p32") return fail(c, "unsupported", "Recorded speech needs a larger memory tier; use the live voice instead.", 503);
+  if (getReducedChatState() === "reduced" || !templateBehavior(governor.tier).recordedSpeech) return fail(c, "unsupported", "Recorded speech needs a larger memory tier; use the live voice instead.", 503);
   const resident = governor.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
   if (resident + RECORDED_SPEECH_PEAK_BYTES > governor.capBytes) return fail(c, "unsupported", "There is not enough memory for recorded speech alongside the current chat and picture engines; use the live voice instead.", 503);
   const active = listJobs().filter((job) => job.kind === RECORDED_SPEECH_JOB_KIND && ["queued", "running", "stalled"].includes(job.state)).length;

@@ -3,10 +3,11 @@
 // when the Stack starts; `lib/splash.ts` reads it and knows no number of its own. A Splash release that moves a floor changes the
 // JSON and the pin, not the code. The JSON is a static import so a compiled binary embeds it.
 import { z } from "zod";
+import { PROFILE_IDS } from "@/lib/profileIds";
 import engineJson from "./engine.json" with { type: "json" };
 
 /** The tier names the governor knows (`GovernorRules.tiers`); kept here as data so this file imports no runtime from lib/. */
-const TIER_NAMES = ["p16", "p32", "p64", "p128"] as const;
+const TIER_NAMES = PROFILE_IDS;
 const EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 export const SplashEngineSpec = z.object({

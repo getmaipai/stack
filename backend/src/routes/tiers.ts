@@ -11,6 +11,7 @@ import { reducedRoomBytes, tierRoomBytes } from "@/lib/governor";
 import { tierCandidateLists, TIER_CANDIDATES, type TierCategory } from "@/lib/tiers";
 import { applyVoiceEngine } from "@/lib/tierPick";
 import { controlReducedChat } from "@/lib/reducedChatLease";
+import { PROFILE_IDS } from "@/lib/profileIds";
 
 const Candidate = z.object({
   id: z.string(), label: z.string(), family: z.string(), peak_bytes: z.number(), verified: z.boolean(),
@@ -22,7 +23,7 @@ const candidatesRoute = createRoute({
   method: "get", path: "/candidates", tags: ["Tiers"], summary: "The models each level of a category may use on this computer (TIER-HOME-04)",
   description: "Every catalog candidate for the category on this computer's profile, under each of Standard, Boost and Max, with the family it belongs to, its peak memory, whether it fits that level's cap and the plain refusal when it does not. `profile` is null when this computer is too small for any profile.",
   request: { query: z.object({ category: z.enum([PRIMARY_ROLE, "pictures", "video", "music", "voice", "stems"]) }) },
-  responses: { 200: { content: { "application/json": { schema: z.object({ category: z.string(), profile: z.enum(["p16", "p32", "p64", "p128"]).nullable(), room_bytes: z.number(), levels: z.array(Level) }) } }, description: "The candidates per level." } },
+  responses: { 200: { content: { "application/json": { schema: z.object({ category: z.string(), profile: z.enum(PROFILE_IDS).nullable(), room_bytes: z.number(), levels: z.array(Level) }) } }, description: "The candidates per level." } },
 });
 
 export const tiersRoutes = apiRouter<AppEnv>();

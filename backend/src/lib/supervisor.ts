@@ -58,6 +58,7 @@ import { classifyCrash, describeStartFailure, stderrEvidence, type CrashVerdict 
 import { memoryLevel } from "@/lib/memoryState";
 import { hfHubRoot } from "@/lib/store/layout";
 import { engineSettingValues, gpuLayersFor, settingValues, type GpuLayers, type SettingValue } from "@/settings";
+import { PROFILE_IDS, templateBehavior, SMALLEST_PROFILE } from "@/lib/profileIds";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { logger } from "@/lib/log";
 import { readGgufFacts } from "@/lib/gguf";
@@ -1246,7 +1247,7 @@ export function codingLaunchSettings(values: Record<string, SettingValue> = sett
   const number = (key: string, fallback: number): number => { const value = values[`stack.engines.coding.${key}`]; return typeof value === "number" && Number.isFinite(value) ? value : fallback; };
   const slotsSetting = number("slots", 0);
   return {
-    slots: slotsSetting > 0 ? Math.floor(slotsSetting) : machineTier === "p128" ? 2 : 1,
+    slots: slotsSetting > 0 ? Math.floor(slotsSetting) : machineTier ? templateBehavior(machineTier).heavyLaneSlots : 1,
     thinkingBudgetTokens: Math.max(0, Math.floor(number("thinking_budget_ceiling", 2000))),
     keepWarmMinutes: Math.max(1, Math.floor(number("keep_warm_minutes", 15))),
     contextLength: Math.max(8192, Math.floor(number("context_length", 131_072))),

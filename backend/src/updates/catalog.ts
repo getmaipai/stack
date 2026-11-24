@@ -15,11 +15,12 @@ import { listModels, type CatalogModelLike } from "@/lib/modelStore";
 import { proposeProfile } from "@/profiles";
 import { settingValues } from "@/settings";
 import { currentEngine } from "@/updates/engines";
+import { PROFILE_IDS } from "@/lib/profileIds";
 
 export const MODEL_INDEX_URL = "https://github.com/getmaipai/catalog/releases/latest/download/model-index.json";
 export const ENGINE_INDEX_URL = "https://github.com/getmaipai/catalog/releases/latest/download/engine-index.json";
 
-const profileIds = ["p16", "p32", "p64", "p128"] as const;
+const profileIds = PROFILE_IDS;
 export const ModelIndexEntrySchema = z.object({
   id: z.string(), role: z.string(), profile: z.enum(profileIds), quality: z.number().int().nonnegative(),
   repo: z.string().optional(), license: z.string().optional(), revision: z.string(), engine: z.string().optional(),
@@ -175,7 +176,7 @@ export type ModelRecommendation = ModelIndexEntry & { sentence: string };
  * better quality band: sizing data for Home's page, never an install. */
 export function recommendationsFor(index: ModelIndex, profileId: string | null, installedQualities: Record<string, number> = {}): ModelRecommendation[] {
   if (!profileId) return [];
-  const current = profileIds.indexOf(profileId as typeof profileIds[number]);
+  const current = profileIds.indexOf(profileId);
   return index.models
     .filter((model) => profileIds.indexOf(model.profile) <= current && (installedQualities[model.role] === undefined || model.quality > installedQualities[model.role]!))
     .map((model) => ({ ...model, sentence: installedQualities[model.role] === undefined ? `Add ${model.role} with quality band ${model.quality}.` : `Improve ${model.role} to quality band ${model.quality}.` }));

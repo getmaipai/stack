@@ -9,6 +9,7 @@ import { __setMemoryReaderForTests } from "@/lib/memory";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
 import { currentMachineTier, resetSupervisorForTests, setMachineTier, watchProcessMemory } from "@/lib/supervisor";
 import { GOVERNOR_MEMORY_DEFAULT } from "./governorMemoryDefault";
+import { PROFILE_IDS } from "@/lib/profileIds";
 
 const GB = 1_073_741_824;
 // The governor's watch re-reads memory as it starts, so the reading it
@@ -18,7 +19,7 @@ beforeEach(() => { __resetHealthForTests(); __setMemoryReaderForTests(scriptedMe
 afterEach(() => { setMachineTier(null); resetSupervisorForTests(); __setMemoryReaderForTests(scriptedMemoryReader([GOVERNOR_MEMORY_DEFAULT])); __resetGovernorForTests(); });
 
 test("a p128 machine keeps p128's margin: a load that fits under the p16 default is queued under p128", async () => {
-  expect(GovernorRules.tiers.p128.workingMarginBytes).toBe(20 * GB);
+  expect(GovernorRules.tiers[PROFILE_IDS.at(-1)!]!.workingMarginBytes).toBe(20 * GB);
   __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 30 * GB });
   // Before any watch carries a tier, the default p16 margin admits 20 GB of a 30 GB free.
   const underDefault = await admit({ id: "chat", kind: "resident", requestedBytes: 20 * GB });

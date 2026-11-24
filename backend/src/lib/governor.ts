@@ -6,6 +6,7 @@ import { ROLES, ROLE_JOB_CLASS, type JobClass, PRIMARY_ROLE } from "@/roles";
 import { reducedFreedBytes as tierReducedFreedBytes, tierCapBytes } from "@/lib/tiers";
 import { CATEGORY_DEFS } from "@/lib/choiceCategories";
 import { logger } from "@/lib/log";
+import { PROFILE_IDS, templateBehavior, SMALLEST_PROFILE, workingMarginBytes } from "@/lib/profileIds";
 
 const GB = 1_073_741_824;
 
@@ -53,17 +54,13 @@ export const GovernorRules = {
   /** Rule Q8: free memory after a flex-band admission must stay above this floor. */
   q8FlexFloorBytes: 16 * GB,
   engineMultipliers: { "llama-server": 1.3, "mlx-serve": 1.4, oMLX: 1.4, default: 1.3 },
-  tiers: {
-    p16: { workingMarginBytes: 4 * GB },
-    p32: { workingMarginBytes: 8 * GB },
-    p64: { workingMarginBytes: 12 * GB },
-    p128: { workingMarginBytes: 20 * GB },
-  },
-} as const;
+  /** Per template working margin, from rows/templateRows.json (workingMarginGb). */
+  tiers: Object.fromEntries(PROFILE_IDS.map((id) => [id, { workingMarginBytes: workingMarginBytes(id) }])) as Record<string, { workingMarginBytes: number }>,
+};
 
 export type GovernorKind = "resident" | "jit" | "generator";
 export type GovernorClass = "reserved" | "warm" | "burst";
-export type GovernorTier = keyof typeof GovernorRules.tiers;
+export type GovernorTier = string;
 export type JobTier = "standard" | "boost" | "max";
 export type AdmissionCaller = "household" | "dev" | "test";
 export type RunState = "running" | "pausing" | "paused";
@@ -180,7 +177,7 @@ interface GovernorTuning {
 }
 
 let tuning: GovernorTuning = { ...GovernorRules, tiers: undefined as never, engineMultipliers: undefined as never } as unknown as GovernorTuning;
-let activeTier: GovernorTier = "p16";
+let activeTier: GovernorTier = SMALLEST_PROFILE;
 let totalMemoryBytes = 0;
 let metalCapBytes: number | null = null;
 let budgetPercent = 100;
@@ -439,7 +436,7 @@ export function liveReducedFreedBytes(): number {
   const reducedChatPeak = 5_700_000_000;
   const ledgerChatSaving = Math.max(0, chat.peakBytes - reducedChatPeak);
   const voice = [...loaded.values()].find((item) => item.role === "voice" || item.id === "voice" || item.id.startsWith("tts"));
-  const reducedVoicePeak = activeTier === "p16" || activeTier === "p32" ? 1_600_000_000 : 2_770_000_000;
+  const reducedVoicePeak = templateBehavior(activeTier).reducedVoicePeakBytes;
   const voiceSaving = voice && !voice.id.includes("reduced") ? Math.max(0, voice.peakBytes - reducedVoicePeak) : 0;
   return ledgerChatSaving + voiceSaving;
 }
@@ -605,7 +602,7 @@ function loadedBytes(): number {
 }
 
 function workingMargin(): number {
-  return GovernorRules.tiers[activeTier].workingMarginBytes;
+  return workingMarginBytes(activeTier);
 }
 
 /** DEV-CHECKOUT-01: a job at or above this size is heavy whatever its role (a big picture, a long clip). */
@@ -1304,7 +1301,7 @@ export function __resetGovernorForTests(): void {
     peakRecordStepBytes: GovernorRules.peakRecordStepBytes,
     osMarginBytes: GovernorRules.osMarginBytes,
   };
-  activeTier = "p16";
+  activeTier = SMALLEST_PROFILE;
   const reading = getMemoryReader().read();
   totalMemoryBytes = reading.totalBytes;
   freeMemoryBytes = reading.freeBytes;

@@ -63,10 +63,10 @@ describe("chat model pin", () => {
     for (const tier of PROFILE_TIERS) {
       if (tierIds.indexOf(tier.id) < tierIds.indexOf(declaredTier ?? "p16")) continue;
       expect(chatPinFitsTier(tier)).toBe(true);
-      expect(chatPinFootprintBytes(tier) + GovernorRules.tiers[tier.id].workingMarginBytes).toBeLessThanOrEqual(tier.minUnifiedGb * GB);
+      expect(chatPinFootprintBytes(tier) + GovernorRules.tiers[tier.id]!.workingMarginBytes).toBeLessThanOrEqual(tier.minUnifiedGb * GB);
     }
     const p16 = PROFILE_TIERS.find((tier) => tier.id === "p16")!;
-    expect(chatPinFootprintBytes(p16) + GovernorRules.tiers.p16.workingMarginBytes).toBeLessThanOrEqual(p16.minUnifiedGb * GB);
+    expect(chatPinFootprintBytes(p16) + GovernorRules.tiers[p16.id]!.workingMarginBytes).toBeLessThanOrEqual(p16.minUnifiedGb * GB);
   });
 });
 

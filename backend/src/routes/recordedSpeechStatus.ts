@@ -8,6 +8,7 @@ import { recordedSpeechInstallModels } from "@/lib/installPlan";
 import { getGovernorStatus } from "@/lib/governor";
 import { getReducedChatState } from "@/lib/reducedChat";
 import { STACK_RECORDED_SPEECH_MODEL_ID } from "@/lib/modelCatalog";
+import { PROFILE_IDS, templateBehavior, SMALLEST_PROFILE } from "@/lib/profileIds";
 
 const Model = z.object({ id: z.string(), role: z.string(), repo: z.string().optional(), url: z.string(), sha256: z.string(), approx_bytes: z.number().int(), licence: z.string(), revision: z.string(), engine: z.string().optional(), archive: z.boolean().optional(), hub_file: z.string().optional(), component: z.string().optional(), starter: z.boolean(), installed: z.boolean() });
 const route = createRoute({ method: "get", path: "/", tags: ["Recorded speech"], summary: "Recorded speech availability and limits", responses: { 200: { content: { "application/json": { schema: z.object({ recorded_speech: z.object({ state: z.string(), available: z.boolean(), engine: z.string(), version: z.string(), model: z.object({ id: z.string(), installed: z.boolean() }), models: z.array(Model), installed: z.boolean(), ready: z.boolean(), limits: z.object({ max_text_chars: z.number(), max_reference_mb: z.number(), reference_min_seconds: z.number(), reference_max_seconds: z.number(), max_speakers: z.number(), peak_bytes: z.number(), idle_exit_seconds: z.number() }) }) }) } }, description: "Recorded speech status." } } });
@@ -15,7 +16,7 @@ export const recordedSpeechRoutes = apiRouter<AppEnv>();
 recordedSpeechRoutes.openapi(route, (c) => {
   const governor = getGovernorStatus();
   const resident = governor.loaded.filter((item) => item.kind === "resident").reduce((sum, item) => sum + item.peakBytes, 0);
-  const supportedTier = governor.tier !== "p16" && governor.tier !== "p32" && getReducedChatState() !== "reduced" && resident + RECORDED_SPEECH_PEAK_BYTES <= governor.capBytes;
+  const supportedTier = templateBehavior(governor.tier).recordedSpeech && getReducedChatState() !== "reduced" && resident + RECORDED_SPEECH_PEAK_BYTES <= governor.capBytes;
   const available = recordedSpeech.depsAvailable && supportedTier;
   const installedIds = listModels().map(modelView).filter((model) => model.state === "installed").map((model) => model.id);
   const installed = recordedSpeechInstallModels(installedIds).some((model) => model.id === STACK_RECORDED_SPEECH_MODEL_ID && model.installed);
