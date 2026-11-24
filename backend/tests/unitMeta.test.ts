@@ -33,3 +33,26 @@ const MUSIC_META = [
 test("the six music units have metadata rows with group music, role music and their tiers", () => {
   for (const row of MUSIC_META) expect(unitMeta(row.id)).toEqual({ group: "music", role: "music", tiers: row.tiers as never });
 });
+
+const OTHER_META: Array<{ id: string; group: string; role: string; tiers?: string[] }> = [
+  { id: "wakeword", group: "voice", role: "wakeword" },
+  { id: "seedvr2-3b", group: "tools", role: "image", tiers: ["p64", "p128"] },
+  { id: "image-tools", group: "tools", role: "image" },
+  { id: "ffmpeg", group: "tools", role: "media" },
+  { id: "fpcalc", group: "tools", role: "media" },
+  { id: "shazam-signature", group: "tools", role: "media" },
+  { id: "liveportrait", group: "tools", role: "image" },
+  { id: "tool-look", group: "tools", role: "image" },
+  { id: "htdemucs", group: "stems", role: "music" },
+  { id: "htdemucs-ft", group: "stems", role: "music" },
+  { id: "htdemucs-6s", group: "stems", role: "music" },
+  { id: "mms-fa-align", group: "stems", role: "music" },
+  { id: "beats-analysis", group: "stems", role: "music" },
+  { id: "soulx-singer-svc", group: "stems", role: "music" },
+  { id: "mossformer2-se-48k", group: "voice", role: "tts" },
+  { id: "fish-audio-drama-3-4bit", group: "voice", role: "tts", tiers: ["p64", "p128"] },
+];
+
+test("the stem, voice, wake word and tool units have metadata rows with their group, role and tiers", () => {
+  for (const row of OTHER_META) expect(unitMeta(row.id)).toEqual({ group: row.group, role: row.role, ...(row.tiers ? { tiers: row.tiers } : {}) } as never);
+});

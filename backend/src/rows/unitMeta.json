@@ -9,5 +9,21 @@
   "score-gen": { "group": "music", "role": "music", "tiers": ["p16", "p32", "p64", "p128"] },
   "whisper-large-v3-turbo": { "group": "music", "role": "music", "tiers": ["p64", "p128"] },
   "ace-step-1-5-xl-turbo-bf16": { "group": "music", "role": "music", "tiers": ["p128"] },
-  "ace-step-1-5-xl-sft-bf16": { "group": "music", "role": "music", "tiers": ["p128"] }
+  "ace-step-1-5-xl-sft-bf16": { "group": "music", "role": "music", "tiers": ["p128"] },
+  "wakeword": { "group": "voice", "role": "wakeword" },
+  "seedvr2-3b": { "group": "tools", "role": "image", "tiers": ["p64", "p128"] },
+  "image-tools": { "group": "tools", "role": "image" },
+  "ffmpeg": { "group": "tools", "role": "media" },
+  "fpcalc": { "group": "tools", "role": "media" },
+  "shazam-signature": { "group": "tools", "role": "media" },
+  "liveportrait": { "group": "tools", "role": "image" },
+  "tool-look": { "group": "tools", "role": "image" },
+  "htdemucs": { "group": "stems", "role": "music" },
+  "htdemucs-ft": { "group": "stems", "role": "music" },
+  "htdemucs-6s": { "group": "stems", "role": "music" },
+  "mms-fa-align": { "group": "stems", "role": "music" },
+  "beats-analysis": { "group": "stems", "role": "music" },
+  "soulx-singer-svc": { "group": "stems", "role": "music" },
+  "mossformer2-se-48k": { "group": "voice", "role": "tts" },
+  "fish-audio-drama-3-4bit": { "group": "voice", "role": "tts", "tiers": ["p64", "p128"] }
 }

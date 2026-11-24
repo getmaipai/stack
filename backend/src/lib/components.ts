@@ -270,7 +270,7 @@ export function componentDefs(): UnitDef[] {
   }
   // The wake word is three small assets that only work together.
   const wake = STACK_MODELS.filter((pin) => pin.role === "wakeword");
-  if (wake.length) units.push({ id: "wakeword", label: partLabel("wakeword"), summary: partDef("wakeword")!.description, group: "voice", role: "wakeword", pins: wake, envs: [], usedBy: () => ["Wake activation on speakers and robots"], busy: () => null });
+  if (wake.length) units.push({ id: "wakeword", label: partLabel("wakeword"), summary: partDef("wakeword")!.description, ...unitMeta("wakeword"), pins: wake, envs: [], usedBy: () => ["Wake activation on speakers and robots"], busy: () => null });
   const pictureBusy = (): string | null => {
     const state = imageGen.status().state;
     if (state === "running" || state === "building") return "A picture is being made right now.";
@@ -293,19 +293,19 @@ export function componentDefs(): UnitDef[] {
   }
   // MAKE-CLEARER-2026-11-13: the Best level of Make clearer. Optional, and recommended only where a 12 GB peak fits beside chat (the 64 GB tier and up).
   units.push({
-    id: STACK_IMAGE_RESTORE_ID, label: partLabel(STACK_IMAGE_RESTORE_ID), summary: partDef(STACK_IMAGE_RESTORE_ID)!.description, group: "tools", role: "image", pins: STACK_IMAGE_RESTORE_MODELS, envs: [envImage], tiers: ["p64", "p128"],
+    id: STACK_IMAGE_RESTORE_ID, label: partLabel(STACK_IMAGE_RESTORE_ID), summary: partDef(STACK_IMAGE_RESTORE_ID)!.description, ...unitMeta(STACK_IMAGE_RESTORE_ID), pins: STACK_IMAGE_RESTORE_MODELS, envs: [envImage],
     platformBlock: () => imageGen.supported() ? null : "Pictures are not available on this kind of computer yet.",
     usedBy: () => ["Make clearer, Best level, in the Studio and in chat"],
     busy: pictureBusy,
   });
   units.push({
-    id: "image-tools", label: partLabel("image-tools"), summary: partDef("image-tools")!.description, group: "tools", role: "image", pins: STACK_IMAGE_TOOL_MODELS, envs: [envTools],
+    id: "image-tools", label: partLabel("image-tools"), summary: partDef("image-tools")!.description, ...unitMeta("image-tools"), pins: STACK_IMAGE_TOOL_MODELS, envs: [envTools],
     platformBlock: () => { const status = imageTools.status(); return status.state === "unsupported" ? status.reason ?? "Image editing is not available on this computer yet." : null; },
     usedBy: () => ["The picture editor"],
     busy: () => { const state = imageTools.status().state; return state === "running" || state === "building" ? "A picture edit is running right now." : null; },
   });
   units.push({
-    id: "ffmpeg", label: partLabel("ffmpeg"), summary: partDef("ffmpeg")!.description, group: "tools", role: "media", pins: [], envs: [envFfmpeg],
+    id: "ffmpeg", label: partLabel("ffmpeg"), summary: partDef("ffmpeg")!.description, ...unitMeta("ffmpeg"), pins: [], envs: [envFfmpeg],
     licenceName: MEDIA_COMPONENTS.find((component) => component.name === "ffmpeg")!.licence,
     alwaysRequired: "Home uses this to mix songs, shift voices and cut clips, so it is always installed.",
     platformBlock: () => ffmpegPinFor() ? null : `Audio and video tools are not available on ${process.platform} ${process.arch} yet.`,
@@ -313,25 +313,25 @@ export function componentDefs(): UnitDef[] {
     busy: () => activeJobFor((kind) => kind.startsWith("media") || kind === "music_edit") ? "A clip or a song edit is running right now." : null,
   });
   units.push({
-    id: "fpcalc", label: partLabel("fpcalc"), summary: partDef("fpcalc")!.description, group: "tools", role: "media", pins: [], envs: [envFpcalc],
+    id: "fpcalc", label: partLabel("fpcalc"), summary: partDef("fpcalc")!.description, ...unitMeta("fpcalc"), pins: [], envs: [envFpcalc],
     licenceName: MEDIA_COMPONENTS.find((component) => component.name === "fpcalc (chromaprint)")!.licence,
     platformBlock: () => fpcalcPinFor() ? null : `The song naming tool is not available on ${process.platform} ${process.arch} yet.`,
     usedBy: () => ["Name a song from a recording"], busy: () => null,
   });
   units.push({
-    id: SHAZAM_SIGNATURE_NAME, label: partLabel(SHAZAM_SIGNATURE_NAME), summary: partDef(SHAZAM_SIGNATURE_NAME)!.description, group: "tools", role: "media", pins: [], envs: [envShazamSignature],
+    id: SHAZAM_SIGNATURE_NAME, label: partLabel(SHAZAM_SIGNATURE_NAME), summary: partDef(SHAZAM_SIGNATURE_NAME)!.description, ...unitMeta(SHAZAM_SIGNATURE_NAME), pins: [], envs: [envShazamSignature],
     licenceName: MEDIA_COMPONENTS.find((component) => component.name === "shazam-signature (shazamio-core)")!.licence,
     platformBlock: () => shazamSignatureRequirementsFileFor() ? null : `The song signature tool is not available on ${process.platform} ${process.arch} yet.`,
     usedBy: () => ["Name a song from a recording"], busy: () => null,
   });
   units.push({
-    id: "liveportrait", label: partLabel("liveportrait"), summary: partDef("liveportrait")!.description, group: "tools", role: "image", pins: STACK_LIVEPORTRAIT_MODELS, envs: [envAvatarMotion],
+    id: "liveportrait", label: partLabel("liveportrait"), summary: partDef("liveportrait")!.description, ...unitMeta("liveportrait"), pins: STACK_LIVEPORTRAIT_MODELS, envs: [envAvatarMotion],
     platformBlock: () => { const status = livePortrait.status(); return status.state === "unsupported" ? status.reason ?? "Companion animation is not available on this computer yet." : null; },
     usedBy: () => ["Talking companions"],
     busy: () => { const state = livePortrait.status().state; return state === "running" || state === "building" ? "Talking frames are being made right now." : null; },
   });
   const lookPins = STACK_IMAGE_TOOL_MODELS.filter((pin) => pin.component === "tool-look");
-  if (lookPins.length) units.push({ id: "tool-look", label: partLabel("tool-look"), summary: partDef("tool-look")!.description, group: "tools", role: "image", pins: lookPins, envs: [envTools], usedBy: () => ["Look at a picture"], busy: () => null });
+  if (lookPins.length) units.push({ id: "tool-look", label: partLabel("tool-look"), summary: partDef("tool-look")!.description, ...unitMeta("tool-look"), pins: lookPins, envs: [envTools], usedBy: () => ["Look at a picture"], busy: () => null });
   units.push({
     id: STACK_VIDEO_MODELS[0]!.id, label: partLabel(STACK_VIDEO_MODELS[0]!.id), summary: partDef(STACK_VIDEO_MODELS[0]!.id)!.description, ...unitMeta(STACK_VIDEO_MODELS[0]!.id), pins: STACK_VIDEO_MODELS, envs: [envVideo],
     platformBlock: () => videoAvailability().code === "unsupported" ? videoAvailability().reason : null,
@@ -364,14 +364,14 @@ export function componentDefs(): UnitDef[] {
     },
   });
   units.push({ id: STACK_VIDEO_MASK_MODEL_ID, label: partLabel(STACK_VIDEO_MASK_MODEL_ID), summary: partDef(STACK_VIDEO_MASK_MODEL_ID)!.description, ...unitMeta(STACK_VIDEO_MASK_MODEL_ID), pins: STACK_VIDEO_MASK_MODELS, envs: [envMask], platformBlock: () => maskRequirementsFileFor() ? null : `SAM 2.1 masks are not available on ${process.platform} ${process.arch} yet.`, usedBy: () => ["Cutouts and background removal on clips", "Still-picture masks on image edits"], busy: () => activeJobFor((kind, input) => kind === "media.edit" && JSON.stringify(input ?? {}).includes('"cutout"')) ? "A clip cutout is running right now." : null });
-  units.push({ id: "htdemucs", label: partLabel("htdemucs"), summary: partDef("htdemucs")!.description, group: "stems", role: "music", pins: [STACK_STEMS_MODELS[0]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
-  units.push({ id: "htdemucs-ft", label: partLabel("htdemucs-ft"), summary: partDef("htdemucs-ft")!.description, group: "stems", role: "music", pins: [STACK_STEMS_MODELS[1]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
-  units.push({ id: "mms-fa-align", label: partLabel("mms-fa-align"), summary: partDef("mms-fa-align")!.description, group: "stems", role: "music", pins: STACK_ALIGN_MODELS, envs: [envAlign], usedBy: () => ["Word-by-word lyrics on a song card"], busy: () => activeJobFor((kind) => kind === "align_generation") ? "A song's lyrics are being timed right now." : null });
-  units.push({ id: "beats-analysis", label: partLabel("beats-analysis"), summary: partDef("beats-analysis")!.description, group: "stems", role: "music", pins: [], envs: [envBeats], usedBy: () => ["Cut to the beat in a video edit"], busy: () => activeJobFor((kind) => kind === BEATS_JOB_KIND) ? "A song is being analysed for its beats right now." : null });
-  units.push({ id: "soulx-singer-svc", label: partLabel("soulx-singer-svc"), summary: partDef("soulx-singer-svc")!.description, group: "stems", role: "music", pins: STACK_MODELS.filter((pin) => pin.component === "voice-convert"), envs: [envVoiceConvert], usedBy: () => ["Voice conversion in music remix"], busy: () => activeJobFor((kind) => kind === "voice_convert_generation") ? "A vocal is being converted right now." : null });
-  units.push({ id: "mossformer2-se-48k", label: partLabel("mossformer2-se-48k"), summary: partDef("mossformer2-se-48k")!.description, group: "voice", role: "tts", pins: STACK_MODELS.filter((pin) => pin.id === "mossformer2-se-48k"), envs: [], usedBy: () => ["Clean up speech audio"] , busy: () => null });
-  units.push({ id: "fish-audio-drama-3-4bit", label: partLabel("fish-audio-drama-3-4bit"), summary: partDef("fish-audio-drama-3-4bit")!.description, group: "voice", role: "tts", pins: STACK_RECORDED_SPEECH_MODELS, envs: [envRecordedSpeech], tiers: ["p64", "p128"], platformBlock: () => recordedSpeech.depsAvailable ? null : "Recorded speech is available on macOS with Apple silicon.", usedBy: () => ["Recorded speech jobs in Home"], busy: () => activeJobFor((kind) => kind === "recorded_speech_generation") ? "A recorded speech job is waiting or rendering right now." : null });
-  units.push({ id: "htdemucs-6s", label: partLabel("htdemucs-6s"), summary: partDef("htdemucs-6s")!.description, group: "stems", role: "music", pins: [STACK_STEMS_MODELS[2]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "htdemucs", label: partLabel("htdemucs"), summary: partDef("htdemucs")!.description, ...unitMeta("htdemucs"), pins: [STACK_STEMS_MODELS[0]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "htdemucs-ft", label: partLabel("htdemucs-ft"), summary: partDef("htdemucs-ft")!.description, ...unitMeta("htdemucs-ft"), pins: [STACK_STEMS_MODELS[1]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
+  units.push({ id: "mms-fa-align", label: partLabel("mms-fa-align"), summary: partDef("mms-fa-align")!.description, ...unitMeta("mms-fa-align"), pins: STACK_ALIGN_MODELS, envs: [envAlign], usedBy: () => ["Word-by-word lyrics on a song card"], busy: () => activeJobFor((kind) => kind === "align_generation") ? "A song's lyrics are being timed right now." : null });
+  units.push({ id: "beats-analysis", label: partLabel("beats-analysis"), summary: partDef("beats-analysis")!.description, ...unitMeta("beats-analysis"), pins: [], envs: [envBeats], usedBy: () => ["Cut to the beat in a video edit"], busy: () => activeJobFor((kind) => kind === BEATS_JOB_KIND) ? "A song is being analysed for its beats right now." : null });
+  units.push({ id: "soulx-singer-svc", label: partLabel("soulx-singer-svc"), summary: partDef("soulx-singer-svc")!.description, ...unitMeta("soulx-singer-svc"), pins: STACK_MODELS.filter((pin) => pin.component === "voice-convert"), envs: [envVoiceConvert], usedBy: () => ["Voice conversion in music remix"], busy: () => activeJobFor((kind) => kind === "voice_convert_generation") ? "A vocal is being converted right now." : null });
+  units.push({ id: "mossformer2-se-48k", label: partLabel("mossformer2-se-48k"), summary: partDef("mossformer2-se-48k")!.description, ...unitMeta("mossformer2-se-48k"), pins: STACK_MODELS.filter((pin) => pin.id === "mossformer2-se-48k"), envs: [], usedBy: () => ["Clean up speech audio"] , busy: () => null });
+  units.push({ id: "fish-audio-drama-3-4bit", label: partLabel("fish-audio-drama-3-4bit"), summary: partDef("fish-audio-drama-3-4bit")!.description, ...unitMeta("fish-audio-drama-3-4bit"), pins: STACK_RECORDED_SPEECH_MODELS, envs: [envRecordedSpeech], platformBlock: () => recordedSpeech.depsAvailable ? null : "Recorded speech is available on macOS with Apple silicon.", usedBy: () => ["Recorded speech jobs in Home"], busy: () => activeJobFor((kind) => kind === "recorded_speech_generation") ? "A recorded speech job is waiting or rendering right now." : null });
+  units.push({ id: "htdemucs-6s", label: partLabel("htdemucs-6s"), summary: partDef("htdemucs-6s")!.description, ...unitMeta("htdemucs-6s"), pins: [STACK_STEMS_MODELS[2]!], envs: [envStems], usedBy: () => ["Stem splitting in chat"], busy: () => activeJobFor((kind) => kind === "stems_generation") ? "A song is being split right now." : null });
   units.push({
     id: STACK_MUSIC_MODELS[0]!.id, label: partLabel(STACK_MUSIC_MODELS[0]!.id), summary: partDef(STACK_MUSIC_MODELS[0]!.id)!.description, ...unitMeta(STACK_MUSIC_MODELS[0]!.id), pins: STACK_MUSIC_MODELS, envs: [envMusic],
     platformBlock: () => musicAvailability().code === "unsupported" ? musicAvailability().reason : null,
