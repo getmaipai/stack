@@ -100,6 +100,19 @@ export const ALLOWED_FILES = [
   "backend/src/packs/loader.test.ts",
 ];
 
+/** Modules whose whole job is one feature name that feature once in their own code (its jobs, its routes, its engine); they are the feature, not a reader of it. */
+export const FEATURE_MODULE_DIRS = [
+  "backend/src/video/",
+  "backend/src/media/",
+  "backend/src/speech/",
+  "backend/src/music/",
+  "backend/src/stems/",
+  "backend/src/voiceConvert/",
+  "backend/src/align/",
+  "backend/src/beats/",
+  "backend/src/sound/",
+];
+
 const ROOT = resolve(import.meta.dir, "..");
 const BASELINE = join(ROOT, "scripts", "lint-no-feature-names.baseline.json");
 
@@ -118,7 +131,7 @@ function collect(): Map<string, Site[]> {
   const srcDir = join(ROOT, "backend", "src");
   for (const abs of walk(srcDir)) {
     const rel = relative(ROOT, abs).replaceAll("\\", "/");
-    if (ALLOWED_FILES.includes(rel)) continue;
+    if (ALLOWED_FILES.includes(rel) || FEATURE_MODULE_DIRS.some((dir) => rel.startsWith(dir))) continue;
     const sites = findSites(rel, readFileSync(abs, "utf8"));
     if (sites.length > 0) result.set(rel, sites);
   }
