@@ -17,6 +17,10 @@ import type { Tone } from "./kit";
 import { roleIcon } from "./roleIcons";
 import { useRecent } from "./useHistory";
 import type { RoleGroup } from "./roleWords";
+import { StatDetails, type StatKind } from "./StatSheet";
+import { modelsHint } from "./statDetails";
+import { createStackClient } from "./stackClient";
+import type { StackDrive, StackDriveFeature } from "@maipai/ui/src/stack/StackClient";
 
 /** The tint behind the big status card, from the status tokens only. */
 const HERO_TINT: Record<StatusKind, string> = {
@@ -111,9 +115,16 @@ function RoleSheet({ role, onClose, go }: { role: Role | null; onClose: () => vo
 
 export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) => void }) {
   const [open, setOpen] = useState<Role | null>(null);
+  const [detail, setDetail] = useState<StatKind | null>(null);
+  const [disks, setDisks] = useState<StackDrive[] | null>(null);
+  const [driveFeatures, setDriveFeatures] = useState<StackDriveFeature[] | null>(null);
   const [showOff, setShowOff] = useState(false);
   const { status, roles, healthz } = snap;
   const recent = useRecent();
+  useEffect(() => {
+    const client = createStackClient();
+    Promise.all([client.drives!.list(), client.drives!.features()]).then(([d, f]) => { setDisks(d.disks); setDriveFeatures(f.features); }).catch(() => { /* old summary hint remains available */ });
+  }, []);
   if (!snap.loaded) return <OverviewSkeleton />;
   if (!status || !roles) {
     return <Alert variant="destructive" role="alert"><AlertTitle>The Stack is not answering</AlertTitle><AlertDescription>{snap.error ?? "No answer yet."} This page keeps trying by itself.</AlertDescription></Alert>;
@@ -151,10 +162,10 @@ export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) =>
       </section>
 
       <section aria-label="Live" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatTile Icon={MemoryStick} label="Memory" value={`${Math.round(ratio * 100)}%`} series={recent.history?.points.map((p) => (p.total > 0 ? (p.used / p.total) * 100 : 0))} max={100} hint={`${bytes(used)} in use`} />
-        <StatTile Icon={Cpu} label="Processor" tone="ok" value={recent.summary?.current?.cpu == null ? "..." : `${Math.round(recent.summary.current.cpu)}%`} series={recent.history?.points.map((p) => p.cpu ?? 0)} max={100} hint="Busy right now" />
-        <StatTile Icon={Activity} label="Requests" tone="warn" value={String(status.busy.running + status.busy.waiting)} series={recent.history?.points.map((p) => p.queue)} hint={`${status.busy.running} running, ${status.busy.waiting} waiting`} />
-        <StatTile Icon={HardDrive} label="Models on disk" tone="muted" value={recent.summary?.current?.disk == null ? "..." : bytes(recent.summary.current.disk)} meter={recent.summary?.current?.disk ? Math.min(1, recent.summary.current.disk / (200 * 1024 ** 3)) : 0} hint="Models and engines" />
+        <StatTile Icon={MemoryStick} label="Memory" value={`${Math.round(ratio * 100)}%`} series={recent.history?.points.map((p) => (p.total > 0 ? (p.used / p.total) * 100 : 0))} max={100} hint={`${bytes(used)} in use; how much of the computer's memory is occupied.`} onOpen={() => setDetail("memory")} />
+        <StatTile Icon={Cpu} label="Processor" tone="ok" value={recent.summary?.current?.cpu == null ? "..." : `${Math.round(recent.summary.current.cpu)}%`} series={recent.history?.points.map((p) => p.cpu ?? 0)} max={100} hint="How busy the computer's processor is right now." onOpen={() => setDetail("processor")} />
+        <StatTile Icon={Activity} label="Requests" tone="warn" value={String(status.busy.running + status.busy.waiting)} series={recent.history?.points.map((p) => p.queue)} hint={`${status.busy.running} running, ${status.busy.waiting} waiting`} onOpen={() => setDetail("requests")} />
+        <StatTile Icon={HardDrive} label="Models on disk" tone="muted" value={recent.summary?.current?.disk == null ? "..." : bytes(recent.summary.current.disk)} meter={recent.summary?.current?.disk ? Math.min(1, recent.summary.current.disk / (200 * 1024 ** 3)) : 0} hint={modelsHint(disks, driveFeatures) ?? "Space used by installed models and engines."} onOpen={() => setDetail("models")} />
       </section>
 
       <section aria-labelledby="feat-h" className="flex flex-col gap-3">
@@ -178,6 +189,7 @@ export function Overview({ snap, go }: { snap: Snapshot; go: (screen: string) =>
 
       <p className="text-xs text-muted-foreground">MaiPai Stack {healthz ? `${healthz.version}, up ${uptime(healthz.uptimeSeconds)}` : ""}. Budget for engines: {bytes(status.memory.budget_bytes)}.</p>
       <RoleSheet role={open} onClose={() => setOpen(null)} go={go} />
+      <StatDetails kind={detail} open={detail !== null} onClose={() => setDetail(null)} go={go} snap={snap} disks={disks} features={driveFeatures} summary={recent.summary} history={recent.history} />
     </div>
   );
 }

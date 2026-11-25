@@ -49,9 +49,10 @@ export function Live({ children }: { children: string }) {
 }
 
 /** A live number with its label, a short line, and optionally a sparkline. */
-export function StatTile({ Icon, label, value, hint, series, tone = "primary", max, meter }: { Icon: LucideIcon; label: string; value: string; hint?: ReactNode; series?: number[]; tone?: Tone; max?: number; meter?: number }) {
+export function StatTile({ Icon, label, value, hint, series, tone = "primary", max, meter, onOpen }: { Icon: LucideIcon; label: string; value: string; hint?: ReactNode; series?: number[]; tone?: Tone; max?: number; meter?: number; onOpen?: () => void }) {
+  const Tag = onOpen ? "button" : "div";
   return (
-    <div className="glass flex flex-col gap-3 p-4">
+    <Tag {...(onOpen ? { type: "button" as const, onClick: onOpen, "aria-label": `${label}: ${value}. Show details` } : {})} className={`glass flex flex-col gap-3 p-4 text-start${onOpen ? " glass-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" : ""}`}>
       <div className="flex items-center gap-3">
         <IconChip Icon={Icon} tone={tone} size="sm" />
         <span className="text-sm text-muted-foreground">{label}</span>
@@ -59,7 +60,7 @@ export function StatTile({ Icon, label, value, hint, series, tone = "primary", m
       <p className="text-3xl font-semibold tracking-tight tabular-nums"><Live>{value}</Live></p>
       {series ? <Sparkline data={series} tone={tone} max={max} /> : meter !== undefined ? <Meter value={meter} tone={tone} label={label} /> : null}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
+    </Tag>
   );
 }
 

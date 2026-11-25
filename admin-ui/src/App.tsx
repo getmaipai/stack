@@ -131,7 +131,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
   );
   return (
     <HelperProvider notify={notify} refresh={refresh}>
-    <div className="flex min-h-dvh flex-col md:flex-row">
+    <div className="flex h-dvh flex-col overflow-hidden md:flex-row">
       <nav aria-label="Main" className="hidden w-60 shrink-0 flex-col gap-1 overflow-y-auto border-e bg-sidebar p-4 text-sidebar-foreground md:sticky md:top-0 md:flex md:h-dvh md:self-start">
         <div className="flex items-center gap-3 px-2 pb-2 pt-1">
           <IconChip Icon={Layers} size="md" />
@@ -144,8 +144,8 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
           </div>
         ))}
       </nav>
-      <div className="flex min-w-0 flex-1 flex-col pb-24 md:pb-0">
-        <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/75 px-4 py-3 backdrop-blur-xl md:px-8">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-24 md:pb-0">
+        <header className="z-10 flex shrink-0 items-center gap-2 border-b bg-background/75 px-4 py-3 backdrop-blur-xl md:px-8">
           <h1 className="me-auto flex items-center gap-2 text-sm font-medium" aria-live="polite">
             {health ? <><StatusIndicator status={healthKind(health)} ping={health === "ok"} />{healthWord(health)}</> : "MaiPai Stack"}
           </h1>
@@ -161,7 +161,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
           <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={dark ? "Switch to light" : "Switch to dark"}>{dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}</Button>
           <Button variant="ghost" size="icon-sm" onClick={() => { void signOut(); }} aria-label="Sign out"><LogOut aria-hidden="true" /></Button>
         </header>
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 md:px-8 md:py-10">
+        <main id="main-scroll" className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto px-4 py-8 md:px-8 md:py-10">
           {/* The AI and models page (@maipai/ui) writes its own title, so the shell does not repeat it. */}
           {screen !== "models" && (
             <div className="mb-8 flex flex-col gap-2">
@@ -172,7 +172,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
           )}
           <div key={screen} className="animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none">
             {screen === "overview" && <Overview snap={snap} go={(id) => go(id as Screen)} />}
-            {screen === "resources" && <Resources changed={snap.status} />}
+            {screen === "resources" && <Resources changed={snap.status} go={(id) => go(id as Screen)} />}
             {screen === "health" && <Health snap={snap} refresh={refresh} notify={notify} />}
             {screen === "engines" && <Engines snap={snap} refresh={refresh} notify={notify} />}
             {screen === "models" && <ModelsScreen client={stackClient} snap={snap} refresh={refresh} notify={notify} go={go} />}

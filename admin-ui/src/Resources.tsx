@@ -14,6 +14,7 @@ import { LineCard, MemoryStack, Empty, ChartCard } from "./ResourceCharts";
 import { resourceApi } from "./resourceApi";
 import { RANGES, hasRoleHistory, historyRoles, loadRows, memoryRows, chartRoles, nowSegments, pressureWord, roleHistoryRows, stateWord } from "./resourceData";
 import type { Engines, History, Marker, Range, Summary } from "./resourceData";
+import { StatDetails, type StatKind } from "./StatSheet";
 
 const REFRESH_MS = 5000; // the Stack samples every 5 s, so this is as live as the data gets
 const GB = 1024 ** 3;
@@ -21,7 +22,7 @@ const pct = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 
 const shareText = (n: number, total: number) => (total > 0 && n / total < 0.1 ? `${((n / total) * 100).toFixed(1)}%` : `${pct(n, total)}%`);
 const NOT_MEASURED = "Not measured";
 
-export function Resources({ changed }: { changed: unknown }) {
+export function Resources({ changed, go = () => {} }: { changed: unknown; go?: (screen: string) => void }) {
   const [range, setRange] = useState<Range>("1h");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [history, setHistory] = useState<History | null>(null);
@@ -31,6 +32,7 @@ export function Resources({ changed }: { changed: unknown }) {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [more, setMore] = useState(false);
+  const [detail, setDetail] = useState<StatKind | null>(null);
 
   useEffect(() => { void resourceApi.modelNames().then(setNames).catch(() => { /* ids are shown as they are */ }); }, []);
 
@@ -132,9 +134,9 @@ export function Resources({ changed }: { changed: unknown }) {
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatTile Icon={MemoryStick} tone={pressure.kind === "online" ? "ok" : pressure.kind === "degraded" ? "warn" : "bad"} label="Memory" value={cur ? `${pct(used, total)}%` : "No reading"} series={memPct} max={100} hint={cur ? `${pressure.word}. Last hour: ${bytes(summary.last_hour.memory_used_mean_bytes)} on average, ${bytes(summary.last_hour.memory_used_peak_bytes)} at most.` : undefined} />
-          <StatTile Icon={Cpu} tone="primary" label="Processor" value={cur?.cpu == null ? "No reading" : `${Math.round(cur.cpu)}%`} series={load.map((r) => r.cpu ?? 0)} max={100} hint={summary.last_hour.cpu_peak == null ? "Needs a second sample." : `Peak ${Math.round(summary.last_hour.cpu_peak)}% in the last hour.`} />
-          <StatTile Icon={HardDrive} tone="muted" label="Models on disk" value={cur?.disk == null ? "No reading" : bytes(cur.disk)} meter={cur?.disk ? Math.min(1, cur.disk / (200 * GB)) : 0} hint="Space used by installed models and engines." />
+          <StatTile Icon={MemoryStick} tone={pressure.kind === "online" ? "ok" : pressure.kind === "degraded" ? "warn" : "bad"} label="Memory" value={cur ? `${pct(used, total)}%` : "No reading"} series={memPct} max={100} hint={cur ? `${pressure.word}. Last hour: ${bytes(summary.last_hour.memory_used_mean_bytes)} on average, ${bytes(summary.last_hour.memory_used_peak_bytes)} at most.` : undefined} onOpen={() => setDetail("memory")} />
+          <StatTile Icon={Cpu} tone="primary" label="Processor" value={cur?.cpu == null ? "No reading" : `${Math.round(cur.cpu)}%`} series={load.map((r) => r.cpu ?? 0)} max={100} hint={summary.last_hour.cpu_peak == null ? "Needs a second sample." : `Peak ${Math.round(summary.last_hour.cpu_peak)}% in the last hour.`} onOpen={() => setDetail("processor")} />
+          <StatTile Icon={HardDrive} tone="muted" label="Models on disk" value={cur?.disk == null ? "No reading" : bytes(cur.disk)} meter={cur?.disk ? Math.min(1, cur.disk / (200 * GB)) : 0} hint="Space used by installed models and engines." onOpen={() => setDetail("models")} />
         </div>
 
         <Collapsible open={more} onOpenChange={setMore}>
@@ -144,10 +146,10 @@ export function Resources({ changed }: { changed: unknown }) {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="grid grid-cols-2 gap-3 pt-2 xl:grid-cols-4">
-              <StatTile Icon={Gauge} tone="primary" label="Graphics" value={cur?.gpu == null ? NOT_MEASURED : `${Math.round(cur.gpu)}%`} hint={cur?.gpu == null ? "This computer gives no cheap graphics reading, so none is shown." : "Share of the graphics chip in use."} />
-              <StatTile Icon={Zap} tone="primary" label="Speed" value={speedNow(cur?.tps) ?? NOT_MEASURED} hint={cur?.tps ? "Tokens per second, all engines added up." : "Appears once an engine keeps a counter and answers a request."} />
-              <StatTile Icon={MemoryStick} tone="warn" label="Swap" value={cur ? bytes(cur.swap) : "No reading"} hint="Memory pushed to disk. Lower is better." />
-              <StatTile Icon={Cpu} tone="muted" label="Waiting requests" value={cur ? String(cur.queue) : "No reading"} hint={`Most at once in the last hour: ${summary.last_hour.queue_peak}.`} />
+              <StatTile Icon={Gauge} tone="primary" label="Graphics" value={cur?.gpu == null ? NOT_MEASURED : `${Math.round(cur.gpu)}%`} hint={cur?.gpu == null ? "This computer gives no cheap graphics reading, so none is shown." : "Share of the graphics chip in use."} onOpen={() => setDetail("graphics")} />
+              <StatTile Icon={Zap} tone="primary" label="Speed" value={speedNow(cur?.tps) ?? NOT_MEASURED} hint={cur?.tps ? "Tokens per second, all engines added up." : "Appears once an engine keeps a counter and answers a request."} onOpen={() => setDetail("speed")} />
+              <StatTile Icon={MemoryStick} tone="warn" label="Swap" value={cur ? bytes(cur.swap) : "No reading"} hint="Memory pushed to disk. Lower is better." onOpen={() => setDetail("swap")} />
+              <StatTile Icon={Cpu} tone="muted" label="Waiting requests" value={cur ? String(cur.queue) : "No reading"} hint={`Most at once in the last hour: ${summary.last_hour.queue_peak}.`} onOpen={() => setDetail("waiting")} />
             </div>
           </CollapsibleContent>
         </Collapsible>
@@ -175,6 +177,7 @@ export function Resources({ changed }: { changed: unknown }) {
       </section>
 
       <EngineDetail row={selected} total={total} modelName={modelName} onClose={() => setOpen(null)} />
+      <StatDetails kind={detail} open={detail !== null} onClose={() => setDetail(null)} go={go} summary={summary} history={history} engines={rows} />
     </div>
   );
 }
