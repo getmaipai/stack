@@ -30,7 +30,7 @@
     "role": "stt",
     "repo": "k2-fsa/sherpa-onnx",
     "license": "CC-BY-4.0",
-    "revision": "157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad",
+    "revision": "6fc4426b54aa549a0019b8a75b8dea59164e71790a37ac56a045ad57f915f714",
     "engine": "sherpa-onnx-node",
     "sizing": {
       "profile": "p64",
@@ -38,8 +38,9 @@
     },
     "download": {
       "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2",
-      "sha256": "157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad",
-      "approx_bytes": 482468385,
+      "sha256": "6fc4426b54aa549a0019b8a75b8dea59164e71790a37ac56a045ad57f915f714",
+      "approx_bytes": 482440461,
+      "note": "The sherpa-onnx maintainer re-uploaded this asset on 2026-11-07; the new bytes were checked to transcribe a test clip and to match GitHub's digest on 2026-11-25.",
       "archive": true
     },
     "measured": {

@@ -195,8 +195,8 @@ Engines per platform:
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | resident | `moonshine-tiny-en-int8` | int8 | 0.10 GB | 0.22 GB (Apple M4 Pro, 24 GB unified memory) | n/a | MIT | k2-fsa/sherpa-onnx @ d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2 | pinned |
 | p32 | resident | `moonshine-tiny-en-int8` | int8 | 0.10 GB | 0.22 GB (Apple M4 Pro, 24 GB unified memory) | n/a | MIT | k2-fsa/sherpa-onnx @ d5fe6ec4334fef36255b2a4010412cad4c007e33103fec62fb5d17cad88086f2 | pinned |
-| p64 | resident | `parakeet-tdt-0.6b-v2-int8` | int8 | 0.45 GB | 1.81 GB (Apple M5 Max, 128 GB unified memory) | n/a | CC-BY-4.0 | k2-fsa/sherpa-onnx @ 157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad | pinned |
-| p128 | resident | `parakeet-tdt-0.6b-v2-int8` | int8 | 0.45 GB | 1.81 GB (Apple M5 Max, 128 GB unified memory) | n/a | CC-BY-4.0 | k2-fsa/sherpa-onnx @ 157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad | pinned |
+| p64 | resident | `parakeet-tdt-0.6b-v2-int8` | int8 | 0.45 GB | 1.81 GB (Apple M5 Max, 128 GB unified memory) | n/a | CC-BY-4.0 | k2-fsa/sherpa-onnx @ 6fc4426b54aa549a0019b8a75b8dea59164e71790a37ac56a045ad57f915f714 | pinned |
+| p128 | resident | `parakeet-tdt-0.6b-v2-int8` | int8 | 0.45 GB | 1.81 GB (Apple M5 Max, 128 GB unified memory) | n/a | CC-BY-4.0 | k2-fsa/sherpa-onnx @ 6fc4426b54aa549a0019b8a75b8dea59164e71790a37ac56a045ad57f915f714 | pinned |
 
 Installed beside the model, never selected on its own: `silero-vad` (vad, 0.6 MB, MIT, k2-fsa/sherpa-onnx @ 9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6); `pyannote-segmentation-3.0-int8` (diarization-segmentation, 6.6 MB, MIT, k2-fsa/sherpa-onnx @ 24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488); `titanet-small-en` (diarization-embedding, 38.4 MB, CC-BY-4.0, k2-fsa/sherpa-onnx @ ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e); `smart-turn-v3.2` (endpoint, 8.3 MB, BSD-2-Clause, pipecat-ai/smart-turn-v3 @ f766f81d3cfdf7737ac64aad813d91bbfd56bf93).
 

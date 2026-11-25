@@ -1,7 +1,7 @@
+import { existsSync } from "node:fs";
 import diskRowFeatures from "@/rows/diskRowFeatures.json";
 import { CATEGORY_DEFS, defOf } from "@/lib/choiceCategories";
 import { DISK_ROW } from "@/lib/components";
-import { existsSync } from "node:fs";
 import { listModels } from "@/lib/modelStore";
 import { diskStatus } from "@/lib/disks";
 import { unloadRole } from "@/lib/supervisor";
@@ -9,13 +9,35 @@ import { planModelMove, runModelMove, type MovePlan } from "@/lib/moveModels";
 
 export const featureOf = (modelId: string): string | null => { const row = DISK_ROW[modelId]; return row ? (diskRowFeatures as Record<string, string | null>)[row] ?? null : null; };
 
+const hasModelFile = (model: { modelPath: string | null }): boolean => !!model.modelPath && existsSync(model.modelPath);
+
 /** The installed models that belong to a feature, found through the disk rows (no per-feature code). */
 export function modelIdsForFeature(featureId: string): string[] {
   if (!defOf(featureId)) throw new Error(`There is no feature called ${featureId}. Pick one from the Features list.`);
-  return installedModels(featureId).map((model) => model.id);
+  return listModels().filter((model) => hasModelFile(model) && featureOf(model.id) === featureId).map((model) => model.id);
 }
-/** A model counts as installed only when its files are on disk: a catalog entry that was never downloaded keeps a planned path but has nothing to move. */
-const installedModels = (featureId: string) => listModels().filter((model) => !!model.modelPath && existsSync(model.modelPath) && featureOf(model.id) === featureId);
+export function skippedForFeature(featureId: string): string[] {
+  if (!defOf(featureId)) throw new Error(`There is no feature called ${featureId}. Pick one from the Features list.`);
+  return listModels().filter((model) => !hasModelFile(model) && featureOf(model.id) === featureId).map((model) => model.id);
+}
+export function presentIds(ids: string[]): { present: string[]; skipped: string[] } {
+  const models = new Map(listModels().map((model) => [model.id, model]));
+  const present: string[] = [], skipped: string[] = [];
+  for (const id of ids) {
+    const model = models.get(id);
+    (model && hasModelFile(model) ? present : skipped).push(id);
+  }
+  return { present, skipped };
+}
+export function moveTargets(featureId: string | undefined, modelIds: string[] | undefined): { present: string[]; skipped: string[]; message: string | undefined } {
+  const ids = modelIds?.length ? modelIds : featureId ? listModels().filter((model) => featureOf(model.id) === featureId).map((model) => model.id) : [];
+  if (featureId && !modelIds?.length && !defOf(featureId)) throw new Error(`There is no feature called ${featureId}. Pick one from the Features list.`);
+  const { present, skipped } = presentIds(ids);
+  const message = skipped.length
+    ? present.length ? `${skipped.length} not downloaded, skipped` : `Nothing to move: none of these models are downloaded yet. ${skipped.length} not downloaded, skipped`
+    : undefined;
+  return { present, skipped, message };
+}
 export const featureIds = (): string[] => CATEGORY_DEFS.map((def) => def.id);
 
 export interface BatchPlan { model_ids: string[]; plans: Array<MovePlan & { model_id: string }>; bytes: number }
@@ -50,7 +72,7 @@ export interface FeatureLocation { feature_id: string; label: string; bytes: num
 export function featureLocations(): FeatureLocation[] {
   const out: FeatureLocation[] = [];
   for (const def of CATEGORY_DEFS) {
-    const models = installedModels(def.id);
+    const models = listModels().filter((model) => hasModelFile(model) && featureOf(model.id) === def.id);
     if (!models.length) continue;
     const ids = [...new Set(models.map((model) => model.diskId ?? "main"))];
     out.push({ feature_id: def.id, label: def.label, bytes: models.reduce((n, model) => n + (model.sizeBytes ?? 0), 0), drive_ids: ids, drives: ids.map((id) => { const d = diskStatus(id === "main" ? null : id); return { id, label: d.label, connected: d.connected }; }) });
