@@ -18,6 +18,7 @@ import { setMachineTierFromHardware, stopAllRoles, unloadIdleRoles } from "@/lib
 import { keepWarmEnabled, warmUp, warmedRoles } from "@/lib/warmup";
 import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { reconcilePinDeclarations } from "@/lib/modelStore";
+import { resumeMoveJobs } from "@/lib/moveModels";
 import { pullMissingDeclaredParts } from "@/lib/installJobs";
 import { ensureChatEngineAssets } from "@/lib/chatEngineAssets";
 import { STACK_MODELS, STACK_STEMS_MODELS, STACK_VOICE_CONVERT_MODELS } from "@/lib/modelCatalog";
@@ -80,6 +81,8 @@ async function serve(): Promise<void> {
   applyPendingSettings();
   // Models the Stack no longer carries (Ornith 1.5 122B, retired 2026-11-21): records dropped, a saved choice that names one reset with a notice, Splash's layout of it removed. Their folders go through Tidy (the start-up sweep below).
   retireModels();
+  // A model move that was cut off is finished or rolled back before anything launches.
+  await resumeMoveJobs().catch((error) => console.log(`Could not finish an interrupted model move: ${error instanceof Error ? error.message : error}`));
   // An installed model gets what its pin now declares (picture input) before anything launches.
   for (const id of reconcilePinDeclarations([...STACK_MODELS, ...STACK_STEMS_MODELS, ...STACK_VOICE_CONVERT_MODELS])) console.log(`Updated the record of ${id} to match its pin.`);
   // TIER-ROUTES-01: the Max window swaps chat to Reduced and back by itself.

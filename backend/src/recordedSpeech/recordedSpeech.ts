@@ -12,6 +12,7 @@ import { forgetLoadedItem, setIdleTtlSeconds, setWarmWorkerUnload } from "@/lib/
 import { log } from "@/lib/log";
 import workerAsset from "./recorded_speech_worker.py" with { type: "file" };
 import requirements from "@/speech/recorded-speech.darwin-arm64.requirements.txt" with { type: "file" };
+import { diskIdOfPath, modelsRootFor } from "@/lib/disks";
 
 export const RECORDED_SPEECH_NAME = "recorded-speech";
 export const RECORDED_SPEECH_VERSION = "1.0.0";
@@ -32,9 +33,10 @@ export interface RecordedSpeechHandle { send(request: RecordedSpeechRequest, cb:
 export interface RecordedSpeechDeps { supported: () => boolean; installed: () => boolean; ensure: (stage: (name: string) => void, signal?: AbortSignal) => Promise<void>; modelPath: () => string; spawn: () => Promise<RecordedSpeechHandle>; }
 
 export function recordedSpeechWorkerEnv(): Record<string, string> {
-  const env = managedEnv({ PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1", HF_HUB_OFFLINE: "1", HF_HUB_DISABLE_TELEMETRY: "1", HF_HUB_DISABLE_PROGRESS_BARS: "1", TQDM_DISABLE: "1", TOKENIZERS_PARALLELISM: "false", HOME: join(dataDir, "home"), HF_HOME: join(dataDir, "models") });
+  const modelPath = getModelPath(); const hubRoot = modelPath ? modelsRootFor(diskIdOfPath(modelPath)) : join(dataDir, "models");
+  const env = managedEnv({ PYTHONUNBUFFERED: "1", PYTHONDONTWRITEBYTECODE: "1", HF_HUB_OFFLINE: "1", HF_HUB_DISABLE_TELEMETRY: "1", HF_HUB_DISABLE_PROGRESS_BARS: "1", TQDM_DISABLE: "1", TOKENIZERS_PARALLELISM: "false", HOME: join(dataDir, "home"), HF_HOME: hubRoot });
   for (const key of Object.keys(env)) if (/TOKEN|KEY|SECRET|PROXY|NO_PROXY|HF_/i.test(key)) delete env[key];
-  env.HF_HUB_OFFLINE = "1"; env.HF_HUB_DISABLE_TELEMETRY = "1"; env.HF_HOME = join(dataDir, "models");
+  env.HF_HUB_OFFLINE = "1"; env.HF_HUB_DISABLE_TELEMETRY = "1"; env.HF_HOME = hubRoot;
   return env;
 }
 

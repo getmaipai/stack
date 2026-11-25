@@ -3002,3 +3002,7 @@ The disk sampler reads free and total space for the models, engines and job outp
 # Drives
 
 Model files can live in the main data folder or in an added drive row. Each model record stores `disk_id`; `null` means the main drive. If an added drive is absent, its model records remain intact and the API reports `drive_not_connected`. Reconnect the drive to use those files again. Removing a drive row is allowed only when no model records refer to it; removing the row never removes files. Model path deletion is limited to the main models folder and registered drives' `maipai-models` folders.
+
+## Moving models between drives
+
+The move engine copies each model to a temporary path, verifies it, switches the model record, then removes the old copy. Its `move_jobs` record supports restart recovery; deletion is restricted to registered model folders.

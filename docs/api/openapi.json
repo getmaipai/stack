@@ -29876,6 +29876,183 @@
         }
       }
     },
+    "/stack/v1/disks/moves": {
+      "post": {
+        "tags": [
+          "Disks"
+        ],
+        "summary": "Move a feature's model files to another drive (dry_run returns the plan only)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "feature_id": {
+                    "type": "string"
+                  },
+                  "model_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "to_disk_id": {
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "to_disk_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The plan, and whether the move started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "model_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "bytes": {
+                      "type": "number"
+                    },
+                    "started": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "model_ids",
+                    "bytes",
+                    "started"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Why the move cannot start, in plain words.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Disks"
+        ],
+        "summary": "Recent moves with progress",
+        "responses": {
+          "200": {
+            "description": "Newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "moves": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "model_id": {
+                            "type": "string"
+                          },
+                          "from_disk": {
+                            "type": "string"
+                          },
+                          "to_disk": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "bytes_done": {
+                            "type": "number"
+                          },
+                          "bytes_total": {
+                            "type": "number"
+                          },
+                          "error": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "updated_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "model_id",
+                          "from_disk",
+                          "to_disk",
+                          "state",
+                          "bytes_done",
+                          "bytes_total",
+                          "error",
+                          "updated_at"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "moves"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/disks/moves/cancel": {
+      "post": {
+        "tags": [
+          "Disks"
+        ],
+        "summary": "Cancel the running move (only before the switch)",
+        "responses": {
+          "200": {
+            "description": "Whether a move was running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cancelled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "cancelled"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/sandboxes": {
       "post": {
         "tags": [

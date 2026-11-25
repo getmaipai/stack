@@ -18,6 +18,7 @@ import { h3GenRoot } from "@/images/h3Engine";
 import { IMAGE_LORA_BASES, type ImageLoraBase } from "@/images/loras";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import { PROFILE_IDS, templateBehavior, SMALLEST_PROFILE } from "@/lib/profileIds";
+import { diskIdOfPath, modelsRootFor } from "@/lib/disks";
 
 /** Qwen-Image runs prebuilt 8-bit weights (INSTALL-EVERYTHING-01) and MiniMax H3-Image prebuilt int8 weights (H3-IMAGE-STACK-01); picture styles (LoRAs) are not offered for either yet, so neither is an ImageLoraBase. */
 export type ImageFamilyId = ImageLoraBase | typeof STACK_IMAGE_QWEN_ID | typeof STACK_IMAGE_H3_ID | typeof STACK_IMAGE_KLEIN3_ID;
@@ -113,7 +114,7 @@ export function familySnapshot(family: ImageFamilyId): string | null {
   if (!familyInstalled(family)) return null;
   if (installedOverride) return `/models/${family}`;
   // MiniMax H3-Image: the runner reads one folder that links the five files of its two repositories (images/h3Layout.ts).
-  if (family === STACK_IMAGE_H3_ID) return buildH3ModelsDir(join(h3GenRoot(), "models"), (id) => { const record = getModel(id); return record?.modelPath ?? null; });
+  if (family === STACK_IMAGE_H3_ID) { const primary = recordsOf(family).map((pin) => getModel(pin.id)).find((record) => record?.modelPath); const root = primary?.modelPath ? modelsRootFor(diskIdOfPath(primary.modelPath)) : join(h3GenRoot(), "models"); return buildH3ModelsDir(root, (id) => { const record = getModel(id); return record?.modelPath ?? null; }); }
   const primary = recordsOf(family).find((pin) => pin.id === IMAGE_FAMILIES[family].catalogId)!;
   const record = getModel(primary.id)!;
   const file = primary.download!.hub_file!;

@@ -52,6 +52,15 @@ export const disks = sqliteTable("disks", {
   removable: integer("removable").notNull().default(0), createdAt: text("created_at").notNull(),
 });
 
+export const moveJobs = sqliteTable("move_jobs", {
+  id: text("id").primaryKey(), modelId: text("model_id").notNull(), fromDisk: text("from_disk").notNull(),
+  toDisk: text("to_disk").notNull(), state: text("state").notNull(), oldPath: text("old_path").notNull(),
+  newPath: text("new_path").notNull(), bytesDone: integer("bytes_done").notNull().default(0),
+  bytesTotal: integer("bytes_total").notNull().default(0), error: text("error"),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+});
+
+
 export const health = sqliteTable("health", {
   code: text("code").primaryKey(),
   severity: text("severity").notNull(),
