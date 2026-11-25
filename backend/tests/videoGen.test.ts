@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { app } from "@/app";
 import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, getGovernorStatus } from "@/lib/governor";
 import { __resetJobsForTests, cancelGeneratorsForMemory, getJob, listJobs } from "@/lib/jobs";
+import { __resetChoicesForTests } from "@/lib/choicesStore";
 import { STACK_MODELS, STACK_VIDEO_MODEL, STACK_VIDEO_TOKENIZER } from "@/lib/modelCatalog";
 import { PROFILE_TIERS } from "@/profiles";
 import { ENGINE_BINARIES, MANAGED_RUNTIMES } from "@/lib/engineCatalog";
@@ -61,7 +62,7 @@ function scripted(script: Script = okReply, over: Partial<VideoGenDeps> = {}): V
 
 function clean(): void {
   videoGen.useDeps(null);
-  __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests();
+  __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); __resetChoicesForTests();
   rmSync(join(dataDir, "video"), { recursive: true, force: true });
   rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true });
 }
