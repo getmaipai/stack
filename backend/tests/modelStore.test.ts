@@ -52,7 +52,7 @@ test("Parakeet is an optional second stt pin and Moonshine remains the fallback"
   expect(STACK_MODELS).toContain(STACK_STT_MODEL);
   expect(STACK_MODELS).toContain(STACK_STT_PARAKEET_V2_MODEL);
   expect(STACK_MODELS.indexOf(STACK_STT_MODEL)).toBeLessThan(STACK_MODELS.indexOf(STACK_STT_PARAKEET_V2_MODEL));
-  expect(STACK_STT_PARAKEET_V2_MODEL).toMatchObject({ id: "parakeet-tdt-0.6b-v2-int8", role: "stt", download: { url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2", sha256: "157c157bc51155e03e37d2466522a3a737dd9c72bb25f36eb18912964161e1ad", archive: true } });
+  expect(STACK_STT_PARAKEET_V2_MODEL).toMatchObject({ id: "parakeet-tdt-0.6b-v2-int8", role: "stt", download: { url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2", sha256: "6fc4426b54aa549a0019b8a75b8dea59164e71790a37ac56a045ad57f915f714", archive: true } });
   for (const pin of [STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL]) {
     upsertModel({ id: pin.id, roles: ["stt"], source: "catalog", provenance: { package: `model:${pin.id}`, catalogId: pin.id }, revision: pin.revision!, sha256: pin.download!.sha256, sizeBytes: pin.download!.approx_bytes, licence: pin.license!, engineRequirements: { engine: pin.engine, sizing: pin.sizing }, verifiedAt: "2026-10-01T00:00:00.000Z", modelPath: join(fixtureDir, pin.id) });
   }
