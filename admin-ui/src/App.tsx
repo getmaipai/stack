@@ -146,20 +146,24 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
       </nav>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-24 md:pb-0">
         <header className="z-10 flex shrink-0 items-center gap-2 border-b bg-background/75 px-4 py-3 backdrop-blur-xl md:px-8">
-          <h1 className="me-auto flex items-center gap-2 text-sm font-medium" aria-live="polite">
-            {health ? <><StatusIndicator status={healthKind(health)} ping={health === "ok"} />{healthWord(health)}</> : "MaiPai Stack"}
-          </h1>
-          <Status status={snap.live ? "online" : "maintenance"} className="hidden sm:flex" aria-label={snap.live ? "Live updates connected" : "Live updates reconnecting"}>
-            <StatusIndicator status={snap.live ? "online" : "maintenance"} ping={false} />{snap.live ? "Live" : "Reconnecting"}
-          </Status>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h1 className="flex items-center gap-2 text-sm font-medium" aria-live="polite">
+              {health ? <><StatusIndicator status={healthKind(health)} ping={health === "ok"} />{healthWord(health)}</> : "MaiPai Stack"}
+            </h1>
+            <Status status={snap.live ? "online" : "maintenance"} className="hidden sm:flex" aria-label={snap.live ? "Live updates connected" : "Live updates reconnecting"}>
+              <StatusIndicator status={snap.live ? "online" : "maintenance"} ping={false} />{snap.live ? "Live" : "Reconnecting"}
+            </Status>
+          </div>
           <button type="button" onClick={() => setPalette(true)} aria-label="Search and jump to a screen or feature" aria-keyshortcuts="Control+K Meta+K" className="search-field hidden h-9 w-56 items-center gap-2 rounded-xl px-3 text-sm text-muted-foreground md:flex lg:w-72">
             <Search aria-hidden="true" className="size-4 shrink-0" /><span className="me-auto truncate">Search screens and features</span><kbd className="rounded-md px-1.5 py-0.5 text-xs shadow-[inset_0_0_0_1px_var(--fill-2)]">{isMac ? "⌘K" : "Ctrl K"}</kbd>
           </button>
-          <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => setPalette(true)} aria-label="Search and jump to a screen or feature"><Search aria-hidden="true" /></Button>
-          <Button variant="ghost" size="sm" onClick={() => setHelperOpen(true)} aria-label={`Ask the Helper (${isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other})`} aria-keyshortcuts="Control+/ Meta+/" title={`Ask the Helper (${isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other})`}><Sparkles aria-hidden="true" /><kbd className="hidden text-xs text-muted-foreground sm:inline">{isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other}</kbd></Button>
-          <Button variant="ghost" size="icon-sm" onClick={refresh} aria-label="Refresh"><RotateCw aria-hidden="true" /></Button>
-          <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={dark ? "Switch to light" : "Switch to dark"}>{dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}</Button>
-          <Button variant="ghost" size="icon-sm" onClick={() => { void signOut(); }} aria-label="Sign out"><LogOut aria-hidden="true" /></Button>
+          <div className="flex flex-1 items-center justify-end gap-2">
+            <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => setPalette(true)} aria-label="Search and jump to a screen or feature"><Search aria-hidden="true" /></Button>
+            <Button variant="ghost" size="sm" onClick={() => setHelperOpen(true)} aria-label={`Ask the Helper (${isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other})`} aria-keyshortcuts="Control+/ Meta+/" title={`Ask the Helper (${isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other})`}><Sparkles aria-hidden="true" /><kbd className="hidden text-xs text-muted-foreground sm:inline">{isMac ? HELPER_SHORTCUT.mac : HELPER_SHORTCUT.other}</kbd></Button>
+            <Button variant="ghost" size="icon-sm" onClick={refresh} aria-label="Refresh"><RotateCw aria-hidden="true" /></Button>
+            <Button variant="ghost" size="icon-sm" onClick={toggle} aria-label={dark ? "Switch to light" : "Switch to dark"}>{dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}</Button>
+            <Button variant="ghost" size="icon-sm" onClick={() => { void signOut(); }} aria-label="Sign out"><LogOut aria-hidden="true" /></Button>
+          </div>
         </header>
         <main id="main-scroll" className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto px-4 py-8 md:px-8 md:py-10">
           {/* The AI and models page (@maipai/ui) writes its own title, so the shell does not repeat it. */}
