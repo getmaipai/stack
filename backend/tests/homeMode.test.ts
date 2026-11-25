@@ -157,6 +157,18 @@ test("the post-load check sends three real OpenAI chat requests and requires tex
   expect(sent[2]?.body).toMatchObject({ reasoning_effort: "low", thinking_budget_tokens: 128 });
 });
 
+test("the thinking check leaves room for the reasoning budget plus the answer, as a thinking model spends max_tokens on reasoning first", async () => {
+  let call = 0;
+  await checkHomeModeOpenAIWire({ request: async (_path, body) => {
+    call++;
+    if (call === 2) return { status: 200, body: { choices: [{ message: { tool_calls: [{ type: "function", function: { name: "home_mode_check", arguments: "{}" } }] } }] } };
+    const budget = Number(body.thinking_budget_tokens ?? 0);
+    // A thinking model reasons until its budget (or max_tokens) runs out; with no tokens left the visible answer is empty.
+    const room = Number(body.max_tokens) - budget;
+    return { status: 200, body: { choices: [{ message: { content: budget > 0 && room < 16 ? "" : "ready" } }] } };
+  } });
+});
+
 test("coding yields to chat only in normal mode: in coding mode the coding process is the chat process", async () => {
   const { codingYieldsToChat } = await import("@/lib/supervisor");
   const { initializeHomeMode } = await import("@/lib/homeMode");

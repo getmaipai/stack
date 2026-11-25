@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { StackChoiceCategory } from "@maipai/ui/src/stack/StackClient";
-import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis, Layers } from "lucide-react";
+import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis, Layers, ToggleRight } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@maipai/ui/src/ui/sheet";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Status, StatusIndicator } from "@maipai/ui/src/ui/status";
@@ -17,6 +17,7 @@ import { ModelsScreen, useStackClient } from "./ModelsScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { Updates } from "./Updates";
 import { Tools } from "./Tools";
+import { Modes } from "./Modes";
 import { Helper } from "./Helper";
 import { HelperProvider } from "./helperChat";
 import { HelperPanel } from "./HelperPanel";
@@ -27,12 +28,13 @@ import { roleIcon } from "./roleIcons";
 import { setFeatureRows, useFeatureRows } from "./featureRows";
 import { Overview } from "./Overview";
 
-type Screen = "overview" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper";
+type Screen = "overview" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper" | "modes";
 type Group = "monitor" | "setup" | "maintain" | "assist";
 interface NavItem { id: Screen; label: string; question: string; Icon: typeof LayoutDashboard; group: Group; more?: boolean }
 const NAV: NavItem[] = [
   { id: "overview", label: "Overview", question: "Is everything working?", Icon: LayoutDashboard, group: "monitor" },
   { id: "models", label: "AI and models", question: "Which features are on, and which model does each one use?", Icon: Boxes, group: "setup" },
+  { id: "modes", label: "Modes", question: "Normal or Max coding, and which features are on.", Icon: ToggleRight, group: "setup", more: true },
   { id: "health", label: "Health", question: "Does anything need fixing?", Icon: HeartPulse, group: "monitor" },
   { id: "helper", label: "Helper", question: "Ask in plain words. Nothing changes until you approve.", Icon: Sparkles, group: "assist" },
   { id: "resources", label: "Resources", question: "Is there enough memory?", Icon: Gauge, group: "monitor", more: true },
@@ -44,7 +46,7 @@ const NAV: NavItem[] = [
 /** The sidebar's categories, in the order a person works through them: look, set up, keep tidy, ask. */
 const GROUPS: { id: Group; label: string; order: Screen[] }[] = [
   { id: "monitor", label: "Monitor", order: ["overview", "health", "resources"] },
-  { id: "setup", label: "Set up", order: ["models", "engines"] },
+  { id: "setup", label: "Set up", order: ["models", "modes", "engines"] },
   { id: "maintain", label: "Maintain", order: ["updates", "settings", "tools"] },
   { id: "assist", label: "Assist", order: ["helper"] },
 ];
@@ -183,6 +185,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
             {screen === "updates" && <Updates refresh={refresh} notify={notify} />}
             {screen === "settings" && <SettingsScreen refresh={refresh} notify={notify} />}
             {screen === "helper" && <Helper />}
+            {screen === "modes" && <Modes notify={notify} />}
             {screen === "tools" && <Tools roleLabels={roleLabels} notify={notify} />}
           </div>
         </main>

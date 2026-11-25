@@ -78,7 +78,8 @@ export async function checkHomeModeOpenAIWire(client: Pick<EngineClient, "reques
   const tool = await client.request("/v1/chat/completions", { ...base, messages: [{ role: "user", content: "Call the check tool now." }], tools: [{ type: "function", function: { name: "home_mode_check", description: "Report a successful check.", parameters: { type: "object", properties: {}, required: [] } } }], tool_choice: "required", max_tokens: 64 });
   const choices = (tool.body as { choices?: Array<{ message?: { tool_calls?: unknown[] } }> })?.choices;
   if (tool.status < 200 || tool.status >= 300 || !choices?.[0]?.message?.tool_calls?.length) throw new Error("The large coding model did not complete its tool check.");
-  const thinking = await client.request("/v1/chat/completions", { ...base, reasoning_effort: "low", thinking_budget_tokens: 128 });
+  // A thinking model spends max_tokens on reasoning first. The check asks for a 128-token budget, so max_tokens must leave room for the budget and the answer (the old 32 returned reasoning only and an empty reply).
+  const thinking = await client.request("/v1/chat/completions", { ...base, reasoning_effort: "low", thinking_budget_tokens: 128, max_tokens: 512 });
   if (thinking.status < 200 || thinking.status >= 300 || !textReply(thinking.body)) throw new Error("The large coding model did not complete its thinking check.");
 }
 /** A resident engine that is still warming up holds the large model back (its start guard throws). A mode switch waits for it
