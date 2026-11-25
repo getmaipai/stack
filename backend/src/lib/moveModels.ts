@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
-import { join, relative, dirname } from "node:path";
+import { join, relative, dirname, sep } from "node:path";
 import { eq, inArray } from "drizzle-orm";
 import { db, sqlite } from "@/db";
 import { moveJobs } from "@/db/schema";
@@ -24,6 +24,11 @@ async function sameTree(a: string, b: string): Promise<boolean> {
   if (!sa.isDirectory()) return sa.size === sb.size && await sha256OfFile(a) === await sha256OfFile(b);
   const aa = readdirSync(a).sort(), bb = readdirSync(b).sort(); if (aa.join("\0") !== bb.join("\0")) return false;
   for (const n of aa) if (!await sameTree(join(a, n), join(b, n))) return false; return true;
+}
+/** After the old copy is gone, remove the folders it leaves empty, never the models folder itself. */
+function pruneEmptyParents(path: string, root: string): void {
+  let dir = dirname(path);
+  while (dir.startsWith(root + sep) && existsSync(dir) && readdirSync(dir).length === 0) { rmSync(dir, { recursive: true, force: true }); dir = dirname(dir); }
 }
 const message = (e: unknown) => e instanceof Error ? e.message : "The move failed. Try again.";
 function update(id: string, state: State, fields: Partial<typeof moveJobs.$inferInsert> = {}) { db.update(moveJobs).set({ state, updatedAt: new Date().toISOString(), ...fields }).where(eq(moveJobs.id, id)).run(); }
@@ -53,7 +58,7 @@ export async function runModelMove(modelId: string, toDiskId: string, opts: { on
     if (statSync(moving).isFile() && model.sha256 && await sha256OfFile(moving) !== model.sha256) throw new Error("The copied model checksum did not match. The original is safe; try again.");
     await opts.hooks?.afterVerify?.(); update(id, "switching"); renameSync(moving, plan.newPath);
     sqlite.transaction(() => { upsertModel({ ...model, modelPath: plan.newPath, diskId: toDiskId === "main" ? null : toDiskId }); })();
-    await opts.hooks?.afterSwitch?.(); update(id, "cleaning"); if (isManagedModelPath(plan.oldPath)) rmSync(plan.oldPath, { recursive: true, force: true }); update(id, "done");
+    await opts.hooks?.afterSwitch?.(); update(id, "cleaning"); if (isManagedModelPath(plan.oldPath)) { rmSync(plan.oldPath, { recursive: true, force: true }); pruneEmptyParents(plan.oldPath, modelsRootFor(model.diskId)); } update(id, "done");
   } catch (error) {
     const job = db.select().from(moveJobs).where(eq(moveJobs.id, id)).get();
     if (!job || !["switching", "cleaning", "done"].includes(job.state)) { rmSync(moving, { recursive: true, force: true }); update(id, "failed", { error: message(error) }); }
@@ -71,6 +76,6 @@ export async function resumeMoveJobs(): Promise<void> {
       if (model && existsSync(job.newPath)) { sqlite.transaction(() => upsertModel({ ...model, modelPath: job.newPath, diskId: job.toDisk === "main" ? null : job.toDisk }))(); }
       else { rmSync(moving, { recursive: true, force: true }); update(job.id, "failed", { error: "Move interrupted, try again." }); continue; }
     }
-    update(job.id, "cleaning"); if (isManagedModelPath(job.oldPath)) rmSync(job.oldPath, { recursive: true, force: true }); update(job.id, "done");
+    update(job.id, "cleaning"); if (isManagedModelPath(job.oldPath)) { rmSync(job.oldPath, { recursive: true, force: true }); pruneEmptyParents(job.oldPath, modelsRootFor(job.fromDisk === "main" ? null : job.fromDisk)); } update(job.id, "done");
   }
 }

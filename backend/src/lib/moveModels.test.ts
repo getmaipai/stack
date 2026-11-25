@@ -84,4 +84,13 @@ describe("model moves", () => {
       expect(String(second)).toContain("Another move is running");
     } finally { t.done(); }
   });
+
+  test("the folder a moved file lived in is removed when it is left empty, the models folder is not", async () => {
+    const t = setup("move-parent", { "weights.bin": "W" });
+    try {
+      const file = join(t.oldPath, "weights.bin"); upsertModel({ id: "move-parent", roles: ["chat"], source: "catalog", provenance: {}, revision: "r1", modelPath: file, sha256: null });
+      await runModelMove("move-parent", t.disk.id);
+      expect(existsSync(t.oldPath)).toBe(false); expect(existsSync(modelsDir)).toBe(true);
+    } finally { t.done(); }
+  });
 });

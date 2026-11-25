@@ -40,6 +40,16 @@ export function createStackClient(onWrite?: () => void): AdminStackClient {
   const wrote = <T>(value: T): T => { onWrite?.(); return value; };
 
   return {
+    drives: {
+      list: () => run(() => call("GET", "/stack/v1/disks")),
+      features: () => run(() => call("GET", "/stack/v1/disks/features")),
+      plan: (featureId: string, toDiskId: string) => run(() => call("POST", "/stack/v1/disks/moves", { feature_id: featureId, to_disk_id: toDiskId, dry_run: true })),
+      move: (featureId: string, toDiskId: string) => run(async () => wrote(await call("POST", "/stack/v1/disks/moves", { feature_id: featureId, to_disk_id: toDiskId }))),
+      moves: () => run(() => call("GET", "/stack/v1/disks/moves")),
+      cancel: () => run(() => call("POST", "/stack/v1/disks/moves/cancel", {})),
+      add: (body: { label: string; root_path: string; removable: boolean }) => run(async () => wrote(await call("POST", "/stack/v1/disks", body))),
+      remove: (id: string) => run(async () => wrote(await call("DELETE", `/stack/v1/disks/${enc(id)}`))),
+    },
     readChoices: () => run(() => call<StackChoicesView>("GET", "/stack/v1/choices")),
     setRoleEnabled: (role: string, enabled: boolean) => run(async () => { await call("PUT", "/stack/v1/settings", { [`stack.roles.${role}.enabled`]: enabled }); wrote(null); }),
     setRolePriorities: (priorities: Readonly<Record<string, number>>) => run(async () => {
