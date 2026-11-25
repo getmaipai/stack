@@ -11,6 +11,7 @@ import { sweepScoreInputs, sweepScoreResults } from "@/score/scoreGen";
 import { sweepImageTmp, sweepResults as sweepImageResults } from "@/images/results";
 import { modelsDir } from "@/lib/paths";
 import { runTidy } from "@/lib/tidy";
+import { runCacheGuard } from "@/lib/cacheGuard";
 
 export interface SweepEntry { name: string; removed: number; bytes: number; }
 export interface SweepSummary { reason: string; removed_files: number; freed_bytes: number; per_sweep: SweepEntry[]; }
@@ -84,6 +85,13 @@ export async function runSweeps(reason: string): Promise<SweepSummary> {
   summary.per_sweep.push({ name: "tidy", removed: tidyResult.removed, bytes: tidyResult.bytes });
   summary.removed_files += tidyResult.removed;
   summary.freed_bytes += tidyResult.bytes;
+  try {
+    const cache = await runCacheGuard();
+    const bytes = cache.removed.reduce((sum, item) => sum + item.bytes, 0);
+    summary.per_sweep.push({ name: "cache-guard", removed: cache.removed.length, bytes });
+    summary.removed_files += cache.removed.length; summary.freed_bytes += bytes;
+    if (cache.problems.length) logger.appendLine(JSON.stringify({ event: "cache.guard.problems", problems: cache.problems }));
+  } catch (error) { logger.appendLine(JSON.stringify({ event: "cache.guard.failed", reason: String(error) })); summary.per_sweep.push({ name: "cache-guard", removed: 0, bytes: 0 }); }
   if (summary.removed_files > 0) logger.appendLine(JSON.stringify({ event: "sweep.done", ...summary }));
   return summary;
 }

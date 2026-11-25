@@ -81,7 +81,7 @@ function isSymlinkTarget(path: string): boolean {
   for (const candidate of candidates) { try { if (lstatSync(candidate).isSymbolicLink() && resolve(realpathSync(candidate)) === absolute) return true; } catch { /* Missing references are ignored. */ } }
   return false;
 }
-function referencedPaths(): Set<string> {
+export function referencedPaths(): Set<string> {
   const paths = new Set<string>();
   for (const model of listModels()) { if (model.modelPath && !RETIRED_VIDEO_MODEL_IDS.has(model.id)) paths.add(resolve(model.modelPath)); }
   for (const pin of catalogPins()) if (pin.repo && pin.revision && pin.download?.hub_file) {

@@ -36,6 +36,7 @@ export interface Engine {
   roleState: string; roleReason: string | null; update: { newest: string; since: string } | null;
 }
 export interface Healthz { ok: true; version: string; contract: number; uptimeSeconds: number }
+export interface CachePlan { owned: { path: string; kind: "tmp_leftover" | "dangling_link"; bytes: number; ageHours: number }[]; outside: { path: string; bytes: number; note: string }[]; tidy: { reclaimable_bytes: number } }
 
 export type SettingValue = string | number | boolean | null;
 export interface Setting {
@@ -140,4 +141,6 @@ export const api = {
   installHelperModel: (m: HelperStatus["model"]) => call<unknown>("POST", "/stack/v1/models", { id: m.id, role: m.role, repo: m.repo, url: m.url, sha256: m.sha256, approx_bytes: m.approx_bytes, licence: m.licence, revision: m.revision, engine: m.engine }),
   rebootHost: () => call<{ ok: true }>("POST", "/stack/v1/host/reboot", {}),
   restartStack: () => call<{ ok: true }>("POST", "/stack/v1/service/restart"),
+  caches: () => call<CachePlan>("GET", "/stack/v1/storage/caches"),
+  clearCache: (path: string) => call<{ freed_bytes: number; kept: string[]; problems: string[] }>("POST", "/stack/v1/storage/caches/clear", { path }),
 };

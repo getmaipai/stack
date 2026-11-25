@@ -8,7 +8,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { StatusIndicator } from "@maipai/ui/src/ui/status";
 import { api } from "./api";
 import type { CheckResult, SettingsDoc } from "./api";
-import { ago } from "./format";
+import { ago, bytes } from "./format";
 import { readinessWord, rebootAllowed } from "./manage";
 import { ConfirmButton, Failure, plainError, useLoad } from "./shared";
 import type { Notify } from "./screens";
@@ -17,6 +17,7 @@ import type { Notify } from "./screens";
 export function Tools({ roleLabels, notify }: { roleLabels: Record<string, string>; notify: Notify }) {
   const settings = useLoad<SettingsDoc>(() => api.settings());
   const latest = useLoad(() => api.latestReadiness());
+  const caches = useLoad(() => api.caches());
   const [result, setResult] = useState<CheckResult | null>(null);
   const [running, setRunning] = useState(false);
   const shown: (CheckResult & { stale?: boolean; staleReason?: string }) | null = result ?? latest.data?.latest ?? null;
@@ -35,6 +36,7 @@ export function Tools({ roleLabels, notify }: { roleLabels: Record<string, strin
     try { await api.rebootHost(); notify("The computer is restarting. This page comes back when it is up."); }
     catch (e) { notify(plainError(e, "The computer could not be restarted. Nothing was changed.")); }
   }
+  async function clearCache(path: string) { try { const result = await api.clearCache(path); notify(`Cleared ${bytes(result.freed_bytes)}. ${result.kept.length} protected files kept.`); caches.reload(); } catch (e) { notify(plainError(e, "The outside cache could not be cleared.")); } }
   const canReboot = rebootAllowed(settings.data);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -65,6 +67,17 @@ export function Tools({ roleLabels, notify }: { roleLabels: Record<string, strin
               {shown.reason && !shown.ok && <p className="text-muted-foreground">{shown.reason}</p>}
             </>
           )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-3 text-base"><IconChip Icon={FileDown} tone="warn" size="sm" />Caches</CardTitle><CardDescription>Stack temporary files, model tidy candidates, and any Hugging Face cache outside Stack storage.</CardDescription></CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm">
+          {caches.error && <Failure title="Caches could not be read" message={caches.error} />}
+          {caches.data && <>
+            <p>Stack owned reclaimable: {bytes(caches.data.owned.reduce((n, item) => n + item.bytes, 0) + caches.data.tidy.reclaimable_bytes)}</p>
+            {caches.data.outside.map((item) => <div key={item.path} className="flex flex-wrap items-center gap-2 rounded-md border p-3"><div className="me-auto min-w-0"><p className="break-all font-medium">{item.path}</p><p className="text-muted-foreground">{bytes(item.bytes)} · {item.note}</p></div><ConfirmButton destructive variant="destructive" label="Clear" title={`Clear ${item.path}?`} confirm="Clear cache" text={`${item.path} uses ${bytes(item.bytes)}. Its contents will be removed. Files named token or stored_tokens and top-level settings files are kept.`} onConfirm={() => clearCache(item.path)} /></div>)}
+            {!caches.data.outside.length && <p className="text-muted-foreground">No outside Hugging Face cache found.</p>}
+          </>}
         </CardContent>
       </Card>
       <Card>

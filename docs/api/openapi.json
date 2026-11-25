@@ -42244,6 +42244,155 @@
         }
       }
     },
+    "/stack/v1/storage/caches": {
+      "get": {
+        "tags": [
+          "Declarations"
+        ],
+        "summary": "Plan Stack-owned and outside cache cleanup",
+        "responses": {
+          "200": {
+            "description": "Cache cleanup candidates and tidy reclaimable bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "owned": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "tmp_leftover",
+                              "dangling_link"
+                            ]
+                          },
+                          "bytes": {
+                            "type": "number"
+                          },
+                          "ageHours": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "kind",
+                          "bytes",
+                          "ageHours"
+                        ]
+                      }
+                    },
+                    "outside": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "bytes": {
+                            "type": "number"
+                          },
+                          "note": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "bytes",
+                          "note"
+                        ]
+                      }
+                    },
+                    "tidy": {
+                      "type": "object",
+                      "properties": {
+                        "reclaimable_bytes": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "reclaimable_bytes"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "owned",
+                    "outside",
+                    "tidy"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/storage/caches/clear": {
+      "post": {
+        "tags": [
+          "Declarations"
+        ],
+        "summary": "Clear an outside cache while preserving tokens and settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cleared cache totals and any preserved files or errors.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "freed_bytes": {
+                      "type": "number"
+                    },
+                    "kept": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "problems": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "freed_bytes",
+                    "kept",
+                    "problems"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/diagnostics": {
       "get": {
         "tags": [
