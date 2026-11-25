@@ -16,7 +16,7 @@ describe("model drives", () => {
       expect(diskIdOfPath(join(drive, "maipai-models", "model"))).toBe(added.id);
       expect(() => addDisk({ label: "Nested", rootPath: join(drive, "maipai-models"), removable: false })).toThrow();
       upsertModel({ id: "test-drive-model", roles: ["chat"], source: "catalog", provenance: {}, revision: "r1", modelPath: join(drive, "maipai-models", "x.bin"), diskId: added.id });
-      expect(() => removeDisk(added.id)).toThrow("1 model record");
+      expect(() => removeDisk(added.id)).toThrow("1 model is on");
       removeModel("test-drive-model"); removeDisk(added.id);
       expect(listDisks().then((rows) => rows.some((row) => row.id === added.id))).resolves.toBe(false);
       expect(() => modelsRootFor(added.id)).toThrow(DriveNotConnectedError);

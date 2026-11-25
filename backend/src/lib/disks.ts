@@ -39,7 +39,7 @@ export function removeDisk(id: string): void {
   if (id === MAIN_DISK_ID) throw new Error("This computer's drive cannot be removed.");
   const row = db.select().from(disks).where(eq(disks.id, id)).get(); if (!row) throw new Error(`Drive ${id} was not found.`);
   const count = db.select().from(models).where(eq(models.diskId, id)).all().length;
-  if (count) throw new Error(`${count} model ${count === 1 ? "record is" : "records are"} on ${row.label}. Move those models to another drive before removing it.`);
+  if (count) throw new Error(`${count === 1 ? "1 model is" : `${count} models are`} on ${row.label}. Move ${count === 1 ? "it" : "them"} to another drive before removing this one.`);
   db.delete(disks).where(eq(disks.id, id)).run();
 }
 export class DriveNotConnectedError extends Error { readonly kind = "drive_not_connected"; constructor(readonly diskId: string, readonly label: string) { super(`${label} is not connected. Plug it back in or choose another drive.`); this.name = "DriveNotConnectedError"; } }
