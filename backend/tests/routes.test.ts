@@ -15,12 +15,13 @@ import { __setMemoryReaderForTests } from "@/lib/memory";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
 import { GOVERNOR_MEMORY_DEFAULT } from "./governorMemoryDefault";
 import { __resetSettingsForTests } from "@/settings";
+import { __resetChoicesForTests } from "@/lib/choicesStore";
 import { dataDir } from "@/lib/paths";
 
 const GB = 1_073_741_824;
 
-beforeEach(() => { __resetHealthForTests(); __resetSettingsForTests(); clearModelsForTests(); setSupervisorFactoryForTests(async (role) => scriptedProcess(role)); __resetGovernorForTests(); });
-afterEach(() => { setSupervisorFactoryForTests(null); resetSupervisorForTests(); clearModelsForTests(); });
+beforeEach(() => { __resetChoicesForTests(); __resetHealthForTests(); __resetSettingsForTests(); clearModelsForTests(); setSupervisorFactoryForTests(async (role) => scriptedProcess(role)); __resetGovernorForTests(); });
+afterEach(() => { __resetChoicesForTests(); setSupervisorFactoryForTests(null); resetSupervisorForTests(); clearModelsForTests(); });
 
 const json = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
