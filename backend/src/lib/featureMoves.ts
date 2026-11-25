@@ -1,6 +1,7 @@
 import diskRowFeatures from "@/rows/diskRowFeatures.json";
 import { CATEGORY_DEFS, defOf } from "@/lib/choiceCategories";
 import { DISK_ROW } from "@/lib/components";
+import { existsSync } from "node:fs";
 import { listModels } from "@/lib/modelStore";
 import { diskStatus } from "@/lib/disks";
 import { unloadRole } from "@/lib/supervisor";
@@ -11,8 +12,10 @@ export const featureOf = (modelId: string): string | null => { const row = DISK_
 /** The installed models that belong to a feature, found through the disk rows (no per-feature code). */
 export function modelIdsForFeature(featureId: string): string[] {
   if (!defOf(featureId)) throw new Error(`There is no feature called ${featureId}. Pick one from the Features list.`);
-  return listModels().filter((model) => !!model.modelPath && featureOf(model.id) === featureId).map((model) => model.id);
+  return installedModels(featureId).map((model) => model.id);
 }
+/** A model counts as installed only when its files are on disk: a catalog entry that was never downloaded keeps a planned path but has nothing to move. */
+const installedModels = (featureId: string) => listModels().filter((model) => !!model.modelPath && existsSync(model.modelPath) && featureOf(model.id) === featureId);
 export const featureIds = (): string[] => CATEGORY_DEFS.map((def) => def.id);
 
 export interface BatchPlan { model_ids: string[]; plans: Array<MovePlan & { model_id: string }>; bytes: number }
@@ -47,7 +50,7 @@ export interface FeatureLocation { feature_id: string; label: string; bytes: num
 export function featureLocations(): FeatureLocation[] {
   const out: FeatureLocation[] = [];
   for (const def of CATEGORY_DEFS) {
-    const models = listModels().filter((model) => !!model.modelPath && featureOf(model.id) === def.id);
+    const models = installedModels(def.id);
     if (!models.length) continue;
     const ids = [...new Set(models.map((model) => model.diskId ?? "main"))];
     out.push({ feature_id: def.id, label: def.label, bytes: models.reduce((n, model) => n + (model.sizeBytes ?? 0), 0), drive_ids: ids, drives: ids.map((id) => { const d = diskStatus(id === "main" ? null : id); return { id, label: d.label, connected: d.connected }; }) });
