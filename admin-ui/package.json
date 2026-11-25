@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@lingui/core": "6.6.0",
-    "@maipai/ui": "file:../../commons-tags/ui-ui-v0.5.750/ui",
+    "@maipai/ui": "file:../../commons-tags/ui-ui-v0.5.751/ui",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
