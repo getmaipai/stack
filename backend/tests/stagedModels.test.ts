@@ -26,6 +26,7 @@ describe("staged model pins", () => {
   test.skipIf(!existsSync(LIVE_HUB))("on the Studio, each installed blob has the pinned size ", () => {
     for (const pin of STACK_STAGED_MODELS) {
       const blob = `${LIVE_HUB}/models--${pin.repo!.replace("/", "--")}/blobs/${pin.download!.sha256}`;
+      if (!existsSync(blob)) continue; // not installed on this hub (yet): nothing to measure
       expect(statSync(blob).size).toBe(pin.download!.approx_bytes);
     }
   });
