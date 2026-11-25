@@ -7,7 +7,8 @@ import { detectHardware } from "@maipai/core/src/hardware";
 
 export type DiskLevel = "normal" | "warn" | "critical";
 export interface DiskVolume { path: string; free_bytes: number; total_bytes: number; level: DiskLevel; warn_bytes: number; critical_bytes: number; }
-type Reader = (path: string) => Promise<{ free: number; total: number; device?: number }> | { free: number; total: number; device?: number };
+export type Reader = (path: string) => Promise<{ free: number; total: number; device?: number }> | { free: number; total: number; device?: number };
+export async function readDiskSpace(path: string): Promise<{ free: number; total: number }> { const value = await reader(path); return { free: value.free, total: value.total }; }
 const GB = 1_000_000_000;
 const REFUSAL = "There is not enough room left on this computer for that. Free up space in Settings, then try again.";
 const levels = new Map<string, DiskLevel>();
@@ -16,7 +17,10 @@ let sampledAt = 0;
 const realReader: Reader = async (path) => { const s = await detectHardware({ diskPath: path }); return { free: s.freeDiskBytes ?? 0, total: s.totalDiskBytes ?? 0, device: Number(statSync(path).dev) }; };
 const safeReader: Reader = process.env.NODE_ENV === "test" ? () => ({ free: 500_000_000_000, total: 1_000_000_000_000, device: 1 }) : realReader;
 let reader: Reader = safeReader;
-const paths = () => [modelsDir, engineRoot, join(dataDir, "jobs")];
+export const paths = async () => {
+  const { listDisks } = await import("@/lib/disks");
+  return [modelsDir, ...(await listDisks()).filter((disk) => disk.id !== "main" && disk.connected).map((disk) => join(disk.root_path, "maipai-models")), engineRoot, join(dataDir, "jobs")];
+};
 let runtimeConfig = { warn_free_gb: 0, critical_free_gb: 0 };
 export function setDiskConfig(config: { warn_free_gb: number; critical_free_gb: number }): void { runtimeConfig = { ...config }; sampledAt = 0; }
 export function getDiskConfig(): { warn_free_gb: number; critical_free_gb: number } { return { ...runtimeConfig }; }
@@ -30,7 +34,7 @@ async function doSample(force = false): Promise<void> {
   if (!force && Date.now() - sampledAt < 60_000) return;
   sampledAt = Date.now();
   const seen = new Set<number>(); const next: DiskVolume[] = [];
-  for (const path of paths()) {
+  for (const path of await paths()) {
     try {
       let probe = path; while (true) { try { statSync(probe); break; } catch { probe = resolve(probe, ".."); } }
       const stats = await reader(probe); if (stats.device !== undefined && seen.has(stats.device)) continue;

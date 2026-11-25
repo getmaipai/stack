@@ -44,6 +44,12 @@ export const models = sqliteTable("models", {
   modelPath: text("model_path"),
   measuredFootprintBytes: integer("measured_footprint_bytes"),
   measuredContextLength: integer("measured_context_length"),
+  diskId: text("disk_id"),
+});
+
+export const disks = sqliteTable("disks", {
+  id: text("id").primaryKey(), label: text("label").notNull(), rootPath: text("root_path").notNull().unique(),
+  removable: integer("removable").notNull().default(0), createdAt: text("created_at").notNull(),
 });
 
 export const health = sqliteTable("health", {

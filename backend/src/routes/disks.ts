@@ -1,0 +1,12 @@
+import { createRoute, z } from "@hono/zod-openapi";
+import { apiRouter, ErrorSchema, idParamSchema } from "@maipai/core/src/openapi";
+import type { AppEnv } from "@/types";
+import { addDisk, listDisks, removeDisk } from "@/lib/disks";
+const Disk = z.object({ id: z.string(), label: z.string(), root_path: z.string(), connected: z.boolean(), free_bytes: z.number(), total_bytes: z.number(), removable: z.boolean() });
+const list = createRoute({ method: "get", path: "/", tags: ["Disks"], summary: "List model drives", responses: { 200: { content: { "application/json": { schema: z.object({ disks: z.array(Disk) }) } }, description: "Main and added drives." } } });
+const add = createRoute({ method: "post", path: "/", tags: ["Disks"], summary: "Add a model drive", request: { body: { content: { "application/json": { schema: z.object({ label: z.string(), root_path: z.string(), removable: z.boolean().default(false) }) } } } }, responses: { 201: { content: { "application/json": { schema: Disk } }, description: "Added drive." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Invalid folder." } } });
+const remove = createRoute({ method: "delete", path: "/{id}", tags: ["Disks"], request: { params: idParamSchema("id") }, summary: "Remove a model drive", responses: { 200: { content: { "application/json": { schema: z.object({ ok: z.literal(true) }) } }, description: "Drive row removed." }, 400: { content: { "application/json": { schema: ErrorSchema } }, description: "Drive contains model records." } } });
+export const disksRoutes = apiRouter<AppEnv>();
+disksRoutes.openapi(list, async (c) => c.json({ disks: await listDisks() }, 200));
+disksRoutes.openapi(add, (c) => { try { return c.json(addDisk({ label: c.req.valid("json").label, rootPath: c.req.valid("json").root_path, removable: c.req.valid("json").removable }), 201); } catch (e) { return c.json({ error: e instanceof Error ? e.message : "Could not add drive." }, 400); } });
+disksRoutes.openapi(remove, (c) => { try { removeDisk(c.req.valid("param").id); return c.json({ ok: true as const }, 200); } catch (e) { return c.json({ error: e instanceof Error ? e.message : "Could not remove drive." }, 400); } });

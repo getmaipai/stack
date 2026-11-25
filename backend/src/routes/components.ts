@@ -32,7 +32,7 @@ const listRoute = createRoute({
   responses: { 200: { content: { "application/json": { schema: z.object({ tier: z.string().nullable(), free_disk_bytes: z.number().int().nullable(), disk_margin_bytes: z.number().int(), installed_bytes: z.number().int(), components: z.array(ComponentSchema) }) } }, description: "Additive. `free_disk_bytes` is the data volume's, the same figure the install plan uses." } },
 });
 const installRoute = createRoute({
-  method: "post", path: "/{id}/install", tags: ["Components"], summary: "Install a component (one job: the files, then its engine environment)", request: { params: idParam, body: { required: false, content: { "application/json": { schema: z.object({ accepted_licence: z.string().max(120).optional().openapi({ description: "The id of the licence notice the admin accepted (from the component's `licence`). Needed only the first time, for a part that has one." }), accepted_by: z.string().max(200).optional().openapi({ description: "An opaque label Home keeps for who accepted it." }) }) } } } },
+  method: "post", path: "/{id}/install", tags: ["Components"], summary: "Install a component (one job: the files, then its engine environment)", request: { params: idParam, body: { required: false, content: { "application/json": { schema: z.object({ accepted_licence: z.string().max(120).optional().openapi({ description: "The id of the licence notice the admin accepted (from the component's `licence`). Needed only the first time, for a part that has one." }), accepted_by: z.string().max(200).optional().openapi({ description: "An opaque label Home keeps for who accepted it." }), disk_id: z.string().nullable().optional() }) } } } },
   responses: {
     202: { content: { "application/json": { schema: z.object({ job: z.string(), component: z.string(), joined: z.boolean() }) } }, description: "The install job (/stack/v1/jobs/{id}); a second call while one runs joins it." },
     200: { content: { "application/json": { schema: z.object({ job: z.null(), component: z.string(), already_installed: z.literal(true) }) } }, description: "Already installed." },
@@ -58,8 +58,8 @@ componentsRoutes.openapi(tidyRunRoute, async (c) => { const body = await c.req.j
 componentsRoutes.openapi(listRoute, async (c) => c.json(await listComponents(), 200));
 componentsRoutes.openapi(installRoute, async (c) => {
   try {
-    const consent = await c.req.json().catch(() => ({})) as { accepted_licence?: unknown; accepted_by?: unknown };
-    const started = await startComponentInstall(c.req.valid("param").id, undefined, { ...(typeof consent.accepted_licence === "string" ? { licence: consent.accepted_licence } : {}), ...(typeof consent.accepted_by === "string" ? { by: consent.accepted_by } : {}) });
+    const consent = await c.req.json().catch(() => ({})) as { accepted_licence?: unknown; accepted_by?: unknown; disk_id?: unknown };
+    const started = await startComponentInstall(c.req.valid("param").id, undefined, { ...(typeof consent.accepted_licence === "string" ? { licence: consent.accepted_licence } : {}), ...(typeof consent.accepted_by === "string" ? { by: consent.accepted_by } : {}), ...(typeof consent.disk_id === "string" || consent.disk_id === null ? { diskId: consent.disk_id } : {}) });
     return started.job ? c.json({ job: started.job, component: started.component, joined: started.joined }, 202) : c.json({ job: null, component: started.component, already_installed: true as const }, 200);
   } catch (error) {
     if (error instanceof ComponentError) return c.json({ error: error.message, code: error.code }, error.status as 404 | 409);

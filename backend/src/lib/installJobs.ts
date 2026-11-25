@@ -8,7 +8,7 @@ import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getModel, installCatalogModel, isModelSelectable, reconcilePinDeclarations, type CatalogModelLike, type DownloadModelOptions } from "@/lib/modelStore";
 import { STACK_MODELS, STACK_STEMS_MODELS } from "@/lib/modelCatalog";
-import { modelsDir } from "@/lib/paths";
+import { modelsRootFor } from "@/lib/disks";
 import { restartForNewChatEngine, restartForNewProjector } from "@/lib/supervisor";
 import { prepareSplashModel, splashLocalEntry } from "@/lib/splashStore";
 import { warmUp } from "@/lib/warmup";
@@ -30,7 +30,7 @@ export function installPurpose(model: Pick<CatalogModelLike, "engine" | "compone
 export const MISSING_PART_CODE = (id: string): string => `model-part-missing.${id}`;
 
 /** Starts the install job for a pin. `done` settles when the install ends. */
-export async function startModelInstall(model: Pin, role: RoleId, download?: DownloadModelOptions["download"]): Promise<{ job: string; done: Promise<void> }> {
+export async function startModelInstall(model: Pin, role: RoleId, download?: DownloadModelOptions["download"], diskId: string | null = null): Promise<{ job: string; done: Promise<void> }> {
   // Loaded on first use: a static import of the disk plan pulls the model catalog and speech voices into this module's load order and
   // breaks their initialisation (gen:components-doc failed with a use-before-init error).
   const { buildDiskPlan } = require("@/lib/diskPlan") as { buildDiskPlan: typeof BuildDiskPlan };
@@ -40,7 +40,7 @@ export async function startModelInstall(model: Pin, role: RoleId, download?: Dow
   const admission = await diskAdmission(need);
   if (!admission.ok) throw new DiskRefusalError(admission.reason);
   // One directory per model id: two pins whose URLs end in the same file name never share a path.
-  const destination = join(modelsDir, model.id, basename(new URL(model.download.url).pathname) || `${model.id}.gguf`);
+  const destination = join(modelsRootFor(diskId), model.id, basename(new URL(model.download.url).pathname) || `${model.id}.gguf`);
   const items = model.download.files?.map((file) => ({ id: file.path, label: file.path, completedBytes: 0, totalBytes: file.bytes, state: "queued" as const })) ?? [{ id: basename(destination), label: basename(destination), completedBytes: 0, totalBytes: model.download.approx_bytes, state: "queued" as const }];
   const job = createJob({ kind: "model.install", role, totalBytes: items.reduce((sum, item) => sum + item.totalBytes, 0), items, status: "downloading", input: { model: model.id, purpose: installPurpose(model) } });
   const done = installCatalogModel(model, { destination, download, signal: jobSignal(job.id), onProgress: (progress) => {

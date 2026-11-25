@@ -3,6 +3,7 @@ import { mkdirSync, renameSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { readdirSync } from "node:fs";
 import { modelsDir } from "@/lib/paths";
+import { connectedModelRoots } from "@/lib/disks";
 import { sha256OfFile } from "@/lib/fileHash";
 import { withTimeout } from "@maipai/core/src/withTimeout";
 
@@ -24,6 +25,8 @@ export function sweepPartialDownloads(now = Date.now()): number {
     }
   };
   visit(modelsDir);
+  // Added drives are scanned only when mounted; no path outside a managed model root is visited.
+  for (const root of connectedModelRoots()) visit(root);
   return removed;
 }
 

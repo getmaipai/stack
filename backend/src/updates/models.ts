@@ -5,7 +5,7 @@ import { meta } from "@/db/schema";
 import { PART_DEFS } from "@/lib/partDefs";
 import { createJob, finishJob, listJobs, updateJob } from "@/lib/jobs";
 import { getModel, installCatalogModel, upsertModel, type CatalogModelLike, type DownloadModelOptions, type ModelRecord } from "@/lib/modelStore";
-import { modelsDir } from "@/lib/paths";
+import { modelsRootFor, isManagedModelPath } from "@/lib/disks";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { beginUpdate } from "@/updates/engines";
@@ -27,7 +27,7 @@ function savePrevious(record: ModelRecord): void {
   if (oldValue) {
     try {
       const old = JSON.parse(oldValue) as { modelPath?: string };
-      if (old.modelPath && old.modelPath !== record.modelPath && old.modelPath.startsWith(modelsDir) && existsSync(old.modelPath)) rmSync(old.modelPath, { recursive: true, force: true });
+      if (old.modelPath && old.modelPath !== record.modelPath && isManagedModelPath(old.modelPath) && existsSync(old.modelPath)) rmSync(old.modelPath, { recursive: true, force: true });
     } catch { /* Replace a malformed remembered value. */ }
   }
   const value = JSON.stringify({ revision: record.revision, modelPath: record.modelPath, sha256: record.sha256, sizeBytes: record.sizeBytes });
@@ -41,7 +41,7 @@ async function apply(id: string, download?: DownloadModelOptions["download"], jo
   if (!def || !snapshot || !snapshot.modelPath || !existsSync(snapshot.modelPath)) return { applied: false, reason: `${def?.label ?? id} must be installed before it can be updated.` };
   if (!model?.revision || model.revision === snapshot.revision || !model.download?.url) return { applied: false, reason: `${def.label} has no different Catalog revision available.` };
   const revision = model.revision;
-  const destination = join(modelsDir, id, revision, basename(new URL(model.download.url).pathname) || `${id}.bin`);
+  const destination = join(modelsRootFor(snapshot.diskId), id, revision, basename(new URL(model.download.url).pathname) || `${id}.bin`);
   // beginUpdate also holds the crash restarter, as an engine swap does.
   const endUpdate = beginUpdate();
   try {

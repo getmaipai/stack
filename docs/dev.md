@@ -2999,3 +2999,6 @@ Owner decision of 2026-11-15, after the Studio bakeoff (Home `docs/design/minima
 # Disk state and admission
 
 The disk sampler reads free and total space for the models, engines and job output folders on the watchdog tick, at most once per minute. It reports per-volume levels with hysteresis and refuses generation or installs that would cross the critical free-space line. Selected model files are included in the disk status so Home can surface missing files.
+# Drives
+
+Model files can live in the main data folder or in an added drive row. Each model record stores `disk_id`; `null` means the main drive. If an added drive is absent, its model records remain intact and the API reports `drive_not_connected`. Reconnect the drive to use those files again. Removing a drive row is allowed only when no model records refer to it; removing the row never removes files. Model path deletion is limited to the main models folder and registered drives' `maipai-models` folders.

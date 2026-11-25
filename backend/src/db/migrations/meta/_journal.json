@@ -15,6 +15,13 @@
       "when": 1789900800000,
       "tag": "0001_admin_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795616760639,
+      "tag": "0002_minor_scorpion",
+      "breakpoints": true
     }
   ]
 }

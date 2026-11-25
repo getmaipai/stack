@@ -23,13 +23,14 @@ import { isModelPinned, loadedRoleForModel, loadModelForRole, pinModel, restartF
 import { STACK_MODELS, STACK_WAKEWORD_MODELS } from "@/lib/modelCatalog";
 import { startModelInstall } from "@/lib/installJobs";
 import { InspectRefusal, inspectModel } from "@/lib/modelInspect";
+import { diskStatus } from "@/lib/disks";
 
 const ModelSchema = z.object({
   id: z.string(), roles: z.array(z.string()), state: z.enum(["notInstalled", "installed"]), runtimeState: z.enum(["loaded", "ready"]), pinned: z.boolean(),
   sizeBytes: z.number().int().nullable(), fileMissing: z.boolean(), measuredFootprintBytes: z.number().int().nullable(), measuredContextLength: z.number().int().nullable(), estimated: z.boolean(),
-  source: z.string(), licence: z.string().nullable(), revision: z.string(), sha256: z.string().nullable(), provenance: z.record(z.string(), z.unknown()), modelPath: z.string().nullable(), installedAt: z.string().nullable(), verifiedAt: z.string().nullable(),
+  source: z.string(), licence: z.string().nullable(), revision: z.string(), sha256: z.string().nullable(), provenance: z.record(z.string(), z.unknown()), modelPath: z.string().nullable(), disk_id: z.string().nullable(), disk_connected: z.boolean(), drive_label: z.string(), installedAt: z.string().nullable(), verifiedAt: z.string().nullable(),
 });
-const PullSchema = z.object({ id: z.string(), role: RoleIdSchema, repo: z.string().optional(), url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative().optional(), licence: z.string(), revision: z.string(), engine: z.string().optional(), archive: z.boolean().optional(), hub_file: z.string().optional(), component: z.string().optional() });
+const PullSchema = z.object({ id: z.string(), role: RoleIdSchema, repo: z.string().optional(), url: z.string().url(), sha256: z.string().length(64), approx_bytes: z.number().int().nonnegative().optional(), licence: z.string(), revision: z.string(), engine: z.string().optional(), archive: z.boolean().optional(), hub_file: z.string().optional(), component: z.string().optional(), disk_id: z.string().nullable().optional() });
 const ImportSchema = z.object({ id: z.string(), path: z.string(), roles: z.array(RoleIdSchema).min(1), licence: z.string(), revision: z.string().optional() });
 const ActionSchema = z.object({ action: z.enum(["load", "unload", "pin", "unpin"]) });
 
@@ -44,8 +45,9 @@ const catalogRoute = createRoute({ method: "get", path: "/catalog", tags: ["Mode
 const wakewordFileRoute = createRoute({ method: "get", path: "/{id}/file", tags: ["Models"], summary: "Read a verified installed wakeword asset for Home", request: { params: idParamSchema("id") }, responses: { 200: { content: { "application/octet-stream": { schema: z.string() } }, description: "Verified bytes of an installed pinned wakeword asset." }, 404: { content: { "application/json": { schema: ErrorSchema } }, description: "The id is not a wakeword asset or it is not installed." }, 503: { content: { "application/json": { schema: ErrorSchema } }, description: "The installed bytes failed checksum verification." } } });
 
 export function modelView(model: ModelRecord) {
-  const fileMissing = model.modelPath !== null && !existsSync(model.modelPath);
-  return { id: model.id, roles: model.roles, state: model.modelPath && !fileMissing && readModelManifest(model.id) ? "installed" as const : "notInstalled" as const, runtimeState: loadedRoleForModel(model.id) ? "loaded" as const : "ready" as const, pinned: isModelPinned(model.id), sizeBytes: model.sizeBytes, fileMissing, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, source: model.source, licence: model.licence, revision: model.revision, sha256: model.sha256, provenance: model.provenance, modelPath: model.modelPath, installedAt: model.installedAt, verifiedAt: model.verifiedAt };
+  const drive = diskStatus(model.diskId);
+  const fileMissing = drive.connected && model.modelPath !== null && !existsSync(model.modelPath);
+  return { id: model.id, roles: model.roles, state: model.modelPath && !fileMissing && readModelManifest(model.id) ? "installed" as const : "notInstalled" as const, runtimeState: loadedRoleForModel(model.id) ? "loaded" as const : "ready" as const, pinned: isModelPinned(model.id), sizeBytes: model.sizeBytes, fileMissing, measuredFootprintBytes: model.measuredFootprintBytes, measuredContextLength: model.measuredContextLength, estimated: model.measuredFootprintBytes === null, source: model.source, licence: model.licence, revision: model.revision, sha256: model.sha256, provenance: model.provenance, modelPath: model.modelPath, disk_id: model.diskId, disk_connected: drive.connected, drive_label: drive.label, installedAt: model.installedAt, verifiedAt: model.verifiedAt };
 }
 
 /** What a pull installs: the body's fields, and what it leaves out from
@@ -107,7 +109,7 @@ modelsRoutes.openapi(pullRoute, async (c) => {
   // One directory per model id: two pins whose URLs end in the same file
   // name never share a path.
   let started: Awaited<ReturnType<typeof startModelInstall>>;
-  try { started = await startModelInstall(model, body.role); } catch (error) { return c.json({ error: error instanceof Error ? error.message : "The install could not start.", ...(error && typeof error === "object" && "kind" in error ? { kind: "disk" as const } : {}) }, 503); }
+  try { started = await startModelInstall(model, body.role, undefined, body.disk_id ?? null); } catch (error) { return c.json({ error: error instanceof Error ? error.message : "The install could not start.", ...(error && typeof error === "object" && "kind" in error ? { kind: "disk" as const } : {}) }, 503); }
   const job = { id: started.job };
 
   return c.json({ job: job.id, model: body.id }, 202);

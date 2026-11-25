@@ -9,6 +9,7 @@ import { downloadUrl } from "@/lib/download";
 import { STACK_TTS_CHATTERBOX_CLONER, CHATTERBOX_CLONER_REPO, CHATTERBOX_CLONER_REVISION } from "@/lib/modelCatalog";
 import { installCatalogModel } from "@/lib/modelStore";
 import { modelsDir } from "@/lib/paths";
+import { modelsRootFor } from "@/lib/disks";
 import { sha256OfPath } from "@/lib/store/blobs";
 import { hfSnapshotsRoot } from "@/lib/store/layout";
 import { privateHost, VoiceRefusedError } from "@/speech/voices";
@@ -59,10 +60,10 @@ let clonerForTests: (() => Promise<void>) | null = null;
 export function __setClonerForTests(fetcher: (() => Promise<void>) | null): void { clonerForTests = fetcher; }
 
 /** Fetches the clip tokenizer once (verified against the pinned digest), so the engine can encode a clip offline. */
-export async function ensureChatterboxCloner(options: { signal?: AbortSignal; download?: typeof downloadUrl } = {}): Promise<void> {
+export async function ensureChatterboxCloner(options: { signal?: AbortSignal; download?: typeof downloadUrl; diskId?: string | null } = {}): Promise<void> {
   if (clonerForTests) return clonerForTests();
   if (await chatterboxClonerPresent()) return;
-  await installCatalogModel(STACK_TTS_CHATTERBOX_CLONER, { destination: join(modelsDir, STACK_TTS_CHATTERBOX_CLONER.id, "model.safetensors"), download: options.download ?? downloadUrl, signal: options.signal });
+  await installCatalogModel(STACK_TTS_CHATTERBOX_CLONER, { destination: join(modelsRootFor(options.diskId ?? null), STACK_TTS_CHATTERBOX_CLONER.id, "model.safetensors"), download: options.download ?? downloadUrl, signal: options.signal });
 }
 
 /** What a request's voice becomes on the Chatterbox engine (and, with `needsTokenizer: false`, on VoxCPM2, which keeps the host check and skips the tokenizer): nothing (its default voice) for a preset name or no voice; for a

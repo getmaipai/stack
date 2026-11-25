@@ -16566,6 +16566,16 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "disk_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "disk_connected": {
+                            "type": "boolean"
+                          },
+                          "drive_label": {
+                            "type": "string"
+                          },
                           "installedAt": {
                             "type": "string",
                             "nullable": true
@@ -16592,6 +16602,9 @@
                           "sha256",
                           "provenance",
                           "modelPath",
+                          "disk_id",
+                          "disk_connected",
+                          "drive_label",
                           "installedAt",
                           "verifiedAt"
                         ]
@@ -16673,6 +16686,10 @@
                   },
                   "component": {
                     "type": "string"
+                  },
+                  "disk_id": {
+                    "type": "string",
+                    "nullable": true
                   }
                 },
                 "required": [
@@ -16966,6 +16983,16 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "disk_id": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "disk_connected": {
+                      "type": "boolean"
+                    },
+                    "drive_label": {
+                      "type": "string"
+                    },
                     "installedAt": {
                       "type": "string",
                       "nullable": true
@@ -16992,6 +17019,9 @@
                     "sha256",
                     "provenance",
                     "modelPath",
+                    "disk_id",
+                    "disk_connected",
+                    "drive_label",
                     "installedAt",
                     "verifiedAt"
                   ]
@@ -29541,6 +29571,18 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "drive_not_connected"
+                            ]
+                          },
+                          "fix": {
+                            "type": "string"
+                          },
+                          "drive_label": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -29628,6 +29670,205 @@
                     "ok",
                     "config"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/disks": {
+      "get": {
+        "tags": [
+          "Disks"
+        ],
+        "summary": "List model drives",
+        "responses": {
+          "200": {
+            "description": "Main and added drives.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "disks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "root_path": {
+                            "type": "string"
+                          },
+                          "connected": {
+                            "type": "boolean"
+                          },
+                          "free_bytes": {
+                            "type": "number"
+                          },
+                          "total_bytes": {
+                            "type": "number"
+                          },
+                          "removable": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "root_path",
+                          "connected",
+                          "free_bytes",
+                          "total_bytes",
+                          "removable"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "disks"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Disks"
+        ],
+        "summary": "Add a model drive",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "root_path": {
+                    "type": "string"
+                  },
+                  "removable": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "label",
+                  "root_path"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Added drive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "root_path": {
+                      "type": "string"
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "free_bytes": {
+                      "type": "number"
+                    },
+                    "total_bytes": {
+                      "type": "number"
+                    },
+                    "removable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "root_path",
+                    "connected",
+                    "free_bytes",
+                    "total_bytes",
+                    "removable"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid folder.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/disks/{id}": {
+      "delete": {
+        "tags": [
+          "Disks"
+        ],
+        "summary": "Remove a model drive",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Drive row removed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Drive contains model records.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -32307,6 +32548,10 @@
                     "type": "string",
                     "maxLength": 200,
                     "description": "An opaque label Home keeps for who accepted it."
+                  },
+                  "disk_id": {
+                    "type": "string",
+                    "nullable": true
                   }
                 }
               }
@@ -34391,6 +34636,10 @@
                     "type": "string",
                     "maxLength": 200,
                     "description": "An opaque label Home keeps for who accepted it."
+                  },
+                  "disk_id": {
+                    "type": "string",
+                    "nullable": true
                   }
                 }
               }

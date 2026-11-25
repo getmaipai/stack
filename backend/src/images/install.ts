@@ -6,7 +6,7 @@
 import { basename, join } from "node:path";
 import { createJob, finishJob, getJob, jobSignal, updateJob } from "@/lib/jobs";
 import { getModel, installCatalogModel, isModelSelectable, type CatalogModelLike } from "@/lib/modelStore";
-import { modelsDir } from "@/lib/paths";
+import { modelsRootFor } from "@/lib/disks";
 import { emit } from "@/lib/events";
 import { ensureImageGenEnvironment, imageGenEnvironmentReady, imageRequirementsFileFor } from "@/images/imageEngine";
 import { installPlanFor, type ImageFamilyId } from "@/images/models";
@@ -18,7 +18,7 @@ const inFlight = new Map<ImageFamilyId, string>();
 type Pin = CatalogModelLike & { download: NonNullable<CatalogModelLike["download"]> };
 const installed = (pin: Pin): boolean => { const record = getModel(pin.id); return !!record && isModelSelectable(record) && !!record.modelPath; };
 
-export function startImageInstall(family: ImageFamilyId): { job: string; joined: boolean } {
+export function startImageInstall(family: ImageFamilyId, diskId: string | null = null): { job: string; joined: boolean } {
   const existing = inFlight.get(family);
   if (existing && getJob(existing)) return { job: existing, joined: true };
   const pins = installPlanFor(family).filter((pin): pin is Pin => !!pin.download);
@@ -32,7 +32,7 @@ export function startImageInstall(family: ImageFamilyId): { job: string; joined:
       updateJob(job.id, { completedBytes: done });
       for (const pin of pins) {
         if (installed(pin)) continue;
-        const destination = join(modelsDir, pin.id, basename(new URL(pin.download.url).pathname));
+        const destination = join(modelsRootFor(diskId), pin.id, basename(new URL(pin.download.url).pathname));
         const base = done;
         await installCatalogModel(pin, {
           destination, signal: jobSignal(job.id),

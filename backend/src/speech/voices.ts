@@ -14,6 +14,7 @@ import { downloadUrl } from "@/lib/download";
 import { hfUrl, resolveHuggingFace } from "@/lib/hf";
 import { installCatalogModel, type CatalogModelLike } from "@/lib/modelStore";
 import { modelsDir } from "@/lib/paths";
+import { modelsRootFor } from "@/lib/disks";
 import { readHfFile } from "@/lib/store/hfCache";
 import { settingValues } from "@/settings";
 import { POCKET_TTS_GATED_REPO, POCKET_TTS_UNGATED_REPO } from "@/speech/pocketTts";
@@ -111,6 +112,7 @@ export class VoiceRefusedError extends Error {
 }
 
 export interface VoiceOptions {
+  diskId?: string | null;
   /** The downloader, replaceable by the suite; every fetch goes through it. */
   download?: typeof downloadUrl;
   /** The hub resolver for a community voice, replaceable by the suite. */
@@ -150,7 +152,7 @@ export async function ensureCloningWeights(given: VoiceOptions = {}): Promise<bo
   const download = options.download ?? downloadUrl;
   const pin = options.cloningWeights ?? POCKET_TTS_CLONING_WEIGHTS;
   await installCatalogModel(pin, {
-    destination: join(modelsDir, pin.id, "model.safetensors"),
+    destination: join(modelsRootFor(given.diskId ?? null), pin.id, "model.safetensors"),
     signal: options.signal,
     download: (url, destination, downloadOptions) => download(url, destination, { ...downloadOptions, expectedSha256: downloadOptions?.expectedSha256 ?? pin.download!.sha256, headers: { Authorization: `Bearer ${token}` } }),
   });
@@ -195,7 +197,7 @@ export async function prepareVoice(voiceUrl: string | undefined, given: VoiceOpt
     const base = presetVoiceModel(presetName);
     const model = { ...base, download: { ...base.download!, sha256: presets[presetName]!.sha256, approx_bytes: presets[presetName]!.bytes } };
     if ((await readHfFile(model.repo!, model.revision!, model.download.hub_file!))?.digest !== model.download.sha256) {
-      await installCatalogModel(model, { destination: join(modelsDir, model.id, `${presetName}.safetensors`), download, signal: options.signal });
+      await installCatalogModel(model, { destination: join(modelsRootFor(options.diskId ?? null), model.id, `${presetName}.safetensors`), download, signal: options.signal });
     }
     return presetName;
   }
@@ -222,7 +224,7 @@ export async function prepareVoice(voiceUrl: string | undefined, given: VoiceOpt
   if (!licence) throw new VoiceRefusedError(`${repo} declares no licence for ${path}, so the Stack will not install it.`, 400, "voice-not-pinnable");
   const id = `voice-${repo.replace(/[^A-Za-z0-9._-]+/g, "-")}-${path.replace(/[^A-Za-z0-9._-]+/g, "-")}`.slice(0, 120);
   const model: CatalogModelLike = { id, role: "tts", component: "voice", repo, license: licence, revision: resolution.revision, engine: "pocket-tts", sizing: { profile: "p16", quantization: "n/a" }, download: { url: file.url, sha256: file.sha256, approx_bytes: file.sizeBytes ?? 0, hub_file: path } };
-  if ((await readHfFile(repo, resolution.revision, path))?.digest !== file.sha256) await installCatalogModel(model, { destination: join(modelsDir, id, path.split("/").pop()!), download, signal: options.signal });
+  if ((await readHfFile(repo, resolution.revision, path))?.digest !== file.sha256) await installCatalogModel(model, { destination: join(modelsRootFor(options.diskId ?? null), id, path.split("/").pop()!), download, signal: options.signal });
   return `hf://${repo}/${path}@${resolution.revision}`;
 }
 

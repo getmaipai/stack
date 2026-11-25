@@ -24,7 +24,7 @@ import { SPLASH_LOCAL_CHAT_MODELS, H3_LICENCE_NOTICE, STACK_TTS_VOXCPM2_STT_MODE
 import { licenceAcceptance, recordLicenceAcceptance, type LicenceNotice } from "@/lib/licenceAcceptance";
 import { buildInstallPlan } from "@/lib/installPlan";
 import { diskPlanForTier, diskTotalsFor, engineDownloadBytes, type DiskPlan } from "@/lib/diskPlan";
-import { modelsDir } from "@/lib/paths";
+import { modelsRootFor } from "@/lib/disks";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { releaseHfFile } from "@/lib/store/hfCache";
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
@@ -613,7 +613,7 @@ export function __setComponentDepsForTests(next: ComponentDeps | null): void { d
 export async function __settleComponentInstallsForTests(): Promise<void> { await Promise.all(settling); }
 const settling = new Set<Promise<void>>();
 
-export async function startComponentInstall(id: string, hw?: HardwareInfo, consent: { licence?: string; by?: string | null } = {}): Promise<{ job: string | null; component: string; joined: boolean; already: boolean }> {
+export async function startComponentInstall(id: string, hw?: HardwareInfo, consent: { licence?: string; by?: string | null; diskId?: string | null } = {}): Promise<{ job: string | null; component: string; joined: boolean; already: boolean }> {
   const unit = componentDefs().find((candidate) => candidate.id === id);
   if (!unit) throw new ComponentError("unknown_component", `There is no component called ${id.slice(0, 60)}.`, 404);
   const running = jobFor(id);
@@ -643,7 +643,7 @@ export async function startComponentInstall(id: string, hw?: HardwareInfo, conse
       updateJob(job.id, { completedBytes: done });
       for (const pin of pins) {
         if (pinInstalled(pin)) continue;
-        const destination = join(modelsDir, pin.id, basename(new URL(pin.download.url).pathname) || `${pin.id}.bin`);
+        const destination = join(modelsRootFor(consent.diskId ?? null), pin.id, basename(new URL(pin.download.url).pathname) || `${pin.id}.bin`);
         const base = done;
         await installCatalogModel(pin, {
           destination, signal: jobSignal(job.id), ...(deps.download ? { download: deps.download } : {}),

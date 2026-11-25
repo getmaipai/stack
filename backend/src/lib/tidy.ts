@@ -17,6 +17,7 @@ import { listLoras } from "@/video/loras";
 import { selectedModel } from "@/lib/supervisor";
 import { ROLE_IDS } from "@/roles";
 import { isRetiredModelId } from "@/lib/retiredModels";
+import { connectedModelRoots, isManagedModelPath, modelRootForPath } from "@/lib/disks";
 
 export type TidyKind = "superseded" | "orphan_folder" | "partial_download";
 export interface TidyItem { id: string; kind: TidyKind; bytes: number; reason: string; blocked: string | null; }
@@ -61,7 +62,9 @@ function blockerFor(id: string, componentId: string, componentModelIds: string[]
   return null;
 }
 function safeModelsPath(path: string): boolean {
-  const root = realpathSync(modelsDir);
+  if (!isManagedModelPath(path)) return false;
+  const rootPath = modelRootForPath(path); if (!rootPath || !existsSync(rootPath)) return false;
+  const root = realpathSync(rootPath);
   const absolute = resolve(path);
   const rel = relative(root, absolute);
   if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || resolve(root, rel) !== absolute) return false;
@@ -105,10 +108,11 @@ function activeInputModelIds(): Set<string> {
 function folderItems(now: number): TidyItem[] {
   const refs = referencedPaths(); const known = knownFolderNames(); const active = activeInputModelIds();
   const selectedIds = new Set(ROLE_IDS.map((role) => selectedModel(role)?.id).filter((id): id is string => !!id));
-  let entries: string[]; try { entries = readdirSync(modelsDir); } catch { return []; }
   const out: TidyItem[] = [];
+  for (const root of [modelsDir, ...connectedModelRoots()]) {
+  let entries: string[]; try { entries = readdirSync(root); } catch { continue; }
   for (const entry of entries) {
-    const path = join(modelsDir, entry); let info;
+    const path = join(root, entry); let info;
     try { info = lstatSync(path); } catch { continue; }
     if (!info.isDirectory() || info.isSymbolicLink() || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(entry)) continue;
     if ((known.has(entry) && !selectedIds.has(entry)) || active.has(entry)) continue;
@@ -119,6 +123,7 @@ function folderItems(now: number): TidyItem[] {
     if (references && !selected && !symlinkTarget) continue;
     const blocked = blockerFor(path, entry, [entry]) ?? (symlinkTarget ? "This path is the target of a symbolic link; remove the link first." : null);
     out.push({ id: path, kind: "orphan_folder", bytes: pathBytes(path), reason: age < graceHours() * HOUR ? `Unreferenced model folder; removable after ${new Date(info.mtimeMs + graceHours() * HOUR).toISOString()}.` : "Unreferenced model folder is past the grace period.", blocked });
+  }
   }
   return out;
 }

@@ -18,6 +18,7 @@ import { raise } from "@/lib/health";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { releaseSplashLayoutFor } from "@/lib/splashStore";
 import { isRetiredModelId } from "@/lib/retiredModels";
+import { diskIdOfPath, isManagedModelPath } from "@/lib/disks";
 
 export const ModelSourceSchema = z.enum(["catalog", "huggingface", "lm-studio"]);
 
@@ -38,6 +39,7 @@ export interface ModelRecord {
   hostIdentity: Record<string, unknown> | null;
   firstBootAt: string;
   modelPath: string | null;
+  diskId: string | null;
   measuredFootprintBytes: number | null;
   measuredContextLength: number | null;
 }
@@ -56,6 +58,7 @@ export interface ModelRecordInput {
   verifiedAt?: string | null;
   hostIdentity?: Record<string, unknown> | null;
   modelPath?: string | null;
+  diskId?: string | null;
   measuredFootprintBytes?: number | null;
   measuredContextLength?: number | null;
 }
@@ -169,6 +172,7 @@ function toRecord(row: typeof models.$inferSelect): ModelRecord {
     hostIdentity: row.hostIdentity ? parseJson<Record<string, unknown>>(row.hostIdentity, {}) : null,
     firstBootAt: row.firstBootAt,
     modelPath: row.modelPath,
+    diskId: row.diskId,
     measuredFootprintBytes: row.measuredFootprintBytes,
     measuredContextLength: row.measuredContextLength,
   };
@@ -282,6 +286,7 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
     hostIdentity: input.hostIdentity ?? null,
     firstBootAt: existing?.firstBootAt ?? now,
     modelPath: carries("modelPath") ? input.modelPath ?? null : existing?.modelPath ?? null,
+    diskId: carries("diskId") ? input.diskId ?? null : carries("modelPath") && input.modelPath ? diskIdOfPath(input.modelPath) : existing?.diskId ?? null,
     measuredFootprintBytes: carries("measuredFootprintBytes") ? input.measuredFootprintBytes ?? null : existing?.measuredFootprintBytes ?? null,
     measuredContextLength: carries("measuredContextLength") ? input.measuredContextLength ?? null : existing?.measuredContextLength ?? null,
   };
@@ -300,6 +305,7 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
     hostIdentity: record.hostIdentity ? json(record.hostIdentity) : null,
     firstBootAt: record.firstBootAt,
     modelPath: record.modelPath,
+    diskId: record.diskId,
     measuredFootprintBytes: record.measuredFootprintBytes,
     measuredContextLength: record.measuredContextLength,
   }).onConflictDoUpdate({
@@ -317,6 +323,7 @@ export function upsertModel(input: ModelRecordInput, now = new Date().toISOStrin
       verifiedAt: record.verifiedAt,
       hostIdentity: record.hostIdentity ? json(record.hostIdentity) : null,
       modelPath: record.modelPath,
+      diskId: record.diskId,
       measuredFootprintBytes: record.measuredFootprintBytes,
       measuredContextLength: record.measuredContextLength,
     },
@@ -571,8 +578,8 @@ export function removeModel(id: string): boolean {
   // A package is a directory beside its archive; both go, the manifest
   // last so a failure here leaves the record findable.
   const archive = readModelManifest(id)?.blobs[0]?.path;
-  if (model.modelPath && model.modelPath.startsWith(modelsDir) && existsSync(model.modelPath)) rmSync(model.modelPath, { recursive: true, force: true });
-  if (archive && archive.startsWith(modelsDir) && archive !== model.modelPath && existsSync(archive)) rmSync(archive, { force: true });
+  if (model.modelPath && isManagedModelPath(model.modelPath) && existsSync(model.modelPath)) rmSync(model.modelPath, { recursive: true, force: true });
+  if (archive && isManagedModelPath(archive) && archive !== model.modelPath && existsSync(archive)) rmSync(archive, { force: true });
   // The model's own directory under the store (a directory model whose
   // install stopped after the weights were placed, a download that
   // never verified) goes with the record; a hub-cache path is not here.
@@ -596,10 +603,10 @@ export function removeModelsAtomically(ids: string[]): boolean {
   try {
     for (const model of present) {
       const archive = readModelManifest(model.id)?.blobs[0]?.path;
-      const paths = [model.modelPath, archive, join(modelsDir, model.id)].filter((path): path is string => !!path && path.startsWith(modelsDir) && existsSync(path));
+      const paths = [model.modelPath, archive, join(modelsDir, model.id)].filter((path): path is string => !!path && isManagedModelPath(path) && existsSync(path));
       const uniquePaths = [...new Set(paths)].sort((a, b) => a.length - b.length).filter((path, index, all) => !all.slice(0, index).some((parent) => path.startsWith(parent + sep)));
       for (const path of uniquePaths) {
-        if (isStoreFixedDir(path) || !realpathSync(path).startsWith(realpathSync(modelsDir) + sep)) continue;
+        if (isStoreFixedDir(path) || !isManagedModelPath(realpathSync(path))) continue;
         const parked = `${path}.${token}.removing`;
         renameSync(path, parked);
         staged.push({ original: path, parked });

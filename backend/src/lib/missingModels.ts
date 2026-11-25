@@ -5,14 +5,17 @@ import { ROLE_IDS } from "@/roles";
 import { getModel } from "@/lib/modelStore";
 import { STACK_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_H3_ID, STACK_VIDEO_H3_MODELS, STACK_VIDEO_H3_MODEL_ID, STACK_VIDEO_MODEL_ID, STACK_VIDEO_TOKENIZER_ID } from "@/lib/modelCatalog";
 import { H3_LAYOUT } from "@/images/h3Layout";
+import { diskStatus } from "@/lib/disks";
 
-export interface MissingModelFiles { role: string; model: string; part_id: string; override: boolean; missing_paths: string[]; }
+export interface MissingModelFiles { role: string; model: string; part_id: string; override: boolean; missing_paths: string[]; reason?: "drive_not_connected"; fix?: string; drive_label?: string; }
 /** Files the selected role model actually reads, following its pinned install layout. */
 export function missingModelFiles(): MissingModelFiles[] {
   const result: MissingModelFiles[] = [];
   for (const role of ROLE_IDS) {
     const model = selectedModel(role);
     if (!model) continue;
+    const drive = diskStatus(model.diskId);
+    if (!drive.connected) { result.push({ role, model: model.id, part_id: model.id, override: false, missing_paths: [], reason: "drive_not_connected", fix: `Plug in ${drive.label} to use ${role}`, drive_label: drive.label }); continue; }
     let required: string[];
     let override = false;
     if (role === "video" && process.env.MAIPAI_H3_VIDEO_HOME && model.id === STACK_VIDEO_H3_MODEL_ID) {
