@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { featureLocations, cancelBatch, modelIdsForFeature, moveBatchRunning, startBatch } from "@/lib/featureMoves";
+import { featureOf, featureLocations, cancelBatch, modelIdsForFeature, moveBatchRunning, startBatch } from "@/lib/featureMoves";
 
 import { upsertModel, removeModel } from "@/lib/modelStore";
 describe("feature moves", () => {
@@ -10,6 +10,9 @@ describe("feature moves", () => {
       expect(coding?.drive_ids).toEqual(["main"]); expect(coding?.drives[0]?.connected).toBe(true);
       expect(featureLocations().find((f) => f.feature_id === "video")).toBeUndefined();
     } finally { removeModel("qwen3.8-27b-ud-q4-k-m"); }
+  });
+  test("a model belongs to the feature its disk row names", () => {
+    expect(featureOf("qwen3.8-27b-ud-q4-k-m")).toBe("coding"); expect(featureOf("no-such-model")).toBeNull();
   });
   test("an unknown feature is refused in plain words", () => {
     expect(() => modelIdsForFeature("no-such-feature")).toThrow("There is no feature called");

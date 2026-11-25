@@ -6,7 +6,7 @@ import { diskStatus } from "@/lib/disks";
 import { unloadRole } from "@/lib/supervisor";
 import { planModelMove, runModelMove, type MovePlan } from "@/lib/moveModels";
 
-const featureOf = (modelId: string): string | null => { const row = DISK_ROW[modelId]; return row ? (diskRowFeatures as Record<string, string | null>)[row] ?? null : null; };
+export const featureOf = (modelId: string): string | null => { const row = DISK_ROW[modelId]; return row ? (diskRowFeatures as Record<string, string | null>)[row] ?? null : null; };
 
 /** The installed models that belong to a feature, found through the disk rows (no per-feature code). */
 export function modelIdsForFeature(featureId: string): string[] {

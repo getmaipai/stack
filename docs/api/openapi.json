@@ -29978,6 +29978,10 @@
                           "model_id": {
                             "type": "string"
                           },
+                          "feature_id": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "from_disk": {
                             "type": "string"
                           },
@@ -30004,6 +30008,7 @@
                         "required": [
                           "id",
                           "model_id",
+                          "feature_id",
                           "from_disk",
                           "to_disk",
                           "state",
