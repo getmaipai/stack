@@ -52,6 +52,15 @@ export const disks = sqliteTable("disks", {
   removable: integer("removable").notNull().default(0), createdAt: text("created_at").notNull(),
 });
 
+// STACK-CONNECTIONS-01: the connections the Stack manages (a paired Home, a custom MCP server). Records only; no secret value is stored
+// here (`secret_ref` names a token in the secrets store). `paused` is the only stored state; connected / not seen lately are read from last_seen_at.
+export const connections = sqliteTable("connections", {
+  id: text("id").primaryKey(), kind: text("kind").notNull(), name: text("name").notNull(), reach: text("reach").notNull(),
+  paused: integer("paused").notNull().default(0), lastSeenAt: text("last_seen_at"), lastUsedAt: text("last_used_at"), pairedAt: text("paired_at"),
+  keyFingerprint: text("key_fingerprint"), endpointJson: text("endpoint_json"), toolsJson: text("tools_json"), secretRef: text("secret_ref"),
+  createdAt: text("created_at").notNull(), provenance: text("provenance").notNull(), hlc: text("hlc").notNull(),
+});
+
 export const moveJobs = sqliteTable("move_jobs", {
   id: text("id").primaryKey(), modelId: text("model_id").notNull(), fromDisk: text("from_disk").notNull(),
   toDisk: text("to_disk").notNull(), state: text("state").notNull(), oldPath: text("old_path").notNull(),

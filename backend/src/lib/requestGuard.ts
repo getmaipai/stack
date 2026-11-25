@@ -13,6 +13,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { HOME_TOKEN_HEADER, homeViewToken } from "@/lib/adultView";
 import { checkLoopbackCaller, refuse } from "@/lib/loopbackGuard";
+import { noteHomeSeen } from "@/lib/connections";
 
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -27,7 +28,7 @@ function tokenMatches(presented: string | null): boolean {
 export function guardRequest(request: Request): Response | null {
   const loopback = checkLoopbackCaller(request);
   if (loopback) return loopback;
-  if (READ_METHODS.has(request.method.toUpperCase())) return null;
+  if (READ_METHODS.has(request.method.toUpperCase())) { stampHome(request); return null; }
 
   const contentType = (request.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
   if (contentType === "text/plain" || contentType === "application/x-www-form-urlencoded") {
@@ -44,7 +45,13 @@ export function guardRequest(request: Request): Response | null {
   if (!matches) {
     return refuse(401, "home_token_refused", "The Stack does not accept the token Home sent, so it did not run the request. Restart Home so it reads the Stack's current token (the file keys/home-view-token in the Stack's data folder).");
   }
+  stampHome(request);
   return null;
+}
+
+/** STACK-CONNECTIONS-01: a request that carries Home's valid token marks the Home connection as seen. Never fails or slows a request. */
+function stampHome(request: Request): void {
+  try { const presented = request.headers.get(HOME_TOKEN_HEADER); if (presented && tokenMatches(presented)) noteHomeSeen(); } catch { /* the stamp is best effort */ }
 }
 
 /** `app.fetch` behind the guard. */
