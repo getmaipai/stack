@@ -2,6 +2,7 @@ import diskRowFeatures from "@/rows/diskRowFeatures.json";
 import { CATEGORY_DEFS, defOf } from "@/lib/choiceCategories";
 import { DISK_ROW } from "@/lib/components";
 import { listModels } from "@/lib/modelStore";
+import { diskStatus } from "@/lib/disks";
 import { unloadRole } from "@/lib/supervisor";
 import { planModelMove, runModelMove, type MovePlan } from "@/lib/moveModels";
 
@@ -40,3 +41,16 @@ export function startBatch(modelIds: string[], toDiskId: string, roles: string[]
   })();
 }
 export const rolesForFeature = (featureId: string): string[] => { const role = defOf(featureId)?.role; return role ? [role] : []; };
+
+export interface FeatureLocation { feature_id: string; label: string; bytes: number; drive_ids: string[]; drives: Array<{ id: string; label: string; connected: boolean }> }
+/** Where each feature's installed files are. A feature with no installed files is left out. */
+export function featureLocations(): FeatureLocation[] {
+  const out: FeatureLocation[] = [];
+  for (const def of CATEGORY_DEFS) {
+    const models = listModels().filter((model) => !!model.modelPath && featureOf(model.id) === def.id);
+    if (!models.length) continue;
+    const ids = [...new Set(models.map((model) => model.diskId ?? "main"))];
+    out.push({ feature_id: def.id, label: def.label, bytes: models.reduce((n, model) => n + (model.sizeBytes ?? 0), 0), drive_ids: ids, drives: ids.map((id) => { const d = diskStatus(id === "main" ? null : id); return { id, label: d.label, connected: d.connected }; }) });
+  }
+  return out;
+}

@@ -30053,6 +30053,83 @@
         }
       }
     },
+    "/stack/v1/disks/features": {
+      "get": {
+        "tags": [
+          "Disks"
+        ],
+        "summary": "Which drive each feature's files are on",
+        "responses": {
+          "200": {
+            "description": "Features with installed files.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "features": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "feature_id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "bytes": {
+                            "type": "number"
+                          },
+                          "drive_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "drives": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "connected": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "label",
+                                "connected"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "feature_id",
+                          "label",
+                          "bytes",
+                          "drive_ids",
+                          "drives"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "features"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/sandboxes": {
       "post": {
         "tags": [

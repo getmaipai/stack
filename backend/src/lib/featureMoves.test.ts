@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { cancelBatch, modelIdsForFeature, moveBatchRunning, startBatch } from "@/lib/featureMoves";
+import { featureLocations, cancelBatch, modelIdsForFeature, moveBatchRunning, startBatch } from "@/lib/featureMoves";
 
+import { upsertModel, removeModel } from "@/lib/modelStore";
 describe("feature moves", () => {
+  test("a feature with installed files reports its drive; one with none is left out", () => {
+    upsertModel({ id: "qwen3.8-27b-ud-q4-k-m", roles: ["coding"], source: "catalog", provenance: {}, revision: "r1", modelPath: "/tmp/stack-loc-test.gguf", sha256: null });
+    try {
+      const coding = featureLocations().find((f) => f.feature_id === "coding");
+      expect(coding?.drive_ids).toEqual(["main"]); expect(coding?.drives[0]?.connected).toBe(true);
+      expect(featureLocations().find((f) => f.feature_id === "video")).toBeUndefined();
+    } finally { removeModel("qwen3.8-27b-ud-q4-k-m"); }
+  });
   test("an unknown feature is refused in plain words", () => {
     expect(() => modelIdsForFeature("no-such-feature")).toThrow("There is no feature called");
   });

@@ -5,7 +5,7 @@ import { addDisk, listDisks, removeDisk } from "@/lib/disks";
 import { db } from "@/db";
 import { moveJobs } from "@/db/schema";
 import { desc } from "drizzle-orm";
-import { cancelBatch, modelIdsForFeature, planBatch, rolesForFeature, startBatch } from "@/lib/featureMoves";
+import { featureLocations, cancelBatch, modelIdsForFeature, planBatch, rolesForFeature, startBatch } from "@/lib/featureMoves";
 import { resumeMoveJobs } from "@/lib/moveModels";
 const Disk = z.object({ id: z.string(), label: z.string(), root_path: z.string(), connected: z.boolean(), free_bytes: z.number(), total_bytes: z.number(), removable: z.boolean() });
 const list = createRoute({ method: "get", path: "/", tags: ["Disks"], summary: "List model drives", responses: { 200: { content: { "application/json": { schema: z.object({ disks: z.array(Disk) }) } }, description: "Main and added drives." } } });
@@ -34,3 +34,6 @@ disksRoutes.openapi(moveStart, async (c) => {
 disksRoutes.openapi(moveList, (c) => c.json({ moves: db.select().from(moveJobs).orderBy(desc(moveJobs.updatedAt)).limit(30).all().map((j) => ({ id: j.id, model_id: j.modelId, from_disk: j.fromDisk, to_disk: j.toDisk, state: j.state, bytes_done: j.bytesDone, bytes_total: j.bytesTotal, error: j.error, updated_at: j.updatedAt })) }, 200));
 disksRoutes.openapi(moveCancel, (c) => c.json({ cancelled: cancelBatch() }, 200));
 export { resumeMoveJobs };
+const Loc = z.object({ feature_id: z.string(), label: z.string(), bytes: z.number(), drive_ids: z.array(z.string()), drives: z.array(z.object({ id: z.string(), label: z.string(), connected: z.boolean() })) });
+const locRoute = createRoute({ method: "get", path: "/features", tags: ["Disks"], summary: "Which drive each feature's files are on", responses: { 200: { content: { "application/json": { schema: z.object({ features: z.array(Loc) }) } }, description: "Features with installed files." } } });
+disksRoutes.openapi(locRoute, (c) => c.json({ features: featureLocations() }, 200));
