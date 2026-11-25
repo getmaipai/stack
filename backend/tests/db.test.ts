@@ -22,7 +22,7 @@ test("opens and migrates the five-table state database", () => {
     });
     expect(probe.exitCode, probe.stderr.toString()).toBe(0);
     const result = JSON.parse(probe.stdout.toString().trim()) as { tables: string[]; meta: unknown[] };
-    expect(result.tables).toEqual(["admin", "admin_sessions", "disks", "health", "meta", "models"]);
+    expect(result.tables).toEqual(["admin", "admin_sessions", "connections", "disks", "health", "meta", "models", "move_jobs"]);
     expect(result.meta).toEqual([]);
   } finally {
     rmSync(dataDir, { recursive: true, force: true });

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { app } from "@/app";
 import { db } from "@/db";
 import { connections } from "@/db/schema";
@@ -11,6 +11,7 @@ const call = (method: string, path: string, body?: unknown) => app.request(`/sta
 const list = async () => ((await (await call("GET", "")).json()) as { connections: Array<{ id: string; kind: string; state: string; last_seen_at?: string | null }> }).connections;
 const mcp = { name: "Notes server", endpoint: { type: "url", url: "http://127.0.0.1:9000/mcp" } };
 const add = async (extra: object = {}) => (await call("POST", "", { ...mcp, ...extra }));
+beforeEach(() => { db.delete(connections).run(); __resetConnectionsForTests(); });
 afterEach(() => { db.delete(connections).run(); __resetConnectionsForTests(); });
 
 describe("connections routes", () => {
