@@ -29931,6 +29931,15 @@
                     },
                     "started": {
                       "type": "boolean"
+                    },
+                    "skipped": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "message": {
+                      "type": "string"
                     }
                   },
                   "required": [

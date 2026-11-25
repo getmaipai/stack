@@ -16,18 +16,18 @@
     "p32.needed_bytes": 43914403488,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 48589999960,
-    "p64.required_free_bytes": 194408115933,
-    "p64.minimum_required_free_bytes": 37187187977,
-    "p64.everything_required_free_bytes": 311569759261,
-    "p64.needed_bytes": 163132484664,
+    "p64.required_free_bytes": 194408088009,
+    "p64.minimum_required_free_bytes": 37187160053,
+    "p64.everything_required_free_bytes": 311569731337,
+    "p64.needed_bytes": 163132456740,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 191231792656,
-    "p128.required_free_bytes": 197949623094,
-    "p128.minimum_required_free_bytes": 37187187977,
-    "p128.everything_required_free_bytes": 792728846256,
-    "p128.needed_bytes": 166083740632,
+    "p64.ai_required_free_bytes": 191231764732,
+    "p128.required_free_bytes": 197949595170,
+    "p128.minimum_required_free_bytes": 37187160053,
+    "p128.everything_required_free_bytes": 792728818332,
+    "p128.needed_bytes": 166083712708,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 194773299817
+    "p128.ai_required_free_bytes": 194773271893
   },
   "tiers": {
     "p16": {
@@ -1329,9 +1329,9 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 539007148,
+          "download_bytes": 538979224,
           "installed_bytes": 718337644,
-          "peak_temp_bytes": 489426829,
+          "peak_temp_bytes": 489398905,
           "model_ids": [
             "parakeet-tdt-0.6b-v2-int8",
             "silero-vad",
@@ -2221,25 +2221,25 @@
         }
       ],
       "default": {
-        "download_bytes": 152708139566,
+        "download_bytes": 152708111642,
         "installed_bytes": 156378156341,
-        "peak_temp_bytes": 6754328323,
-        "needed_bytes": 163132484664,
-        "required_free_bytes": 194408115933
+        "peak_temp_bytes": 6754300399,
+        "needed_bytes": 163132456740,
+        "required_free_bytes": 194408088009
       },
       "minimum": {
-        "download_bytes": 26431375129,
+        "download_bytes": 26431347205,
         "installed_bytes": 28447816188,
-        "peak_temp_bytes": 3049808551,
-        "needed_bytes": 31497624739,
-        "required_free_bytes": 37187187977
+        "peak_temp_bytes": 3049780627,
+        "needed_bytes": 31497596815,
+        "required_free_bytes": 37187160053
       },
       "everything": {
-        "download_bytes": 242192799072,
+        "download_bytes": 242192771148,
         "installed_bytes": 249074688892,
-        "peak_temp_bytes": 12680132590,
-        "needed_bytes": 261754821482,
-        "required_free_bytes": 311569759261
+        "peak_temp_bytes": 12680104666,
+        "needed_bytes": 261754793558,
+        "required_free_bytes": 311569731337
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2429,9 +2429,9 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 539007148,
+          "download_bytes": 538979224,
           "installed_bytes": 718337644,
-          "peak_temp_bytes": 489426829,
+          "peak_temp_bytes": 489398905,
           "model_ids": [
             "parakeet-tdt-0.6b-v2-int8",
             "silero-vad",
@@ -3648,25 +3648,25 @@
         }
       ],
       "default": {
-        "download_bytes": 155659395534,
+        "download_bytes": 155659367610,
         "installed_bytes": 159329412309,
-        "peak_temp_bytes": 6754328323,
-        "needed_bytes": 166083740632,
-        "required_free_bytes": 197949623094
+        "peak_temp_bytes": 6754300399,
+        "needed_bytes": 166083712708,
+        "required_free_bytes": 197949595170
       },
       "minimum": {
-        "download_bytes": 26431375129,
+        "download_bytes": 26431347205,
         "installed_bytes": 28447816188,
-        "peak_temp_bytes": 3049808551,
-        "needed_bytes": 31497624739,
-        "required_free_bytes": 37187187977
+        "peak_temp_bytes": 3049780627,
+        "needed_bytes": 31497596815,
+        "required_free_bytes": 37187160053
       },
       "everything": {
-        "download_bytes": 640110286433,
+        "download_bytes": 640110258509,
         "installed_bytes": 648841071381,
-        "peak_temp_bytes": 14119560598,
-        "needed_bytes": 662960631979,
-        "required_free_bytes": 792728846256
+        "peak_temp_bytes": 14119532674,
+        "needed_bytes": 662960604055,
+        "required_free_bytes": 792728818332
       },
       "measured_on": "2026-10-17",
       "default_selected": [
