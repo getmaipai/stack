@@ -169,7 +169,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
             <Button variant="ghost" size="icon-sm" onClick={() => { void signOut(); }} aria-label="Sign out"><LogOut aria-hidden="true" /></Button>
           </div>
         </header>
-        <main id="main-scroll" className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto px-4 py-8 md:px-8 md:py-10">
+        <main id="main-scroll" className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto overscroll-contain px-4 py-8 md:px-8 md:py-10">
           {/* The AI and models and Styles pages (@maipai/ui) write their own titles, so the shell does not repeat them. */}
           {screen !== "models" && screen !== "styles" && (
             <div className="mb-8 flex flex-col gap-2">

@@ -4,7 +4,7 @@
 @import "@maipai/ui/src/tokens.css";
 @source "../node_modules/@maipai/ui/src";
 
-html, body, #root { min-height: 100dvh; }
+html, body, #root { height: 100dvh; overflow: hidden; overscroll-behavior: none; }
 body { background-color: var(--surface-page, var(--background)); color: var(--foreground); font-family: var(--font-sans); }
 /* A soft wash of the accent at the top of the page, so dark mode reads as lit, not flat. It stays put while the page scrolls. */
 body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(48rem 24rem at 78% -6rem, color-mix(in oklab, var(--primary) 10%, transparent), transparent 70%), radial-gradient(40rem 22rem at -4% 12%, color-mix(in oklab, var(--primary) 5%, transparent), transparent 70%); }

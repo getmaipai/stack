@@ -157,7 +157,7 @@ test("a killed downloader resumes its partial file after process restart and ver
   }
 }, 15_000);
 
-describe("Hugging Face login", () => {
+describe("Hugging Face token", () => {
   const OK = { expectedSha256: SHA256, expectedBytes: CONTENT.length };
   const seen: Array<{ host: string; path: string; auth: string | null }> = [];
   const cdn = Bun.serve({ port: 0, fetch(request) { seen.push({ host: "cdn", path: new URL(request.url).pathname, auth: request.headers.get("authorization") }); return new Response(CONTENT, { headers: { "content-length": String(CONTENT.length) } }); } });
