@@ -16,15 +16,44 @@ export interface LicenceNotice {
   summary: string[];
 }
 export interface LicenceAcceptance { licence: string; accepted_at: string; by: string | null }
+/** GLOBAL-LICENCE: one acceptance that covers every notice, current and future. Bump this date when any licence's terms change, so the question is asked again. */
+export const GLOBAL_LICENCE_TERMS_VERSION = "2026-11-25";
+export interface GlobalLicenceAcceptance { terms_version: string; accepted_at: string; by: string | null }
+
+/** The stored global acceptance lives in the same file under this key. */
+const GLOBAL_KEY = "__global__";
+
+type Stored = LicenceAcceptance | GlobalLicenceAcceptance;
+const isNoticeRecord = (value: Stored | undefined): value is LicenceAcceptance => !!value && "licence" in value;
+const isGlobalRecord = (value: Stored | undefined): value is GlobalLicenceAcceptance => !!value && "terms_version" in value;
 
 const file = (): string => join(dataDir, "licence-acceptances.json");
-function read(): Record<string, LicenceAcceptance> {
-  try { return JSON.parse(readFileSync(file(), "utf8")) as Record<string, LicenceAcceptance>; } catch { return {}; }
+function read(): Record<string, Stored> {
+  try { return JSON.parse(readFileSync(file(), "utf8")) as Record<string, Stored>; } catch { return {}; }
+}
+
+/** The admin's one acceptance, or null when nothing is stored or the stored terms version is not the current one (a new version asks again). */
+export function globalLicenceAcceptance(): GlobalLicenceAcceptance | null {
+  const found = read()[GLOBAL_KEY];
+  return isGlobalRecord(found) && found.terms_version === GLOBAL_LICENCE_TERMS_VERSION ? found : null;
+}
+
+/** Accept every licence at once; accepting again at a new terms version overwrites. */
+export function recordGlobalLicenceAcceptance(by: string | null, now = new Date()): GlobalLicenceAcceptance {
+  const record: GlobalLicenceAcceptance = { terms_version: GLOBAL_LICENCE_TERMS_VERSION, accepted_at: now.toISOString(), by: by ? by.slice(0, 200) : null };
+  mkdirSync(dirname(file()), { recursive: true });
+  const temp = `${file()}.${process.pid}.tmp`;
+  writeFileSync(temp, JSON.stringify({ ...read(), [GLOBAL_KEY]: record }, null, 1), { mode: 0o600 });
+  renameSync(temp, file());
+  return record;
 }
 
 export function licenceAcceptance(noticeId: string): LicenceAcceptance | null {
   const found = read()[noticeId];
-  return found && found.licence === noticeId ? found : null;
+  if (isNoticeRecord(found) && found.licence === noticeId) return found;
+  // A valid global acceptance counts for every notice, so install never asks after it.
+  const global = globalLicenceAcceptance();
+  return global ? { licence: noticeId, accepted_at: global.accepted_at, by: global.by } : null;
 }
 export function recordLicenceAcceptance(noticeId: string, by: string | null, now = new Date()): LicenceAcceptance {
   const existing = licenceAcceptance(noticeId);

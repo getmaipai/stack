@@ -6,7 +6,7 @@ import { FEED_EVENTS } from "./live";
 import { StackClientError } from "@maipai/ui/src/stack/StackClient";
 import type {
   StackAddModelBody, StackAddModelResult, StackCategoryId, StackClient, StackInstallStarted, StackLevel, StackOrderBody, StackOrderResult, StackPickBody, StackPickResult,
-  StackRecommendedResult, StackRemoveBody, StackRemoveResult, StackRemoved, StackUnused, StackChoicesView,
+  StackRecommendedResult, StackRemoveBody, StackRemoveResult, StackRemoved, StackUnused, StackChoicesView, StackLicences,
 } from "@maipai/ui/src/stack/StackClient";
 
 const enc = encodeURIComponent;
@@ -49,6 +49,10 @@ export function createStackClient(onWrite?: () => void): AdminStackClient {
       cancel: () => run(() => call("POST", "/stack/v1/disks/moves/cancel", {})),
       add: (body: { label: string; root_path: string; removable: boolean }) => run(async () => wrote(await call("POST", "/stack/v1/disks", body))),
       remove: (id: string) => run(async () => wrote(await call("DELETE", `/stack/v1/disks/${enc(id)}`))),
+    },
+    licences: {
+      read: () => run(() => call<StackLicences>("GET", "/stack/v1/licences")),
+      accept: () => run(async () => wrote(await call<StackLicences>("POST", "/stack/v1/licences", {}))),
     },
     readChoices: () => run(() => call<StackChoicesView>("GET", "/stack/v1/choices")),
     setRoleEnabled: (role: string, enabled: boolean) => run(async () => { await call("PUT", "/stack/v1/settings", { [`stack.roles.${role}.enabled`]: enabled }); wrote(null); }),

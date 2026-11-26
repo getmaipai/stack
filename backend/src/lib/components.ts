@@ -553,6 +553,11 @@ function guardUninstall(unit: UnitDef, requirement: ComponentRequirement): Compo
   return null;
 }
 
+/** Every licence notice any part carries (current and future), de-duplicated by id. */
+export function allLicenceNotices(): LicenceNotice[] {
+  return dedupe(componentDefs().flatMap((unit) => unit.licenceNotice ? [unit.licenceNotice] : []), (notice) => notice.id);
+}
+
 export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> {
   const hardware = hw ?? await detectHardware();
   const { tier, planned } = planOf(hardware);

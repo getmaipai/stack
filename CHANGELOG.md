@@ -11,6 +11,8 @@ is published yet. This file tracks what either picks up.
 
 ### Added
 
+- One global licence acceptance: `GET` and `POST /stack/v1/licences`. An admin accepts once and every part's licence (current and future) is covered until the terms version changes; the AI and models page shows the accept card (kit ui 0.5.754).
+
 - Preset audit (PRESET-AUDIT-01, 2026-11-22): the uncensored 27B chat model (a part the Stack already serves for chat) is now an offered Standard pick on 64 and 128 GB computers, never the recommended one. The coding model's description says its Max level uses the Max chat model.
 
 ### Changed

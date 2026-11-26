@@ -42046,6 +42046,169 @@
         }
       }
     },
+    "/stack/v1/licences": {
+      "get": {
+        "tags": [
+          "Licences"
+        ],
+        "summary": "Whether the admin has accepted every licence, and what is covered",
+        "responses": {
+          "200": {
+            "description": "The global acceptance state and every notice it covers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "terms_version": {
+                      "type": "string",
+                      "description": "The licence terms version this acceptance covers; a new one asks again."
+                    },
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "accepted_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "by": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "licences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "url",
+                          "summary"
+                        ]
+                      },
+                      "description": "Every licence notice any part carries, de-duplicated."
+                    }
+                  },
+                  "required": [
+                    "terms_version",
+                    "accepted",
+                    "accepted_at",
+                    "by",
+                    "licences"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Licences"
+        ],
+        "summary": "Accept every licence at once (an admin did)",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "by": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "An opaque label Home keeps for who accepted it."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The acceptance state after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "terms_version": {
+                      "type": "string",
+                      "description": "The licence terms version this acceptance covers; a new one asks again."
+                    },
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "accepted_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "by": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "licences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "url",
+                          "summary"
+                        ]
+                      },
+                      "description": "Every licence notice any part carries, de-duplicated."
+                    }
+                  },
+                  "required": [
+                    "terms_version",
+                    "accepted",
+                    "accepted_at",
+                    "by",
+                    "licences"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/privacy": {
       "get": {
         "tags": [
