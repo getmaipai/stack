@@ -12,7 +12,7 @@ import { dataDir } from "@/lib/paths";
 import { getJob, __resetJobsForTests } from "@/lib/jobs";
 import { recordGlobalLicenceAcceptance } from "@/lib/licenceAcceptance";
 import { __resetLoraStoreForTests, legacyLoraDir, loraStorePath, mergeLegacyManifests, readAllLoras, writeAllLoras } from "@/lib/media/loraStore";
-import { assertLorasAllowed, getCatalog, importCatalog, listCatalog, patchCatalog, purgeCatalog, restoreCatalog, sweepLoraTrash, trashCatalog } from "@/lib/media/loraCatalog";
+import { getCatalog, importCatalog, listCatalog, patchCatalog, purgeCatalog, restoreCatalog, sweepLoraTrash, trashCatalog } from "@/lib/media/loraCatalog";
 import { __resetSourceLimitForTests, browseSource, setSourceKey, sourceKey, sourceStatus, startCatalogInstall, startLoraMove, __resetLoraMoveForTests } from "@/lib/media/loraSources";
 import { imageLoras, __resetImageLoraInstallForTests } from "@/images/loras";
 import { getLora as getVideoLora, resolveLoras as resolveVideoLoras } from "@/video/loras";
@@ -67,13 +67,9 @@ test("merge: a record the store already has is never overwritten by an old manif
 
 test("fence: an unknown or trashed id counts as adult-only for a non-adult audience; an adult-only file needs an adult audience", async () => {
   const adult = await addPicture("dark", { classification: "adult-only" }); const safe = await addPicture("safe");
-  expect(() => assertLorasAllowed([safe.id], "all-ages")).not.toThrow();
-  expect(() => assertLorasAllowed([adult.id], "all-ages")).toThrow(/adult-only/);
-  expect(() => assertLorasAllowed([adult.id], "adult")).not.toThrow();
-  expect(() => assertLorasAllowed(["lora-0123456789abcdef"], "all-ages")).toThrow(/not available/);
-  expect(() => assertLorasAllowed(["not-an-id"], "adult")).toThrow(/No LoRA/);
+  expect((await imageLoras.resolve([{ id: safe.id }], "all-ages", "z-image-turbo"))[0]!.record.id).toBe(safe.id);
+  await expect(imageLoras.resolve([{ id: "lora-0123456789abcdef" }], "all-ages", "z-image-turbo")).rejects.toThrow(/No LoRA/);
   trashCatalog(safe.id);
-  expect(() => assertLorasAllowed([safe.id], "all-ages")).toThrow();
   await expect(imageLoras.resolve([{ id: adult.id }], "all-ages", "z-image-turbo")).rejects.toThrow(/adult-only/);
   await expect(imageLoras.resolve([{ id: "lora-0123456789abcdef" }], "adult", "z-image-turbo")).rejects.toThrow(/No LoRA/);
   await expect(imageLoras.resolve([{ id: safe.id }], "adult", "z-image-turbo")).rejects.toThrow(/No LoRA/);

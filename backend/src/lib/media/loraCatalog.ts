@@ -15,10 +15,10 @@ import { join } from "node:path";
 import { Lora as SpecLora } from "@maipai/spec/gen/ts/lora.js";
 import { dataDir } from "@/lib/paths";
 import { diskStatus } from "@/lib/disks";
-import { LoraError, type Audience, type LoraClass, type LoraMedia, type LoraRecord } from "@/lib/media/loraLibrary";
+import { LoraError, type LoraClass, type LoraMedia, type LoraRecord } from "@/lib/media/loraLibrary";
 import { loraDriveProblem, readAllLoras, writeAllLoras } from "@/lib/media/loraStore";
 import { imageLoras } from "@/images/loras";
-import { updateLora as updateVideoLora, isLoraId } from "@/video/loras";
+import { updateLora as updateVideoLora } from "@/video/loras";
 
 export const TRASH_DAYS = 30;
 export type LoraStatus = "ready" | "drive_missing" | "installing" | "failed";
@@ -150,19 +150,6 @@ export function purgeCatalog(id: string): boolean {
   if (record.preview) rmSync(join(previewDir(), record.preview), { force: true });
   writeAllLoras(all.filter((entry) => entry.id !== id));
   return true;
-}
-
-/** The fence in one function: every id must be a live LoRA the audience may use; an unknown or trashed id counts as adult-only. Throws `lora_not_allowed` or `unknown_lora`. */
-export function assertLorasAllowed(ids: string[], audience: Audience): void {
-  const all = readAllLoras();
-  for (const id of ids) {
-    const record = isLoraId(id) ? all.find((entry) => entry.id === id) : undefined;
-    if (!record || record.removed_at) {
-      if (audience !== "adult") throw new LoraError("lora_not_allowed", "That style is not available here.", 422);
-      throw new LoraError("unknown_lora", `No LoRA with the id ${String(id).slice(0, 40)} is in the library.`, 422);
-    }
-    if (record.classification === "adult-only" && audience !== "adult") throw new LoraError("lora_not_allowed", "That LoRA is adult-only and this request is not for an adult audience.", 422);
-  }
 }
 
 export interface ImportItem { lora: unknown; preview?: { content_type: string; data_base64: string } | null }
