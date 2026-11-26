@@ -71,16 +71,19 @@ export function getCatalog(id: string): CatalogLora | null {
   return record ? view(record) : null;
 }
 
-export type AdultTicketVerifier = (ticket: string) => Promise<boolean>;
+export type AdultTicketVerifier = (ticket: string, loraId: string) => Promise<boolean>;
 let verifier: AdultTicketVerifier | null = null;
 /** Home's paired token is how the Stack checks a ticket: whatever calls Home sets this. Until one is set every lowering is refused (fail closed). */
 export function setAdultTicketVerifier(next: AdultTicketVerifier | null): void { verifier = next; }
 
 export interface CatalogPatch {
   name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; description?: string; kind?: string;
+  /** Who may use it, written to `home.availability.who`; no ticket needed. */
+  availabilityWho?: "admins" | "adults" | "people";
   /** Home's fresh single-use ticket, required to change adult-only to all-ages. */
   ticket?: string;
 }
+const WHO = ["admins", "adults", "people"];
 const KINDS = ["style", "character", "motion", "other"];
 
 export async function patchCatalog(id: string, patch: CatalogPatch): Promise<CatalogLora> {
@@ -94,16 +97,21 @@ export async function patchCatalog(id: string, patch: CatalogPatch): Promise<Cat
   if (lowering) {
     if (!patch.ticket) throw new LoraError("ticket_required", "Making an adult-only style available to everyone needs the adult lock opened in Home first. Open it in Home, then try again.", 403);
     let ok = false;
-    try { ok = verifier ? await verifier(patch.ticket) : false; } catch { ok = false; }
+    try { ok = verifier ? await verifier(patch.ticket, id) : false; } catch { ok = false; }
     if (!ok) throw new LoraError("ticket_refused", "Home did not accept that confirmation, or it has been used already. Open the adult lock in Home again, then try again.", 403);
   }
   const libraryPatch = { name: patch.name, classification: patch.classification, strengthDefault: patch.strengthDefault, triggerWords: patch.triggerWords, sourceUrl: patch.sourceUrl };
   if (media === "video") await updateVideoLora(id, libraryPatch); else await imageLoras.update(id, libraryPatch);
-  if (patch.description !== undefined || patch.kind !== undefined) {
+  if (patch.availabilityWho !== undefined && !WHO.includes(patch.availabilityWho)) throw new LoraError("bad_availability", "Who can use it is admins, adults or people.", 422);
+  if (patch.description !== undefined || patch.kind !== undefined || patch.availabilityWho !== undefined) {
     const all = readAllLoras(); const index = all.findIndex((record) => record.id === id);
     const home = { ...(all[index]!.home ?? {}) } as Record<string, unknown>;
     if (patch.description !== undefined) home.description = patch.description;
     if (patch.kind !== undefined) home.kind = patch.kind;
+    if (patch.availabilityWho !== undefined) {
+      const current = home.availability && typeof home.availability === "object" ? home.availability as Record<string, unknown> : null;
+      home.availability = current ? { ...current, who: patch.availabilityWho } : { who: patch.availabilityWho, people: [] };
+    }
     all[index] = { ...all[index]!, home }; writeAllLoras(all);
   }
   return getCatalog(id)!;

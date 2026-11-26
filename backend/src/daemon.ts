@@ -37,6 +37,7 @@ import { sfxGen } from "@/sound/sfxGen";
 import { stopScoreWorkers } from "@/score/scoreGen";
 import { imageGen } from "@/images/imageEngine";
 import { runSweeps } from "@/lib/sweeps";
+import { installHomeTicketVerifierFromEnv } from "@/lib/media/homeTicketVerifier";
 import { retireModels } from "@/lib/retireModels";
 import { sandboxService, startSandboxSweeper } from "@/lib/sandbox";
 import { beginStopping } from "@/lib/lifecycle";
@@ -87,6 +88,8 @@ async function serve(): Promise<void> {
   for (const id of reconcilePinDeclarations([...STACK_MODELS, ...STACK_STEMS_MODELS, ...STACK_VOICE_CONVERT_MODELS])) console.log(`Updated the record of ${id} to match its pin.`);
   // TIER-ROUTES-01: the Max window swaps chat to Reduced and back by itself.
   resetReducedChatOnBoot();
+  // Lowering an adult-only style needs Home's ticket; this wires the check when STACK_HOME_CALLBACK_URL is set.
+  installHomeTicketVerifierFromEnv();
   wireMaxWindowReduced();
   // The governor's working margin follows the machine's tier from here on.
   const { tier, stop: stopTierWatch } = await setMachineTierFromHardware();

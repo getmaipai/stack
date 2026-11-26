@@ -24394,6 +24394,15 @@
                   "kind": {
                     "type": "string"
                   },
+                  "availability_who": {
+                    "type": "string",
+                    "enum": [
+                      "admins",
+                      "adults",
+                      "people"
+                    ],
+                    "description": "Who may use it, written to `home.availability.who`. No ticket needed."
+                  },
                   "ticket": {
                     "type": "string",
                     "description": "Home's fresh single-use adult-lock ticket. Required to change adult-only to all-ages; marking adult-only needs none."
