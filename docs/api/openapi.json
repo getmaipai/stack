@@ -1475,6 +1475,83 @@
           "total_bytes": {
             "type": "integer"
           },
+          "folders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "label": {
+                  "type": "string"
+                },
+                "in_use": {
+                  "type": "boolean"
+                },
+                "advice": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "object",
+                  "nullable": true,
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "engine",
+                        "engines",
+                        "models",
+                        "feature",
+                        "stack"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "id"
+                  ],
+                  "description": "Who owns the folder; null when the Stack does not know it (for example `splash` is the Splash engine's)."
+                },
+                "used_by": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label"
+                    ]
+                  },
+                  "description": "Installed models that run on the owner engine; removing the folder would hurt them."
+                }
+              },
+              "required": [
+                "path",
+                "bytes",
+                "label",
+                "in_use",
+                "advice",
+                "owner",
+                "used_by"
+              ]
+            },
+            "description": "Every top-level folder of the Stack's data with its owner and what depends on it."
+          },
           "tidy": {
             "type": "object",
             "properties": {
@@ -1527,6 +1604,7 @@
         "required": [
           "items",
           "total_bytes",
+          "folders",
           "tidy"
         ]
       },
@@ -34644,7 +34722,7 @@
           "Choices"
         ],
         "summary": "Installed models no choice, order or fallback uses, and what removing them frees",
-        "description": "A model is listed when it is installed, removable, chosen at no level, not in a category's order (unless that category switched it off), not required by another part and not what this computer's setup binds to a role. `tidy` is the Stack's own list of replaced and abandoned files (`/components/tidy`).",
+        "description": "A model is listed when it is installed, removable, chosen at no level, not in a category's order (unless that category switched it off), not required by another part and not what this computer's setup binds to a role. `folders` names the owner of every top-level data folder (for example `splash` is the Splash engine's) and which installed models depend on it. `tidy` is the Stack's own list of replaced and abandoned files (`/components/tidy`).",
         "responses": {
           "200": {
             "description": "The list, largest first.",
@@ -34652,6 +34730,116 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ChoicesUnused"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/choices/impact/{id}": {
+      "get": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "What deleting, moving or upgrading a model or engine touches, before anything is done",
+        "description": "From the relationship map (what drives a model and what extends it). `blocking` are installed things in use that depend on it: the action is refused while they exist. `warnings` go along or break. Starts no work.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "delete",
+                "move",
+                "upgrade"
+              ],
+              "default": "delete"
+            },
+            "required": false,
+            "name": "action",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The impact.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "delete",
+                        "move",
+                        "upgrade"
+                      ]
+                    },
+                    "blocking": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "why"
+                        ]
+                      }
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "why": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "why"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "action",
+                    "blocking",
+                    "warnings"
+                  ]
                 }
               }
             }
