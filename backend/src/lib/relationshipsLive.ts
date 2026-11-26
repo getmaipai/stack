@@ -5,7 +5,8 @@ import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
 import { catalogPins } from "@/lib/tidy";
 import { listLoras } from "@/video/loras";
 import { settingValues } from "@/settings";
-import { PART_DEFS, LORA_BASE_MODEL_IDS } from "@/lib/partDefs";
+import { PART_DEFS } from "@/lib/partDefs";
+import loraBases from "@/rows/loraBases.json";
 import { impactOf, buildLinks, type Action, type Facts, type Impact, type Link } from "@/lib/relationships";
 
 
@@ -16,7 +17,7 @@ export function liveFacts(): Facts {
   const labels = new Map(PART_DEFS.map((def) => [def.id, def.label]));
   const hub = new Set(pins.filter((pin) => !!pin.download?.hub_file).map((pin) => pin.id));
   return {
-    pins, loras: listLoras().map((lora) => ({ id: lora.id, base_model: lora.base_model })), loraBases: LORA_BASE_MODEL_IDS,
+    pins, loras: listLoras().map((lora) => ({ id: lora.id, base_model: lora.base_model })), loraBases: loraBases as Record<string, string>,
     installed: (id) => !!getModel(id)?.modelPath, inUse: (id) => selected.has(id) || chatModel === id || loadedRoleForModel(id) !== null,
     label: (id) => labels.get(id) ?? id, hubLayout: (id) => hub.has(id),
   };
