@@ -224,3 +224,10 @@ test("sources: browse Hugging Face and Civitai with a fake source, classify from
   const routeResponse = await app.request("/stack/v1/loras/sources"); expect(JSON.stringify(await routeResponse.json())).not.toContain("civitai_key_value_123");
   setSourceKey("civitai", null); expect(sourceKey("civitai")).toBeNull();
 });
+
+test("POST /stack/v1/loras/install reaches the LoRA install, not the components route, and is refused until the licence is accepted", async () => {
+  const body = JSON.stringify({ media: "picture", source: "civitai", url: "https://civitai.com/api/download/models/12345", name: "x" });
+  const refused = await app.request("/stack/v1/loras/install", { method: "POST", headers: { "content-type": "application/json" }, body });
+  expect(refused.status).toBe(403);
+  expect(((await refused.json()) as { code: string }).code).toBe("licence_not_accepted");
+});

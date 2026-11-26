@@ -186,6 +186,8 @@ app.route("/stack/v1/health", healthRoutes);
 app.route("/stack/v1/status", statusRoutes);
 app.route("/stack/v1/check", checkRoutes);
 app.route("/stack/v1/updates", updatesRoutes);
+// STACK-LORAS-01: before the root-mounted components routes, whose `/{id}/install` would otherwise catch /loras/install.
+app.route("/stack/v1/loras", lorasRoutes);
 app.route("/stack/v1", eventsRoutes);
 app.route("/stack/v1/hardware", hardwareRoutes);
 app.route("/stack/v1/tiers", tiersRoutes);
@@ -221,7 +223,6 @@ app.route("/stack/v1/speech-recorded", recordedSpeechRoutes);
 app.route("/stack/v1/image", imageRoutes);
 app.route("/stack/v1/settings", settingsRoutes);
 app.route("/stack/v1/licences", licencesRoutes);
-app.route("/stack/v1/loras", lorasRoutes);
 app.route("/stack/v1", declarationRoutes);
 app.route("/stack/v1/voices", voicesRoutes);
 app.route("/stack/v1", homeModeRoutes);
