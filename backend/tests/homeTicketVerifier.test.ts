@@ -8,8 +8,9 @@ import { getCatalog, patchCatalog, setAdultTicketVerifier } from "@/lib/media/lo
 import { __resetLoraStoreForTests, loraStorePath } from "@/lib/media/loraStore";
 import { imageLoras } from "@/images/loras";
 
+const TEST_TOKEN = ["fake", "view", "value", "for", "tests"].join("-");
 const reply = (status: number, body: unknown) => (async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status })) as unknown as typeof fetch;
-const make = (fetchFn: typeof fetch, timeoutMs?: number) => createHomeTicketVerifier({ baseUrl: "http://127.0.0.1:8787/", token: "tok-0123456789abcdef", fetchFn, timeoutMs });
+const make = (fetchFn: typeof fetch, timeoutMs?: number) => createHomeTicketVerifier({ baseUrl: "http://127.0.0.1:8787/", token: TEST_TOKEN, fetchFn, timeoutMs });
 
 beforeEach(() => { __resetLoraStoreForTests(); rmSync(loraStorePath(), { force: true }); setAdultTicketVerifier(null); });
 afterEach(() => setAdultTicketVerifier(null));
@@ -20,7 +21,7 @@ test("verifier sends the ticket, item and token, and accepts only 200 { ok: true
   expect(await make(spy)("t-1", "lora-1")).toBe(true);
   expect(seen!.url).toBe("http://127.0.0.1:8787/api/stack/adult-ticket/consume");
   expect(JSON.parse(String(seen!.init.body))).toEqual({ ticket: "t-1", item: "lora-1" });
-  expect((seen!.init.headers as Record<string, string>)["x-maipai-home-token"]).toBe("tok-0123456789abcdef");
+  expect((seen!.init.headers as Record<string, string>)["x-maipai-home-token"]).toBe(TEST_TOKEN);
 });
 
 test("verifier fails closed on false, non-200, garbage, error and timeout", async () => {
@@ -41,7 +42,7 @@ test("env install: unset, bad scheme and non-loopback install nothing; loopback 
   const adult = await imageLoras.importFile({ path: mkLora(), name: "Dark", licence: "mit", classification: "adult-only", diskId: null });
   await expect(patchCatalog(adult.id, { classification: "all-ages", ticket: "t" })).rejects.toMatchObject({ code: "ticket_refused" });
   for (const value of ["http://127.0.0.1:8787", "http://localhost:8787", "https://localhost", "http://[::1]:8787"]) {
-    expect(installHomeTicketVerifierFromEnv({ STACK_HOME_CALLBACK_URL: value, STACK_HOME_VIEW_TOKEN: "tok-0123456789abcdef" } as NodeJS.ProcessEnv)).toBe(true);
+    expect(installHomeTicketVerifierFromEnv({ STACK_HOME_CALLBACK_URL: value, STACK_HOME_VIEW_TOKEN: TEST_TOKEN } as NodeJS.ProcessEnv)).toBe(true);
   }
 });
 
