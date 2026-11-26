@@ -34,7 +34,7 @@ const deps = (): VideoGenDeps => ({
     return { exited, kill: () => end(143), send: async (request) => { await gate; writeFileSync(request.output, "MP4"); writeFileSync(request.poster, "JPG"); return okReply(request); } };
   },
 });
-const clean = () => { videoGen.useDeps(null); __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true }); };
+const clean = () => { videoGen.useDeps(null); __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true }); rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true }); };
 beforeEach(() => {
   calls = []; chatBusyReplies = 0; gate = new Promise((resolve) => { open = resolve; });
   clean(); resetReducedChatForTests();

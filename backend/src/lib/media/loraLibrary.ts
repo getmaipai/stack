@@ -25,7 +25,7 @@
 // (uncertain means adult-only).
 import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { sha256OfFile } from "@/lib/fileHash";
 
 export const LORA_CLASSES = ["all-ages", "adult-only"] as const;
@@ -56,7 +56,21 @@ export interface LoraRecord {
   trigger_words: string[];
   added_by: string | null;
   added_at: string;
+  /** STACK-LORAS-01: the unified catalog's fields. Absent on a record written before the merge; `media` is stamped by the store. */
+  media?: LoraMedia;
+  /** Which Stack drive holds the file; null or absent is the Stack's own data directory. */
+  disk_id?: string | null;
+  /** Stored state: ready, installing or failed. `drive_missing` is never stored, it is worked out from the drive on every read. */
+  status?: "ready" | "installing" | "failed";
+  /** Restorable trash: set when removed, cleared on restore; the file stays until `trash_until`. */
+  removed_at?: string | null;
+  trash_until?: string | null;
+  /** What Home sent about this style that the Stack keeps but does not interpret (description, kind, add-ins, availability, licence text), the spec `Lora` fields beyond the file facts. */
+  home?: Record<string, unknown> | null;
+  /** The preview picture file name under data/loras/previews, or null. */
+  preview?: string | null;
 }
+export type LoraMedia = "picture" | "video";
 
 export class LoraError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) { super(message); }
@@ -151,6 +165,8 @@ export interface ImportInput {
   addedBy?: string | null;
   /** Extra words to scan beside the file's own (a Hugging Face card's tags). */
   extraDescription?: string[];
+  /** STACK-LORAS-01: the Stack drive to keep the file on; absent or null is the Stack's own data directory. */
+  diskId?: string | null;
 }
 
 export interface LoraPatch { name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; }
@@ -165,6 +181,8 @@ export interface LoraLibraryConfig {
   maxPerJob: number;
   /** Returns the base model the tensors fit, or throws a LoraError (422 wrong_base_model). */
   detectBase: (info: SafetensorsInfo) => string;
+  /** STACK-LORAS-01: the unified store this library's records live in (its own media only). Absent: a manifest in `dir()`. */
+  store?: { read: () => LoraRecord[]; write: (records: LoraRecord[]) => void; fileOn: (id: string, diskId: string | null) => string; media: LoraMedia; /** A plain sentence when the record's drive is not connected, else null. */ driveProblem?: (record: LoraRecord) => string | null };
 }
 
 const ID_RE = /^lora-[0-9a-f]{16}$/;
@@ -173,12 +191,14 @@ const SHA_RE = /^[0-9a-f]{64}$/;
 
 export function createLoraLibrary(config: LoraLibraryConfig) {
   const manifestPath = (): string => join(config.dir(), "manifest.json");
-  const loraFile = (id: string): string => join(config.dir(), `${id}.safetensors`);
+  const loraFile = (id: string): string => config.store ? config.store.fileOn(id, config.store.read().find((record) => record.id === id)?.disk_id ?? null) : join(config.dir(), `${id}.safetensors`);
 
   function readManifest(): LoraRecord[] {
+    if (config.store) return config.store.read();
     try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras : []; } catch { return []; }
   }
   function writeManifest(records: LoraRecord[]): void {
+    if (config.store) { config.store.write(records); return; }
     mkdirSync(config.dir(), { recursive: true, mode: 0o700 });
     const target = manifestPath();
     const temp = `${target}.${process.pid}.tmp`;
@@ -195,7 +215,7 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
 
   const cleanWords = (words: string[] | undefined): string[] => (words ?? []).map((word) => word.trim()).filter((word) => word.length > 0 && word.length <= 200).slice(0, 20);
 
-  const list = (): LoraRecord[] => readManifest().map((record) => ({ ...record }));
+  const list = (): LoraRecord[] => readManifest().filter((record) => !record.removed_at).map((record) => ({ ...record }));
   const get = (id: string): LoraRecord | null => readManifest().find((record) => record.id === id) ?? null;
   const bySha = (sha256: string): LoraRecord | null => readManifest().find((record) => record.sha256 === sha256) ?? null;
   const readHeader = (path: string): SafetensorsInfo => readLoraHeader(path);
@@ -224,8 +244,8 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
     return exclusive(() => {
       const records = readManifest();
       if (records.some((record) => record.id === id)) throw new LoraError("already_added", "This LoRA is already in the library.", 409);
-      mkdirSync(config.dir(), { recursive: true, mode: 0o700 });
-      const target = loraFile(id);
+      const target = config.store ? config.store.fileOn(id, input.diskId ?? null) : loraFile(id);
+      mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
       const temp = `${target}.${process.pid}.part`;
       copyFileSync(input.path, temp);
       renameSync(temp, target);
@@ -236,6 +256,7 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
         licence, licence_class: klass, source_url: input.sourceUrl?.slice(0, 2000) ?? null, classification,
         classification_note: words.adult && asked === "all-ages" ? "The file's own description names adult content, so it is adult-only." : null,
         strength_default: input.strengthDefault ?? 1, trigger_words: triggerWords, added_by: input.addedBy?.slice(0, 200) ?? null, added_at: new Date().toISOString(),
+        ...(config.store ? { media: config.store.media, disk_id: input.diskId ?? null, status: "ready" as const, removed_at: null, trash_until: null } : {}),
       };
       writeManifest([...records, record]);
       return record;
@@ -290,6 +311,9 @@ export function createLoraLibrary(config: LoraLibraryConfig) {
     for (const entry of wanted) {
       const record = entry.id !== undefined ? (isLoraId(entry.id) ? get(entry.id) : null) : entry.sha256 !== undefined && SHA_RE.test(entry.sha256) ? bySha(entry.sha256) : null;
       if (!record) throw new LoraError("unknown_lora", `No LoRA with the id ${String(entry.id ?? entry.sha256 ?? "").slice(0, 40)} is in the library.`, 422);
+      if (record.removed_at) throw new LoraError("unknown_lora", `No LoRA with the id ${record.id} is in the library.`, 422);
+      const driveProblem = config.store?.driveProblem?.(record);
+      if (driveProblem) throw new LoraError("drive_missing", driveProblem, 422);
       if (seen.has(record.id)) throw new LoraError("duplicate_lora", "The same LoRA is listed twice.", 422);
       seen.add(record.id);
       const strength = entry.strength ?? record.strength_default;

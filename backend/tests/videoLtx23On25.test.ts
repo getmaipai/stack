@@ -46,7 +46,7 @@ function wanFile(name: string): string {
 /** Adds a file as LTX-2.5, then relabels the record the way an old manifest holds a 2.3 file (new 2.3 uploads stay refused). */
 async function add23(name: string, rank = 16, extra: Record<string, unknown> = {}) {
   const record = await importLora({ path: writeSafetensors(name, ltxModules(rank)), name, licence: "apache-2.0", declaredBase: "ltx-2.5", classification: "all-ages", ...extra } as never);
-  const file = join(dataDir, "video", "loras", "manifest.json");
+  const file = join(dataDir, "loras", "manifest.json");
   const manifest = JSON.parse(readFileSync(file, "utf8")) as { loras: Array<Record<string, unknown>> };
   for (const item of manifest.loras) if (item.id === record.id) item.base_model = "ltx-2.3";
   writeFileSync(file, JSON.stringify(manifest, null, 1));
@@ -70,7 +70,7 @@ function scripted(): VideoGenDeps {
 function clean(): void {
   videoGen.useDeps(null);
   __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); __resetMemoryStateForTests();
-  rmSync(join(dataDir, "video"), { recursive: true, force: true });
+  rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true });
   rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true });
 }
 beforeEach(() => {

@@ -43,11 +43,11 @@ async function install(name: string): Promise<string> {
 }
 beforeEach(() => {
   requests.length = 0; sheetFiles.length = 0; videoGen.useDeps(stubWorker()); __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests();
-  rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true }); __resetRootsForTests();
+  rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true }); rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true }); __resetRootsForTests();
   root = mkdtempSync(join(tmpdir(), "ingredients-")); setRoots({ read: [root] });
   __setEditRuntimeForTests({ toolbox, run: runner }); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" }); registerVideoJobs();
 });
-afterEach(() => { rmSync(join(dataDir, "video"), { recursive: true, force: true }); videoGen.useDeps(null); __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); __setEditRuntimeForTests(null); __resetRootsForTests(); rmSync(root, { recursive: true, force: true }); rmSync(jobsDir(), { recursive: true, force: true }); });
+afterEach(() => { rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true }); videoGen.useDeps(null); __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); __setEditRuntimeForTests(null); __resetRootsForTests(); rmSync(root, { recursive: true, force: true }); rmSync(jobsDir(), { recursive: true, force: true }); });
 
 test("ingredients frames are 1 + 24 seconds, capped at 193", () => {
   expect(ltx25IngredientsFrames(4)).toBe(97); expect(ltx25IngredientsFrames(5)).toBe(121); expect(ltx25IngredientsFrames(8)).toBe(193); expect(ltx25IngredientsFrames(9)).toBe(193);

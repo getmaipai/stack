@@ -6,8 +6,8 @@ import { commitResult, deleteResult, readTake, sweepResults, takePath, workDir, 
 
 const job = (n: number) => `job-00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const facts = { route: "words", operation: "clip_text", level: "standard", shape: "landscape", seed: 17, part: "minimax-h3", pack_version: "1", recipe: { level: "standard", steps: 7 } };
-beforeEach(() => { rmSync(join(dataDir, "video"), { recursive: true, force: true }); });
-afterEach(() => { rmSync(join(dataDir, "video"), { recursive: true, force: true }); });
+beforeEach(() => { rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true }); });
+afterEach(() => { rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true }); });
 
 test("commit writes only the take facts, mode 0600, and deleteResult leaves the record", () => {
   const id = job(1), work = workDir(id); mkdirSync(work, { recursive: true }); writeFileSync(join(work, "video.mp4"), "v"); writeFileSync(join(work, "poster.jpg"), "p");

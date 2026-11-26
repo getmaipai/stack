@@ -91,7 +91,7 @@ function scripted(): VideoGenDeps {
 function clean(): void {
   videoGen.useDeps(null);
   __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); __resetMemoryStateForTests();
-  rmSync(join(dataDir, "video"), { recursive: true, force: true });
+  rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true });
   rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true });
 }
 beforeEach(() => {
@@ -248,8 +248,8 @@ test("request validation: Standard refuses a LoRA (lora_unsupported), three is t
   await expect(importLora({ path: oldPath, name: "Old", licence: "mit", classification: "all-ages" })).rejects.toMatchObject({ code: "wrong_base_model" });
   const old = await importLora({ path: writeSafetensors("old-wan", { "diffusion_model.blocks.0.self_attn.q.lora_A.weight": { dtype: "F16", shape: [16, 3072] }, "diffusion_model.blocks.0.self_attn.q.lora_B.weight": { dtype: "F16", shape: [3072, 16] } }), name: "Old", licence: "mit", classification: "all-ages" });
   const legacy = { ...old, base_model: "ltx-2.3" as const, tested_on_25: "no_effect" as const };
-  const manifest = JSON.parse(readFileSync(join(dataDir, "video", "loras", "manifest.json"), "utf8")) as { loras: Array<Record<string, unknown>> };
-  manifest.loras[0] = legacy; writeFileSync(join(dataDir, "video", "loras", "manifest.json"), JSON.stringify(manifest, null, 1));
+  const manifest = JSON.parse(readFileSync(join(dataDir, "loras", "manifest.json"), "utf8")) as { loras: Array<Record<string, unknown>> };
+  manifest.loras[0] = legacy; writeFileSync(join(dataDir, "loras", "manifest.json"), JSON.stringify(manifest, null, 1));
   const legacyBytes = await Bun.file(oldPath).arrayBuffer(); writeFileSync(loraPath(old.id), new Uint8Array(legacyBytes));
   const adult = await add25("Adult", writeSafetensors("adult", comfyModules(4096, 4)), { classification: "adult-only" });
   const base = { prompt: "x", model: "ltx25-max", size: "1024x576", seconds: 5, timeout_ms: 5000 };

@@ -39,7 +39,7 @@ function stubWorker(): VideoGenDeps { return { supported: () => true, ensureEnvi
 const request = (extra: Record<string, unknown> = {}) => app.request("/v1/videos/restyle", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source, lora: loraId, prompt: "A painted paper world", timeout_ms: 5000, ...extra }) });
 beforeEach(async () => {
   requests.length = 0; videoGen.useDeps(stubWorker()); __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests();
-  rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true }); __resetRootsForTests();
+  rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true }); rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true }); __resetRootsForTests();
   root = mkdtempSync(join(tmpdir(), "ic-lora-")); source = join(root, "clip.mp4"); writeFileSync(source, "source-video"); setRoots({ read: [root] });
   probe = { streams: [{ codec_type: "video", width: 1024, height: 576, r_frame_rate: "24/1", nb_frames: "121", duration: "5.04" }, { codec_type: "audio" }], format: { duration: "5.04" } };
   __setEditRuntimeForTests({ toolbox, run: runner }); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GB, freeMemoryBytes: 100 * GB, tier: "p128" }); registerVideoJobs();

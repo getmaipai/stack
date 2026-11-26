@@ -80,7 +80,7 @@ function clean(): void {
   videoGen.useDeps(null); imageGen.useDeps(null);
   __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); __resetEventsForTests(); __resetAdultViewForTests();
   __setInstalledFamiliesForTests(null);
-  for (const path of ["video", "tmp/video", "images", "tmp/images"]) rmSync(join(dataDir, path), { recursive: true, force: true });
+  for (const path of ["video", "tmp/video", "images", "tmp/images", "loras"]) rmSync(join(dataDir, path), { recursive: true, force: true });
 }
 beforeEach(() => {
   videoRequests = []; imageRequests = [];

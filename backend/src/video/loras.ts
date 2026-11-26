@@ -22,10 +22,11 @@
 // says otherwise (uncertain means adult-only).
 import { createHash } from "node:crypto";
 import { closeSync, copyFileSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { sha256OfFile } from "@/lib/fileHash";
-import { LoraError, namesRealPerson } from "@/lib/media/loraLibrary";
+import { LoraError, namesRealPerson, type LoraMedia } from "@/lib/media/loraLibrary";
+import { legacyLoraDir, loraDriveProblem, loraFileOn, readMediaLoras, writeMediaLoras } from "@/lib/media/loraStore";
 
 export const LORA_BASE_MODEL = "wan2.2-ti2v-5b";
 /** LTXD-23: the base of a LoRA made for LTX-2.3. The 2.3 video MODEL is retired, but a 2.3 LoRA may be added (it enters untested on 2.5). */
@@ -68,6 +69,14 @@ export interface LoraRecord {
   tested_on_25?: Ltx25Mark | null;
   /** LTXD-18B, derived on read and never stored: true for an `ltx-2.3` record with no bench result. Home does not offer these by default. */
   untested_on_25?: boolean;
+  /** STACK-LORAS-01: the unified catalog's fields (see lib/media/loraLibrary.ts). */
+  media?: LoraMedia;
+  disk_id?: string | null;
+  status?: "ready" | "installing" | "failed";
+  removed_at?: string | null;
+  trash_until?: string | null;
+  home?: Record<string, unknown> | null;
+  preview?: string | null;
 }
 export const LTX25_MARKS = ["tested", "no_effect"] as const;
 export type Ltx25Mark = (typeof LTX25_MARKS)[number];
@@ -270,16 +279,17 @@ export interface ImportInput {
   addedBy?: string | null;
   /** The base the adder says the file was made for (an LTX file's version cannot be read from its tensors: see detectLoraBase). */
   declaredBase?: LoraBase | null;
+  /** STACK-LORAS-01: the Stack drive to keep the file on; absent or null is the Stack's own data directory. */
+  diskId?: string | null;
 }
 
-function libraryDir(): string { return join(dataDir, "video", "loras"); }
-function manifestPath(): string { return join(libraryDir(), "manifest.json"); }
-function loraFile(id: string): string { return join(libraryDir(), `${id}.safetensors`); }
+function libraryDir(): string { return legacyLoraDir("video"); }
+function loraFile(id: string): string { return loraFileOn("video", id, readMediaLoras("video").find((record) => record.id === id)?.disk_id ?? null); }
 const ID_RE = /^lora-[0-9a-f]{16}$/;
 export const isLoraId = (value: string): boolean => ID_RE.test(value);
 
 function readManifest(): LoraRecord[] {
-  try { const parsed = JSON.parse(readFileSync(manifestPath(), "utf8")) as { loras?: LoraRecord[] }; return Array.isArray(parsed.loras) ? parsed.loras.map(withMarkView) : []; } catch { return []; }
+  return (readMediaLoras("video") as LoraRecord[]).map(withMarkView);
 }
 /** Fills the mark fields a reader sees: `tested_on_25` (null when absent) and the derived `untested_on_25`. */
 function withMarkView(record: LoraRecord): LoraRecord {
@@ -288,11 +298,7 @@ function withMarkView(record: LoraRecord): LoraRecord {
   return { ...record, base_model: base, tested_on_25: mark, untested_on_25: base === LORA_BASE_LTX && mark === null };
 }
 function writeManifest(records: LoraRecord[]): void {
-  mkdirSync(libraryDir(), { recursive: true, mode: 0o700 });
-  const target = manifestPath();
-  const temp = `${target}.${process.pid}.tmp`;
-  writeFileSync(temp, JSON.stringify({ loras: records.map(({ untested_on_25: _derived, ...stored }) => stored) }, null, 1), { mode: 0o600 });
-  renameSync(temp, target);
+  writeMediaLoras("video", records.map(({ untested_on_25: _derived, ...stored }) => stored) as never);
 }
 
 let lock: Promise<unknown> = Promise.resolve();
@@ -302,7 +308,7 @@ function exclusive<T>(work: () => Promise<T> | T): Promise<T> {
   return next;
 }
 
-export function listLoras(): LoraRecord[] { return readManifest().map((record) => ({ ...record })); }
+export function listLoras(): LoraRecord[] { return readManifest().filter((record) => !record.removed_at).map((record) => ({ ...record })); }
 export function getLora(id: string): LoraRecord | null { return readManifest().find((record) => record.id === id) ?? null; }
 export function loraPath(id: string): string { return loraFile(id); }
 
@@ -343,8 +349,8 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
   return exclusive(() => {
     const records = readManifest();
     if (records.some((record) => record.id === id)) throw new LoraError("already_added", "This LoRA is already in the library.", 409);
-    mkdirSync(libraryDir(), { recursive: true, mode: 0o700 });
-    const target = loraFile(id);
+    const target = loraFileOn("video", id, input.diskId ?? null);
+    mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
     const temp = `${target}.${process.pid}.part`;
     copyFileSync(input.path, temp);
     renameSync(temp, target);
@@ -355,6 +361,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
       licence, licence_class: klass, source_url: input.sourceUrl?.slice(0, 2000) ?? null, classification,
       classification_note: words.adult && asked === "all-ages" ? "The file's own description names adult content, so it is adult-only." : null,
       strength_default: input.strengthDefault ?? 1, trigger_words: triggerWords, added_by: input.addedBy?.slice(0, 200) ?? null, added_at: new Date().toISOString(),
+      media: "video", disk_id: input.diskId ?? null, status: "ready", removed_at: null, trash_until: null,
     };
     writeManifest([...records, record]);
     return withMarkView(record);
@@ -447,7 +454,9 @@ export async function resolveLoras(requests: LoraRequest[] | undefined, audience
   for (const entry of list) {
     if (!isLoraId(entry.id)) throw new LoraError("unknown_lora", `No LoRA with the id ${String(entry.id).slice(0, 40)} is in the library.`, 422);
     const record = getLora(entry.id);
-    if (!record) throw new LoraError("unknown_lora", `No LoRA with the id ${entry.id} is in the library.`, 422);
+    if (!record || record.removed_at) throw new LoraError("unknown_lora", `No LoRA with the id ${entry.id} is in the library.`, 422);
+    const driveProblem = loraDriveProblem(record);
+    if (driveProblem) throw new LoraError("drive_missing", driveProblem, 422);
     // LTXD-18B: a 2.3 file on a 2.5 clip is a warning (a bench showed Claymation changes a 2.5 clip); a file the bench found does nothing is refused. Every other mismatch (Wan, a 2.5 file on 2.3, unknown base) is refused as before.
     const warning = ltx23On25Warning(record, base);
     if ((record.base_model ?? LORA_BASE_MODEL) !== base && !warning) throw new LoraError("wrong_base_model", `"${record.name}" was made for the ${baseLabel(record.base_model)} video model and this clip is ${baseLabel(base)}. Pick a style made for the same one.`, 422);

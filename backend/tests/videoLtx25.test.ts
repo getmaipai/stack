@@ -56,7 +56,7 @@ function scripted(reply: (request: WorkerRequest) => WorkerReply = okReply): Vid
 function clean(): void {
   videoGen.useDeps(null);
   __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests(); __resetMemoryStateForTests();
-  rmSync(join(dataDir, "video"), { recursive: true, force: true });
+  rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true });
   rmSync(join(dataDir, "tmp", "video"), { recursive: true, force: true });
 }
 beforeEach(() => {

@@ -1,5 +1,5 @@
 import { and, eq, ne } from "drizzle-orm";
-import { existsSync, mkdirSync, accessSync, constants, statSync } from "node:fs";
+import { existsSync, mkdirSync, accessSync, constants, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { db } from "@/db";
 import { disks, models } from "@/db/schema";
@@ -40,7 +40,13 @@ export function removeDisk(id: string): void {
   const row = db.select().from(disks).where(eq(disks.id, id)).get(); if (!row) throw new Error(`Drive ${id} was not found.`);
   const count = db.select().from(models).where(eq(models.diskId, id)).all().length;
   if (count) throw new Error(`${count === 1 ? "1 model is" : `${count} models are`} on ${row.label}. Move ${count === 1 ? "it" : "them"} to another drive before removing this one.`);
+  const loraCount = loraCountOnDisk(id);
+  if (loraCount) throw new Error(`${loraCount === 1 ? "1 style is" : `${loraCount} styles are`} on ${row.label}. Move ${loraCount === 1 ? "it" : "them"} to another drive before removing this one.`);
   db.delete(disks).where(eq(disks.id, id)).run();
+}
+/** How many LoRAs (styles) keep their file on a drive; read from the unified store directly so this file does not import the LoRA code. */
+function loraCountOnDisk(id: string): number {
+  try { const parsed = JSON.parse(readFileSync(join(dataDir, "loras", "manifest.json"), "utf8")) as { loras?: Array<{ disk_id?: string | null }> }; return (parsed.loras ?? []).filter((record) => record.disk_id === id).length; } catch { return 0; }
 }
 export class DriveNotConnectedError extends Error { readonly kind = "drive_not_connected"; constructor(readonly diskId: string, readonly label: string) { super(`${label} is not connected. Plug it back in or choose another drive.`); this.name = "DriveNotConnectedError"; } }
 export function modelsRootFor(diskId: string | null): string {
@@ -67,3 +73,18 @@ export function diskStatus(diskId: string | null): { connected: boolean; label: 
 }
 export function connectedModelRoots(): string[] { return diskRows().flatMap((row) => { try { return statSync(row.rootPath).isDirectory() ? [join(row.rootPath, "maipai-models")] : []; } catch { return []; } }); }
 export function modelRootForPath(path: string): string | null { return [modelsDir, ...diskRows().map((row) => join(row.rootPath, "maipai-models"))].filter((root) => within(path, root)).sort((a, b) => b.length - a.length)[0] ?? null; }
+
+/** STACK-LORAS-01: where LoRA files live on a drive (`<drive>/loras`). Null for the Stack's own data directory, whose LoRAs stay in their media's own folders (data/images/loras, data/video/loras). Throws `DriveNotConnectedError` for a drive that is unknown or unplugged, so an install or move never writes to a missing drive. */
+export function loraRootFor(diskId: string | null | undefined): string | null {
+  if (!diskId || diskId === MAIN_DISK_ID) return null;
+  const row = db.select().from(disks).where(eq(disks.id, diskId)).get();
+  if (!row) throw new DriveNotConnectedError(diskId, diskId);
+  try { if (!statSync(row.rootPath).isDirectory()) throw new Error(); } catch { throw new DriveNotConnectedError(diskId, row.label); }
+  return join(row.rootPath, "loras");
+}
+/** Where a LoRA's file would be on a drive, without checking the drive is plugged in (a reader decides what a missing drive means). Null for the main disk. */
+export function loraRootPath(diskId: string | null | undefined): string | null {
+  if (!diskId || diskId === MAIN_DISK_ID) return null;
+  const row = db.select().from(disks).where(eq(disks.id, diskId)).get();
+  return row ? join(row.rootPath, "loras") : join("/nonexistent-drive", diskId, "loras");
+}

@@ -88,6 +88,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: ["civitai.com", "huggingface.co", "hf.co"],
   },
   {
+    id: "lora-browse",
+    what: "Searching Hugging Face or Civitai for styles (LoRAs) in the Stack admin",
+    when: "Only when an admin types a search in the Styles page; at most one request every 2 seconds and 60 an hour, never on a schedule",
+    carries: "The search words the admin typed, with User-Agent: MaiPai-Stack. The admin's saved key or token for that site goes as a Bearer header to that site only; nothing about the household, people or prompts",
+    receiver: "Hugging Face (huggingface.co) or Civitai (civitai.com), straight from this computer",
+    setting: null,
+    hosts: ["civitai.com", "huggingface.co"],
+  },
+  {
     id: "image-lora-install",
     what: "Downloading a picture style (LoRA) file an admin chose",
     when: "Only when an owner or admin installs a style from Hugging Face or Civitai in Home; one download at a time, resumed from where it stopped, never on a schedule",

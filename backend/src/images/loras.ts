@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { type Job } from "@/lib/jobs";
 import { createLoraLibrary, LoraError, MAX_LORA_BYTES, type SafetensorsInfo, type LoraRecord } from "@/lib/media/loraLibrary";
+import { loraStoreFor } from "@/lib/media/loraStore";
 import { LORA_INSTALL_SITES, parseInstallUrl, startInstall, sweepParts, type InstallSource } from "@/lib/media/loraInstallCore";
 
 export const IMAGE_LORA_BASES = ["flux2-klein-4b", "z-image-turbo", "ernie-image-turbo"] as const;
@@ -38,7 +39,7 @@ export function detectImageBase(info: SafetensorsInfo): ImageLoraBase {
   throw new LoraError("wrong_base_model", "This LoRA was not made for FLUX.2 Klein 4B or Z-Image-Turbo, the picture models on this computer. Pick a LoRA made for one of those.", 422);
 }
 
-export const imageLoras = createLoraLibrary({ dir: () => join(dataDir, "images", "loras"), noun: "picture", maxPerJob: MAX_LORAS_PER_IMAGE, detectBase: detectImageBase });
+export const imageLoras = createLoraLibrary({ dir: () => join(dataDir, "images", "loras"), store: loraStoreFor("picture"), noun: "picture", maxPerJob: MAX_LORAS_PER_IMAGE, detectBase: detectImageBase });
 
 const imagePartDirectory = () => join(dataDir, "tmp", "image-lora-install");
 let imageInstalling: string | null = null;

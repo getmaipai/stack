@@ -76,8 +76,8 @@ const CLIP = process.env.VIDEO_TEST_CLIP ?? "";
 const real = FFMPEG !== "" && existsSync(FFMPEG) && CLIP !== "" && existsSync(CLIP);
 const JOB = "job-00000000-0000-4000-8000-0000000000aa";
 
-beforeEach(() => { rmSync(join(dataDir, "video"), { recursive: true, force: true }); });
-afterEach(() => { delete process.env.VIDEO_FFMPEG; rmSync(join(dataDir, "video"), { recursive: true, force: true }); });
+beforeEach(() => { rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true }); });
+afterEach(() => { delete process.env.VIDEO_FFMPEG; rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true }); });
 
 test.skipIf(!real)("real conversion: the silent clip gets one video and one audio track, still H.264 yuv420p, faststart, titled", async () => {
   process.env.VIDEO_FFMPEG = FFMPEG;

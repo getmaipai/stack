@@ -24,6 +24,7 @@ export interface VideoLoraInstallInput {
   sha256Expected?: string | null;
   token?: string | null;
   sourceUrl?: string | null;
+  diskId?: string | null;
 }
 
 const partDir = () => join(dataDir, "tmp", "video-lora-install");

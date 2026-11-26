@@ -1060,6 +1060,20 @@ MAKER-F addition, `shapes_bake` with `path: "stylised"` (cartoon and clay charac
 
 `segment` uses the optional SAM 2.1 small component to return one still-picture mask (single-channel PNG, 255 inside the selected thing, 0 outside) and its `area` fraction. Send `prompt` as JSON in the multipart form: `{ "box": [x0,y0,x1,y1], "points": [{"x": 12, "y": 24, "label": 1}] }`; either a box or at least one positive point is required, with at most 16 positive or negative points. Coordinates are pixels in the picture. Inputs are limited to 12 megapixels and 4096 pixels on the long side. One call loads SAM on demand (about 10 seconds cold); warm worker reuse is not included yet. Masks use the same video-class memory admission, and refusals reuse the cutout model-missing, memory and unexpected-failure sentences. The component adds no download when already installed.
 
+**One LoRA library (STACK-LORAS-01).** Pictures and video share one store, `data/loras/manifest.json` (a record has `media`: `picture` or `video`, `disk_id`, `status`
+`ready`, `drive_missing`, `installing` or `failed`, `removed_at`/`trash_until`, and `home`, the spec `Lora` record Home sent). The first read after an upgrade merges the two old
+manifests (`data/images/loras`, `data/video/loras`) in by id, idempotently; files stay where they are (a file on another drive is at `<drive>/loras/<id>.safetensors`) and the old
+manifests are left untouched as a backup. Routes (`/stack/v1/loras`, same guard as every `/stack/v1` route): `GET /` (`?removed=true` lists the trash, `?media=`); `PATCH /{id}`
+(name, `classification`, `strength_default`, `trigger_words`, `source_url`, `description`, `kind`; changing `adult-only` to `all-ages` needs Home's fresh single-use `ticket`, 403
+`ticket_required` or `ticket_refused`, and the Stack refuses every lowering until a ticket verifier is set); `DELETE /{id}` (the trash for 30 days; `?purge=true` deletes now);
+`POST /{id}/restore`; `POST /{id}/move` `{ disk_id }` (a `lora.move` job: copy, check the sha256, switch the record, delete the original); `POST /import` `{ items: [{ lora, preview? }] }`
+(Home's records and previews, idempotent by id, never creates, never deletes, never lowers an audience; each result is `imported`, `unchanged`, `missing_file`, `conflict` or `invalid`);
+`POST /install` `{ media, source, url, name, disk_id?, audience?, ... }` (an `image.lora.install` or `video.lora.install` job; refused 403 `licence_not_accepted` until the one global licence
+accept is made; the saved site key is used, never sent by the caller); `GET /sources`, `PUT /sources/{site}/key` (a token is stored encrypted and never returned) and
+`GET /sources/{site}/search?q=` (Hugging Face and Civitai search with an `audience_hint` from the site's own fields). The second fence: a request naming an adult-only LoRA must
+carry the `adult` audience, and an unknown, trashed or unreadable id counts as adult-only (`lora_not_allowed`, `unknown_lora`); a LoRA on a drive that is not connected is refused
+`drive_missing` with the drive's name. A drive that holds a style cannot be removed. The per-media routes below stay for generation and older callers.
+
 **LoRA library.** `data/images/loras/` holds one `.safetensors` per record (named by its sha256) and `manifest.json`: `GET /stack/v1/image/loras`;
 `POST /stack/v1/image/loras` (multipart: `file`, or `path` for a file already on the Stack's computer; `name`, `licence`, `licence_acknowledged`,
 `source_url`, `classification`, `strength_default`, `trigger_words`, `added_by`); `POST /stack/v1/image/loras/install` (JSON `{ url, name, licence?,

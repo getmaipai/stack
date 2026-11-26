@@ -85,7 +85,7 @@ function clean(): void {
   imageGen.useDeps(null);
   __resetJobsForTests(); __resetGovernorForTests(); __resetProvenanceForTests();
   __setInstalledFamiliesForTests(null); __setRestoreInstalledForTests(null);
-  for (const path of ["images", "tmp/images", "tmp/image-lora"]) rmSync(join(dataDir, path), { recursive: true, force: true });
+  for (const path of ["images", "loras", "tmp/images", "tmp/image-lora"]) rmSync(join(dataDir, path), { recursive: true, force: true });
 }
 beforeEach(() => {
   spawned = 0; killed = 0; requests.length = 0; cancelled.length = 0;

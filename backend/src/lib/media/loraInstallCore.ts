@@ -53,7 +53,7 @@ export function parseInstallUrl(site: LoraInstallSite, value: string): URL {
   return url;
 }
 
-export interface InstallSource { site: LoraInstallSite; url: string; name: string; licence: string; licenceAcknowledged?: boolean; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; addedBy?: string | null; baseModel?: string | null; sha256Expected?: string | null; token?: string | null; sourceUrl?: string | null; sourceHost?: string; extraDescription?: string[] }
+export interface InstallSource { site: LoraInstallSite; url: string; name: string; licence: string; licenceAcknowledged?: boolean; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; addedBy?: string | null; baseModel?: string | null; sha256Expected?: string | null; token?: string | null; sourceUrl?: string | null; sourceHost?: string; extraDescription?: string[]; /** STACK-LORAS-01: the Stack drive to keep the file on; null or absent is the main disk. */ diskId?: string | null }
 export interface InstallAdapter<T> { kind: string; role: string; noun: string; partDir: () => string; parseUrl: (site: LoraInstallSite, value: string) => URL; get: (id: string) => T | null | undefined; importFile: (options: Record<string, unknown>) => Promise<T>; readHeader: (path: string) => unknown; maxBytes: number; /** The code a duplicate found after the download carries (the picture install kept `already_added` from before the shared core). */ duplicateCode?: string }
 export interface LoraInstallFailure { code: string; existing_id?: string }
 
@@ -119,7 +119,7 @@ export function startInstall<T>(input: InstallSource, adapter: InstallAdapter<T>
       if (expected && sha256 !== expected) throw new LoraError("hash_mismatch", `The file does not match the fingerprint ${SITE_RULES[input.site].label} published for it, so it was not added. Try again; if it happens twice, the source changed the file.`, 422);
       const existing = adapter.get(`lora-${sha256.slice(0, 16)}`) as { id?: string } | undefined;
       if (existing) throw Object.assign(new LoraError(adapter.duplicateCode ?? "duplicate_lora", "This style is already in the library.", 409), { existingId: existing.id });
-      const record = await adapter.importFile({ path: part, name: input.name, licence: input.licence, licenceAcknowledged: input.licenceAcknowledged, sourceUrl: input.sourceUrl ?? null, classification: input.classification, strengthDefault: input.strengthDefault, triggerWords: input.triggerWords, addedBy: input.addedBy, declaredBase: input.baseModel ?? null, extraDescription: input.extraDescription ?? [] });
+      const record = await adapter.importFile({ path: part, name: input.name, licence: input.licence, licenceAcknowledged: input.licenceAcknowledged, sourceUrl: input.sourceUrl ?? null, classification: input.classification, strengthDefault: input.strengthDefault, triggerWords: input.triggerWords, addedBy: input.addedBy, declaredBase: input.baseModel ?? null, extraDescription: input.extraDescription ?? [], diskId: input.diskId ?? null });
       finishJob(job.id, { ok: true, result: { lora: record } });
     } catch (error) {
       const isLoraError = error instanceof Error && "code" in error && "status" in error;

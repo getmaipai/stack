@@ -15,7 +15,7 @@ import { dataDir } from "@/lib/paths";
 
 let dir = "";
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "receipt-")); });
-afterEach(() => { setReceiptProbeForTests(null); rmSync(dir, { recursive: true, force: true }); rmSync(join(dataDir, "video"), { recursive: true, force: true }); delete process.env.VIDEO_RESULT_KEEP; });
+afterEach(() => { setReceiptProbeForTests(null); rmSync(dir, { recursive: true, force: true }); rmSync(join(dataDir, "video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true }); delete process.env.VIDEO_RESULT_KEEP; });
 
 const file = (width: number, height: number, bytes = 10): ReceiptFile => ({ width, height, frames: 121, fps: 24, seconds: 5.04, audio: true, bytes });
 const sizes = (map: Record<string, ReceiptFile>) => setReceiptProbeForTests(async (path) => map[path.split("/").pop()!] ?? null);
