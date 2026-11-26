@@ -1,6 +1,7 @@
 // Pinned engine builds and the actions behind Home's buttons. Version
 // state is derived from the running build, the store's `current` link
 // and the newest pin for this machine, never stored.
+import { liveImpact } from "@/lib/relationshipsLive";
 import { createRoute, z } from "@hono/zod-openapi";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -294,5 +295,7 @@ enginesRoutes.openapi(removeRoute, (c) => {
     roleRunning: getRoleStatus(engineRole(name)).state !== "stopped", bound: engineIsBound(name, tag),
   });
   if (refusal) return c.json({ error: refusal }, 400);
+  // The relationship map: an installed model in use that runs on this engine blocks removing its last build.
+  if (currentEngine(name) === tag) { const blocked = liveImpact(name, "delete").blocking; if (blocked.length) return c.json({ error: blocked.map((note) => note.why).join(" ") }, 400); }
   return removeEngine(name, tag) ? c.json({ ok: true as const }, 200) : c.json({ error: "Unknown build" }, 404);
 });

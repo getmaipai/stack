@@ -27,7 +27,7 @@ const DAY = 24 * HOUR;
 // These legacy records may remain after an upgrade removes the retired component from the catalog.
 // The models retired from the Stack as a whole (retiredModels.ts) are treated the same way.
 const RETIRED_VIDEO_MODEL_IDS = { has: (id: string): boolean => ["ltx-2-3-distilled-mlx", "video-gemma-3-12b-text-encoder"].includes(id) || isRetiredModelId(id) };
-const catalogPins = (): CatalogModelLike[] => [...STACK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_H3_MODELS, ...STACK_IMAGE_KLEIN3_MODELS, ...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS, ...STACK_IMAGE_H3_MODELS, ...componentDefs().flatMap((component) => component.pins)];
+export const catalogPins = (): CatalogModelLike[] => [...STACK_MODELS, ...STACK_VIDEO_LTX25_MODELS, ...STACK_VIDEO_LTX25_MAX_MODELS, ...STACK_VIDEO_MASK_MODELS, ...STACK_VIDEO_H3_MODELS, ...STACK_IMAGE_KLEIN3_MODELS, ...STACK_IMAGE_KLEIN_MODELS, ...STACK_IMAGE_ZIMAGE_MODELS, ...STACK_IMAGE_ERNIE_MODELS, ...STACK_IMAGE_QWEN_MODELS, ...STACK_IMAGE_H3_MODELS, ...componentDefs().flatMap((component) => component.pins)];
 function graceHours(): number { const value = Number(settingValues()["stack.storage.tidy_grace_hours"] ?? 24); return Number.isFinite(value) ? Math.max(0, value) : 24; }
 function pathBytes(path: string): number { try { const s = lstatSync(path); if (s.isSymbolicLink()) return 0; if (!s.isDirectory()) return s.size; return readdirSync(path).reduce((n, name) => n + pathBytes(join(path, name)), 0); } catch { return 0; } }
 function settingPointsAt(id: string): string | null {

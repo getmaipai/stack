@@ -1,0 +1,21 @@
+[
+  { "path": "splash", "owner": { "kind": "engine", "id": "splash" }, "label": "The Splash engine's data: its model layout (hub), home and cache. Rebuilt at the next Splash start, but it holds the files the running coding model is linked to." },
+  { "path": "splash-test", "owner": { "kind": "engine", "id": "splash" }, "label": "The Splash engine's test layout. Safe to remove when no Splash test is running." },
+  { "path": "engines", "owner": { "kind": "engines", "id": "engines" }, "label": "Installed engine builds (llama.cpp, Splash, oMLX and the generators). Remove a build from the engines page, not by hand." },
+  { "path": "models", "owner": { "kind": "models", "id": "models" }, "label": "Model files the Stack downloaded. Each folder belongs to the model it is named for." },
+  { "path": "store", "owner": { "kind": "models", "id": "models" }, "label": "The Stack's own model store." },
+  { "path": "coding", "owner": { "kind": "feature", "id": "coding" }, "label": "Coding mode's workspaces and results." },
+  { "path": "images", "owner": { "kind": "feature", "id": "image" }, "label": "Picture results and their records." },
+  { "path": "video", "owner": { "kind": "feature", "id": "video" }, "label": "Video results, takes, styles (LoRAs) and records." },
+  { "path": "music", "owner": { "kind": "feature", "id": "music" }, "label": "Music and stem results and records." },
+  { "path": "score", "owner": { "kind": "feature", "id": "music" }, "label": "Music scoring work files." },
+  { "path": "media", "owner": { "kind": "feature", "id": "media" }, "label": "Media the Stack made or was given." },
+  { "path": "speech-recorded", "owner": { "kind": "feature", "id": "speech" }, "label": "Recorded speech clips." },
+  { "path": "voice-previews", "owner": { "kind": "feature", "id": "speech" }, "label": "Voice preview clips." },
+  { "path": "mask-still", "owner": { "kind": "feature", "id": "video" }, "label": "Mask work files for video." },
+  { "path": "keys", "owner": { "kind": "stack", "id": "stack" }, "label": "The Stack's keys. Never remove." },
+  { "path": "home", "owner": { "kind": "stack", "id": "stack" }, "label": "The Stack's own home folder." },
+  { "path": "logs", "owner": { "kind": "stack", "id": "stack" }, "label": "The Stack's logs." },
+  { "path": "resource-history", "owner": { "kind": "stack", "id": "stack" }, "label": "Resource history the Stack records." },
+  { "path": "tmp", "owner": { "kind": "stack", "id": "stack" }, "label": "Scratch space; emptied by the Stack." }
+]

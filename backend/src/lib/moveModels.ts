@@ -7,6 +7,7 @@ import { moveJobs } from "@/db/schema";
 import { getModel, upsertModel } from "@/lib/modelStore";
 import { modelsRootFor, diskStatus, diskIdOfPath, isManagedModelPath } from "@/lib/disks";
 import { readDiskSpace } from "@/lib/diskState";
+import { liveImpact } from "@/lib/relationshipsLive";
 import { sha256OfFile } from "@/lib/download";
 
 export interface MovePlan { bytes: number; oldPath: string; newPath: string }
@@ -39,6 +40,7 @@ export async function planModelMove(modelId: string, toDiskId: string): Promise<
   const target = diskStatus(toDiskId); if (!target.connected) throw new Error(`${target.label} is not connected. Plug it back in or choose another drive.`);
   if ((model.diskId ?? "main") === toDiskId) throw new Error("This model is already on that drive. Choose another drive.");
   if (!isManagedModelPath(model.modelPath)) throw new Error("This model is outside Stack managed folders. Move it manually.");
+  { const blocked = liveImpact(modelId, "move").blocking; if (blocked.length) throw new Error(blocked.map((note) => note.why).join(" ")); }
   const bytes = bytesAt(model.modelPath), oldRoot = modelsRootFor(model.diskId), newRoot = modelsRootFor(toDiskId);
   const newPath = join(newRoot, relative(oldRoot, model.modelPath));
   let space; try { space = await readDiskSpace(dirname(newRoot)); } catch { space = await readDiskSpace(newRoot); }

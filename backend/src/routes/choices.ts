@@ -2,6 +2,7 @@
 // and the writes behind it: a pick per category and level (and per hardware profile), the order, the recommended setup, what is unused,
 // add-a-model-and-use-it, and the one-time import of Home's old values. Home and the admin page are two views over these routes. Writes go
 // through the same guard as every other write (the loopback checks and Home's token, or the admin session with its CSRF header).
+import { liveImpact } from "@/lib/relationshipsLive";
 import { PRIMARY_ROLE } from "@/roles";
 import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
@@ -24,8 +25,14 @@ const readRoute = createRoute({
 });
 const unusedRoute = createRoute({
   method: "get", path: "/unused", tags: ["Choices"], summary: "Installed models no choice, order or fallback uses, and what removing them frees",
-  description: "A model is listed when it is installed, removable, chosen at no level, not in a category's order (unless that category switched it off), not required by another part and not what this computer's setup binds to a role. `tidy` is the Stack's own list of replaced and abandoned files (`/components/tidy`).",
+  description: "A model is listed when it is installed, removable, chosen at no level, not in a category's order (unless that category switched it off), not required by another part and not what this computer's setup binds to a role. `folders` names the owner of every top-level data folder (for example `splash` is the Splash engine's) and which installed models depend on it. `tidy` is the Stack's own list of replaced and abandoned files (`/components/tidy`).",
   responses: { 200: json(UnusedListSchema, "The list, largest first.") },
+});
+const impactRoute = createRoute({
+  method: "get", path: "/impact/{id}", tags: ["Choices"], summary: "What deleting, moving or upgrading a model or engine touches, before anything is done",
+  description: "From the relationship map (what drives a model and what extends it). `blocking` are installed things in use that depend on it: the action is refused while they exist. `warnings` go along or break. Starts no work.",
+  request: { params: z.object({ id: z.string().min(1).max(200) }), query: z.object({ action: z.enum(["delete", "move", "upgrade"]).default("delete") }) },
+  responses: { 200: json(z.object({ id: z.string(), action: z.enum(["delete", "move", "upgrade"]), blocking: z.array(z.object({ id: z.string(), label: z.string(), why: z.string() })), warnings: z.array(z.object({ id: z.string(), label: z.string(), why: z.string() })) }), "The impact.") },
 });
 const removeRoute = createRoute({
   method: "post", path: "/unused/remove", tags: ["Choices"], summary: "Remove the chosen unused models; each id is checked again at removal time",
@@ -67,6 +74,7 @@ const pickRoute = createRoute({
 export const choicesRoutes = apiRouter<AppEnv>();
 choicesRoutes.openapi(readRoute, async (c) => c.json(await readChoices(), 200) as never);
 choicesRoutes.openapi(unusedRoute, async (c) => c.json(await readUnused(), 200) as never);
+choicesRoutes.openapi(impactRoute, (c) => c.json(liveImpact(c.req.valid("param").id, c.req.valid("query").action), 200) as never);
 choicesRoutes.openapi(removeRoute, async (c) => {
   const body = c.req.valid("json");
   return c.json(await removeUnused(body.ids, body.tidy, sourceOf(c), remoteOf(c)), 200) as never;

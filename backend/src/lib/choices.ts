@@ -2,6 +2,7 @@
 // and the writes behind it. Home and the Stack's own admin page are two views over this. Nothing here knows a person: who may use a
 // level stays in Home. The stores are the ones that already exist (choicesStore.ts beside partChoices.ts and the settings); the
 // candidates, fit decisions and recommended picks are the tier table's (tiers.ts) and the profile planner's.
+import { folderImpacts } from "@/lib/relationshipsLive";
 import type { StackPartView } from "@maipai/spec/stack/ts/stack-part-view.js";
 import { detectHardware, type HardwareInfo } from "@/lib/hardware";
 import { PROFILE_MODEL_BINDINGS, PROFILE_TIERS, sizeMachine, type ProfileTier } from "@/profiles";
@@ -394,7 +395,7 @@ export async function readUnused() {
   const state = await loadState();
   const items = unusedItems(state, buildCategories(state));
   const tidy = await planTidy();
-  return { items, total_bytes: items.reduce((sum, item) => sum + item.size_bytes, 0), tidy: { reclaimable_bytes: tidy.reclaimable_bytes, items: tidy.items } };
+  return { items, total_bytes: items.reduce((sum, item) => sum + item.size_bytes, 0), folders: folderImpacts(), tidy: { reclaimable_bytes: tidy.reclaimable_bytes, items: tidy.items } };
 }
 
 // ---- Writes ----

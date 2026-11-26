@@ -125,6 +125,11 @@ export const RecommendedResult = z.object({
 
 export const UnusedListSchema = z.object({
   items: z.array(UnusedItemSchema), total_bytes: z.number().int(),
+  folders: z.array(z.object({
+    path: z.string(), bytes: z.number().int().nonnegative(), label: z.string(), in_use: z.boolean(), advice: z.string(),
+    owner: z.object({ kind: z.enum(["engine", "engines", "models", "feature", "stack"]), id: z.string() }).nullable().describe("Who owns the folder; null when the Stack does not know it (for example `splash` is the Splash engine's)."),
+    used_by: z.array(z.object({ id: z.string(), label: z.string() })).describe("Installed models that run on the owner engine; removing the folder would hurt them."),
+  })).describe("Every top-level folder of the Stack's data with its owner and what depends on it."),
   tidy: z.object({ reclaimable_bytes: z.number().int(), items: z.array(z.object({ id: z.string(), kind: z.enum(["superseded", "orphan_folder", "partial_download"]), bytes: z.number().int(), reason: z.string(), blocked: z.string().nullable() })) }),
 }).openapi("ChoicesUnused");
 export const RemoveBody = z.object({ ids: z.array(z.string().min(1).max(200)).max(20).default([]), tidy: z.boolean().default(false).describe("Also run the Stack's tidy of replaced and abandoned files.") });

@@ -7,6 +7,7 @@
 // managed environment they run in. Nothing here is stored except when a
 // component was last used (`meta`); state is derived from the disk, the
 // model records and the job list, so it cannot drift.
+import { liveImpact } from "@/lib/relationshipsLive";
 import { existsSync, lstatSync, readdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import { lastUsedOf } from "@/lib/componentUse";
@@ -712,6 +713,9 @@ export async function uninstallComponent(id: string, hw?: HardwareInfo): Promise
   const { tier, planned } = planOf(hardware);
   const guard = guardUninstall(unit, requirementFor(unit, tier, planned).requirement);
   if (guard) throw guard;
+  // The relationship map: refuse while something installed and in use depends on a file this removes (its own pieces go with it, so they do not count).
+  { const own = new Set(unit.pins.map((pin) => pin.id)); const blocked = unit.pins.flatMap((pin) => liveImpact(pin.id, "delete").blocking).filter((note) => !own.has(note.id));
+    if (blocked.length) throw new ComponentError("in_use", `${blocked.map((note) => note.why).join(" ")} Remove those first.`, 409); }
   const before = unitDiskBytes(unit, defs);
   let freed = 0;
   // A file another installed component also lists (the voxcpm2 clip speech-to-text) stays while that component is installed.
