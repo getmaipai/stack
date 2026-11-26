@@ -99,30 +99,32 @@ async function download(url: URL, site: LoraInstallSite, token: string | null, p
 }
 
 /**
- * The download site's own adult check for the file about to be installed. Returns true (nsfw) when the site says so
- * and also when it says nothing usable: no answer, an error, or a missing flag all fail toward nsfw.
+ * The download site's own adult check for the file about to be installed: `nsfw` when the site flags it, `clean` when the site answered and
+ * did not, `unchecked` when it said nothing usable (no answer, an error, or no flag). An unchecked style is left untagged, not nsfw (owner
+ * decision 2026-11-26, rule C11: not having been checked is never by itself a reason to mark or lock).
  * Civitai: the model's `nsfw` flag and the version's `nsfwLevel`. Hugging Face: the `not-for-all-audiences` tag.
  */
-export async function siteSaysNsfw(site: LoraInstallSite, url: URL, token: string | null, fetchImpl: typeof fetch): Promise<boolean> {
+export type SiteAdultCheck = "nsfw" | "clean" | "unchecked";
+export async function siteAdultCheck(site: LoraInstallSite, url: URL, token: string | null, fetchImpl: typeof fetch): Promise<SiteAdultCheck> {
   try {
     const headers: Record<string, string> = { accept: "application/json", "user-agent": "MaiPai-Stack", ...(token ? { authorization: `Bearer ${token}` } : {}) };
     const signal = AbortSignal.timeout(10_000);
     if (site === "civitai") {
-      const id = /\/api\/download\/models\/(\d+)/.exec(url.pathname)?.[1]; if (!id) return true;
+      const id = /\/api\/download\/models\/(\d+)/.exec(url.pathname)?.[1]; if (!id) return "unchecked";
       const response = await fetchImpl(`https://civitai.com/api/v1/model-versions/${id}`, { headers, signal });
-      if (!response.ok) return true;
+      if (!response.ok) return "unchecked";
       const body = await response.json() as { nsfwLevel?: unknown; model?: { nsfw?: unknown } };
       const flag = body.model?.nsfw; const level = body.nsfwLevel;
-      if (typeof flag !== "boolean" && typeof level !== "number") return true;
-      return flag === true || (typeof level === "number" && level > 1);
+      if (typeof flag !== "boolean" && typeof level !== "number") return "unchecked";
+      return flag === true || (typeof level === "number" && level > 1) ? "nsfw" : "clean";
     }
-    const repo = url.pathname.split("/").slice(1, 3).join("/"); if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return true;
+    const repo = url.pathname.split("/").slice(1, 3).join("/"); if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return "unchecked";
     const response = await fetchImpl(`https://huggingface.co/api/models/${repo}`, { headers, signal });
-    if (!response.ok) return true;
+    if (!response.ok) return "unchecked";
     const body = await response.json() as { tags?: unknown };
-    if (!Array.isArray(body.tags)) return true;
-    return body.tags.includes("not-for-all-audiences");
-  } catch { return true; }
+    if (!Array.isArray(body.tags)) return "unchecked";
+    return body.tags.includes("not-for-all-audiences") ? "nsfw" : "clean";
+  } catch { return "unchecked"; }
 }
 
 export function startInstall<T>(input: InstallSource, adapter: InstallAdapter<T>, isBusy: () => boolean, setBusy: (id: string | null) => void, deps: { fetch?: typeof fetch } = {}): Job {
@@ -146,10 +148,10 @@ export function startInstall<T>(input: InstallSource, adapter: InstallAdapter<T>
       if (expected && sha256 !== expected) throw new LoraError("hash_mismatch", `The file does not match the fingerprint ${SITE_RULES[input.site].label} published for it, so it was not added. Try again; if it happens twice, the source changed the file.`, 422);
       const existing = adapter.get(`lora-${sha256.slice(0, 16)}`) as { id?: string } | undefined;
       if (existing) throw Object.assign(new LoraError(adapter.duplicateCode ?? "duplicate_lora", "This style is already in the library.", 409), { existingId: existing.id });
-      // The nsfw tag starts from the site's own check; the caller can only raise it.
-      const nsfw = await siteSaysNsfw(input.site, url, token, fetchImpl);
-      const tag: LoraClass = nsfw || input.classification === "adult-only" ? "adult-only" : "all-ages";
-      const record = await adapter.importFile({ path: part, name: input.name, licence: input.licence, licenceAcknowledged: input.licenceAcknowledged, sourceUrl: input.sourceUrl ?? null, classification: tag, classificationOrigin: "site", strengthDefault: input.strengthDefault, triggerWords: input.triggerWords, addedBy: input.addedBy, declaredBase: input.baseModel ?? null, extraDescription: input.extraDescription ?? [], diskId: input.diskId ?? null });
+      // The nsfw tag starts from the site's own check; the caller can only raise it. An unchecked style is untagged (all-ages) and carries no origin.
+      const check = await siteAdultCheck(input.site, url, token, fetchImpl);
+      const tag: LoraClass = check === "nsfw" || input.classification === "adult-only" ? "adult-only" : "all-ages";
+      const record = await adapter.importFile({ path: part, name: input.name, licence: input.licence, licenceAcknowledged: input.licenceAcknowledged, sourceUrl: input.sourceUrl ?? null, classification: tag, ...(check === "unchecked" ? {} : { classificationOrigin: "site" as const }), strengthDefault: input.strengthDefault, triggerWords: input.triggerWords, addedBy: input.addedBy, declaredBase: input.baseModel ?? null, extraDescription: input.extraDescription ?? [], diskId: input.diskId ?? null });
       finishJob(job.id, { ok: true, result: { lora: record } });
     } catch (error) {
       const isLoraError = error instanceof Error && "code" in error && "status" in error;

@@ -191,14 +191,15 @@ test("install: the site says not nsfw -> tagged all-ages, origin site; a caller 
   expect(await installFromCivitai("c2", clean, "adult-only")).toMatchObject({ classification: "adult-only", classification_origin: "site" });
 });
 
-test("install: the check is unavailable, errors, or leaves the flag out -> tagged nsfw", async () => {
-  expect((await installFromCivitai("u1", () => { throw new Error("offline"); }, "all-ages")).classification).toBe("adult-only");
-  expect((await installFromCivitai("u2", () => new Response("no", { status: 503 }), "all-ages")).classification).toBe("adult-only");
-  expect((await installFromCivitai("u3", () => new Response(JSON.stringify({ model: {} }), { status: 200 }), "all-ages")).classification).toBe("adult-only");
+test("install: the check is unavailable, errors, or leaves the flag out -> untagged (not nsfw), no origin", async () => {
+  for (const [seed, check] of [["u1", () => { throw new Error("offline"); }], ["u2", () => new Response("no", { status: 503 })], ["u3", () => new Response(JSON.stringify({ model: {} }), { status: 200 })]] as const) {
+    expect(await installFromCivitai(seed, check as () => Response)).toMatchObject({ classification: "all-ages", classification_origin: null });
+  }
+  expect((await installFromCivitai("u4", () => new Response("no", { status: 503 }), "adult-only")).classification).toBe("adult-only");
 });
 
 test("install: an admin can lower a site-tagged nsfw style afterwards", async () => {
-  const record = await installFromCivitai("l1", () => new Response("no", { status: 500 }));
+  const record = await installFromCivitai("l1", () => new Response(JSON.stringify({ model: { nsfw: true } }), { status: 200 }));
   expect(record).toMatchObject({ classification: "adult-only", classification_origin: "site" });
   expect(await patchCatalog(record.id, { classification: "all-ages" })).toMatchObject({ classification: "all-ages", classification_origin: "admin" });
 });
