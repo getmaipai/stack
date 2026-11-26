@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { downloadUrl, sha256OfFile } from "@/lib/download";
+import { downloadUrl, fetchModelFile, setDownloadHfAuth, sha256OfFile } from "@/lib/download";
 
 const CONTENT = Buffer.from("x".repeat(50_000), "utf8");
 const SHA256 = createHash("sha256").update(CONTENT).digest("hex");
@@ -156,3 +156,50 @@ test("a killed downloader resumes its partial file after process restart and ver
     rmSync(directory, { recursive: true, force: true });
   }
 }, 15_000);
+
+describe("Hugging Face login", () => {
+  const OK = { expectedSha256: SHA256, expectedBytes: CONTENT.length };
+  const seen: Array<{ host: string; path: string; auth: string | null }> = [];
+  const cdn = Bun.serve({ port: 0, fetch(request) { seen.push({ host: "cdn", path: new URL(request.url).pathname, auth: request.headers.get("authorization") }); return new Response(CONTENT, { headers: { "content-length": String(CONTENT.length) } }); } });
+  const hub = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url);
+      seen.push({ host: "hub", path: url.pathname, auth: request.headers.get("authorization") });
+      if (url.pathname === "/gated") return request.headers.get("authorization") === "Bearer secret-login" ? new Response(CONTENT, { headers: { "content-length": String(CONTENT.length) } }) : new Response(null, { status: 401 });
+      if (url.pathname === "/redirect") return new Response(null, { status: 302, headers: { location: `http://localhost:${cdn.port}/file` } });
+      return new Response(CONTENT, { headers: { "content-length": String(CONTENT.length) } });
+    },
+  });
+  afterAll(() => { cdn.stop(true); hub.stop(true); setDownloadHfAuth("https://huggingface.co", ""); });
+  const hubUrl = (path: string) => `http://localhost:${hub.port}${path}`;
+  const point = (token: string) => { seen.length = 0; setDownloadHfAuth(`http://localhost:${hub.port}`, token); };
+
+  test("sends the login to the model host", async () => {
+    point("secret-login");
+    await downloadUrl(hubUrl("/gated"), dest(), OK);
+    expect(seen[0]?.auth).toBe("Bearer secret-login");
+  });
+  test("sends nothing when no login is set, and a gated file says 401", async () => {
+    point("");
+    const res = await fetchModelFile(hubUrl("/gated"), {});
+    expect(res.status).toBe(401);
+    expect(seen.every((s) => s.auth === null)).toBe(true);
+  });
+  test("never sends the login to another host", async () => {
+    point("secret-login");
+    await downloadUrl(`http://127.0.0.1:${cdn.port}/file`, dest(), OK);
+    expect(seen).toEqual([{ host: "cdn", path: "/file", auth: null }]);
+  });
+  test("drops the login on a redirect to another host", async () => {
+    point("secret-login");
+    await downloadUrl(hubUrl("/redirect"), dest(), OK);
+    expect(seen.find((s) => s.host === "hub")?.auth).toBe("Bearer secret-login");
+    expect(seen.find((s) => s.host === "cdn")?.auth).toBeNull();
+  });
+  test("an explicit Authorization header wins", async () => {
+    point("secret-login");
+    await downloadUrl(hubUrl("/plain"), dest(), { ...OK, headers: { Authorization: "Bearer caller" } });
+    expect(seen[0]?.auth).toBe("Bearer caller");
+  });
+});

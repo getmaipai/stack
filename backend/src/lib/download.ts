@@ -35,6 +35,46 @@ export function sweepPartialDownloads(now = Date.now()): number {
 let defaultCapMbps = 0;
 export function setDownloadCapMbps(mbps: number): void { defaultCapMbps = Number.isFinite(mbps) && mbps > 0 ? mbps : 0; }
 
+// The model host and the Hugging Face login (`stack.updates.hf_token`,
+// falling back to the voice cloning token), pushed here by settings.ts the
+// same way. The token is never logged and never appears in an error message.
+let modelHost = "https://huggingface.co";
+let hfToken = "";
+export function setDownloadHfAuth(host: string, token: string): void {
+  modelHost = host.trim();
+  hfToken = token.trim();
+}
+
+/** Whether a URL points at the configured model host, where the login may be sent. */
+function onModelHost(url: string): boolean {
+  try { return new URL(url).host === new URL(modelHost).host; } catch { return false; }
+}
+
+const MAX_REDIRECT_HOPS = 10;
+
+/** Fetches a model file, adding `Authorization: Bearer <token>` when the URL
+ * is on the configured model host and the caller set no Authorization header.
+ * While the header is in play redirects are followed manually so a hop to
+ * another host (the file CDN) drops it. */
+export async function fetchModelFile(url: string, headers: Record<string, string>, signal?: AbortSignal): Promise<Response> {
+  const send = { ...headers };
+  const guarded = hfToken !== "" && onModelHost(url) && !Object.keys(send).some((name) => name.toLowerCase() === "authorization");
+  if (guarded) send.Authorization = `Bearer ${hfToken}`;
+  const init: RequestInit = guarded ? { headers: send, signal, redirect: "manual" } : { headers: send, signal };
+  const timeout = (target: string) => withTimeout(fetch(target, init), CONNECT_TIMEOUT_MS, () => new Error(`no response from ${target} for ${CONNECT_TIMEOUT_MS / 1000}s`));
+  let target = url;
+  let res = await timeout(target);
+  if (!guarded) return res;
+  for (let hop = 0; hop < MAX_REDIRECT_HOPS && res.status >= 301 && res.status <= 308 && res.status !== 304 && res.headers.get("location"); hop += 1) {
+    const next = new URL(res.headers.get("location")!, target);
+    await res.body?.cancel().catch(() => {});
+    if (next.host !== new URL(target).host) delete send.Authorization;
+    target = next.toString();
+    res = await timeout(target);
+  }
+  return res;
+}
+
 export interface DownloadProgress {
   completedBytes: number;
   totalBytes: number;
@@ -86,7 +126,7 @@ async function downloadOnce(url: string, destPath: string, opts: DownloadOptions
   const partPath = `${destPath}.part`;
   const startAt = existsSync(partPath) ? statSync(partPath).size : 0;
   const headers: Record<string, string> = { ...opts.headers, ...(startAt > 0 ? { Range: `bytes=${startAt}-` } : {}) };
-  const res = await withTimeout(fetch(url, { headers, signal: opts.signal }), CONNECT_TIMEOUT_MS, () => new Error(`no response from ${url} for ${CONNECT_TIMEOUT_MS / 1000}s`));
+  const res = await fetchModelFile(url, headers, opts.signal);
   if (!res.ok && res.status !== 206) throw new Error(`GET ${url} returned ${res.status}`);
   if (startAt > 0 && res.status !== 206) {
     unlinkSync(partPath);

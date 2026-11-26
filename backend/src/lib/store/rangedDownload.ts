@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
-import { downloadUrl, type DownloadProgress } from "@/lib/download";
+import { downloadUrl, fetchModelFile, type DownloadProgress } from "@/lib/download";
 
 export interface RangedDownloadOptions {
   expectedSha256: string;
@@ -29,7 +29,7 @@ function report(options: RangedDownloadOptions, bytes: number, total: number, pa
 }
 
 async function rangeSupported(url: string, signal?: AbortSignal): Promise<boolean> {
-  const response = await fetch(url, { headers: { Range: "bytes=0-0" }, signal });
+  const response = await fetchModelFile(url, { Range: "bytes=0-0" }, signal);
   await response.arrayBuffer();
   return response.status === 206 && Boolean(response.headers.get("content-range"));
 }
@@ -40,7 +40,7 @@ async function downloadPart(url: string, index: number, state: PartState, dest: 
   state.offset = Math.min(state.start + current, state.end + 1);
   if (state.offset > state.start) writeFileSync(sidecar(path), JSON.stringify(state));
   if (state.offset > state.end) return;
-  const response = await fetch(url, { headers: { Range: `bytes=${state.offset}-${state.end}` }, signal: options.signal });
+  const response = await fetchModelFile(url, { Range: `bytes=${state.offset}-${state.end}` }, options.signal);
   if (response.status !== 206) throw new Error("Range response was not partial");
   const bytes = Buffer.from(await response.arrayBuffer());
   if (bytes.length > state.end - state.offset + 1) throw new Error("Range response exceeded requested part");

@@ -10,7 +10,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { defaultModelBudgetBytes, setGovernorMemorySettings, setIdleTtlSeconds } from "@/lib/governor";
-import { setDownloadCapMbps } from "@/lib/download";
+import { setDownloadCapMbps, setDownloadHfAuth } from "@/lib/download";
 import { heavyGate } from "@/lib/heavyGate";
 import { StackSetting } from "@maipai/spec/stack/ts/stack-setting.js";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
@@ -98,6 +98,9 @@ export const SETTINGS: SettingDeclaration[] = [
   { ...stack, key: "stack.memory.reap_orphans", selector: "boolean", default: true, label: "Stop abandoned engines", help: "Stop an engine from this Stack's own engines folder that lost its parent program, has no one connected, and has been running 90 seconds or more. These hold gigabytes for nothing. Only the Stack's own engines are ever matched.", section: { id: "memory", order: 70 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.updates.enabled", selector: "boolean", default: false, label: "Check for updates", help: "Allow the Stack to read the Catalog's signed index when you or Home ask it to check. Nothing is downloaded or installed without an explicit action.", section: { id: "updates", order: 10 }, level: "basic", needs_restart: false },
   { ...stack, key: "stack.updates.model_host", selector: "text", default: "https://huggingface.co", label: "Model host", help: "Where model files are downloaded from: Hugging Face, or a mirror you run.", section: { id: "updates", order: 20 }, level: "advanced", needs_restart: false },
+  // Secret like the voice cloning token: encrypted at rest, never returned
+  // by the settings route, and used only by the Stack's own downloads.
+  { ...stack, key: "stack.updates.hf_token", selector: "text", default: "", label: "Hugging Face login", help: "Lets the Stack download models that Hugging Face keeps behind a login. Stored encrypted; the Stack never shows it again.", section: { id: "updates", order: 25 }, level: "advanced", needs_restart: false, secret: true },
   { ...stack, key: "stack.runtime.self_heal", selector: "boolean", default: true, label: "Restart engines that crash", help: "When a chat, embed, voice or speech engine stops on its own, the Stack restarts it by itself (2 seconds, then 10, 30 and 120 seconds), checks that it answers, and stops trying after 5 failures in 30 minutes. It waits while an install or update runs, or while the computer is low on memory.", section: { id: "runtime", order: 12 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.runtime.idle_unload_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 30, label: "Unload after idle", help: "Minutes without a request before a resident engine is unloaded.", section: { id: "runtime", order: 10 }, level: "advanced", needs_restart: false },
   { ...stack, key: "stack.runtime.idle_unload_on_battery_minutes", selector: "number", range: { min: 1, max: 1440 }, default: 10, label: "Unload after idle on battery", help: "The same limit while the computer runs on battery.", section: { id: "runtime", order: 20 }, level: "advanced", needs_restart: false },
@@ -336,6 +339,8 @@ export function applySettingsToRuntime(): void {
   });
   setBudgetPercent(Number(values["stack.memory.budget_percent"]));
   setDownloadCapMbps(Number(values["stack.runtime.download_cap_mbps"]));
+  // The Hugging Face login for gated model downloads; the voice cloning token serves as the fallback. settingValues reveals secrets, so the plaintext stays inside this push.
+  setDownloadHfAuth(String(values["stack.updates.model_host"]), String(values["stack.updates.hf_token"]) || String(values["stack.engines.tts.hf_token"]));
   // The coding engine idles out after its own keep-warm minutes, not the governor-wide limit (CODE-STACK-01 S2).
   setIdleTtlSeconds(HEAVY_ROLE, Number(values["stack.engines.coding.keep_warm_minutes"]) * 60);
   setIdleTtlSeconds("helper", Math.max(1, Number(values["stack.engines.helper.keep_warm_minutes"])) * 60);
