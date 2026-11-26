@@ -20,7 +20,7 @@ function secretIsSet(s: Setting): boolean {
   return v !== null && v !== undefined && v !== "";
 }
 
-function Field({ s, value, typed, error, onChange, onRemove }: { s: Setting; value: SettingValue; typed?: string; error?: string; onChange: (raw: string | boolean) => void; onRemove?: () => void }) {
+function Field({ s, value, typed, error, onChange, onRemove, onSaveNow }: { s: Setting; value: SettingValue; typed?: string; error?: string; onChange: (raw: string | boolean) => void; onRemove?: () => void; onSaveNow?: () => void }) {
   const id = `set-${s.key}`;
   return (
     <div className="flex flex-col gap-1.5 py-3">
@@ -38,6 +38,7 @@ function Field({ s, value, typed, error, onChange, onRemove }: { s: Setting; val
         {s.secret && (
           <Input id={id} type="password" autoComplete="off" placeholder="Paste to set" className="w-56 max-w-[55vw]" value={typed ?? ""} aria-invalid={error ? true : undefined} onChange={(e) => onChange(e.target.value)} />
         )}
+        {s.secret && typed && onSaveNow && <Button size="sm" onClick={onSaveNow}>Save</Button>}
         {!s.secret && (s.selector === "number" || s.selector === "text") && (
           <Input id={id} className="w-56 max-w-[55vw]" inputMode={s.selector === "number" ? "numeric" : undefined} value={String(value ?? "")} aria-invalid={error ? true : undefined} onChange={(e) => onChange(e.target.value)} />
         )}
@@ -88,6 +89,19 @@ export function SettingsScreen({ notify }: { refresh: () => void; notify: Notify
     } catch (e) { notify(plainError(e, "The settings could not be saved. Nothing was changed.")); }
     finally { setBusy(false); }
   }
+  // A pasted secret saves and takes effect in one click, so it never waits behind the page-level Save bar.
+  async function saveSecret(key: string) {
+    const value = draft[key];
+    if (value === undefined || value === "") return;
+    setBusy(true);
+    try {
+      await api.putSettings({ [key]: value });
+      doc.set(await api.applySettings());
+      setDraft((d) => { const { [key]: _gone, ...rest } = d; return rest; });
+      notify("Saved and in use.");
+    } catch (e) { notify(plainError(e, "The token could not be saved. Nothing was changed.")); }
+    finally { setBusy(false); }
+  }
   async function apply() {
     setBusy(true);
     try { doc.set(await api.applySettings()); notify("Applied. Restart the Stack from Tools so engines pick up the new values."); }
@@ -119,7 +133,7 @@ export function SettingsScreen({ notify }: { refresh: () => void; notify: Notify
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className="divide-y border-t px-5 pb-2">
-                {g.items.map((s) => <Field key={s.key} s={s} value={settingValue(s, draft)} typed={s.key in draft ? String(draft[s.key] ?? "") : undefined} error={errors[s.key]} onChange={(raw) => change(s, raw)} onRemove={() => { setDraft((d) => ({ ...d, [s.key]: "" })); setErrors((e) => { const { [s.key]: _gone, ...rest } = e; return rest; }); }} />)}
+                {g.items.map((s) => <Field key={s.key} s={s} value={settingValue(s, draft)} typed={s.key in draft ? String(draft[s.key] ?? "") : undefined} error={errors[s.key]} onChange={(raw) => change(s, raw)} onSaveNow={() => { void saveSecret(s.key); }} onRemove={() => { setDraft((d) => ({ ...d, [s.key]: "" })); setErrors((e) => { const { [s.key]: _gone, ...rest } = e; return rest; }); }} />)}
               </CardContent>
             </CollapsibleContent>
           </Card>
