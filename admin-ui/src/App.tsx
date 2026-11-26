@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { StackChoiceCategory } from "@maipai/ui/src/stack/StackClient";
-import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis, Layers, ToggleRight } from "lucide-react";
+import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis, Layers, ToggleRight, Palette as PaletteIcon } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@maipai/ui/src/ui/sheet";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Status, StatusIndicator } from "@maipai/ui/src/ui/status";
@@ -14,6 +14,7 @@ import { Palette } from "./Palette";
 import type { PaletteItem } from "./Palette";
 import { Resources } from "./Resources";
 import { ModelsScreen, useStackClient } from "./ModelsScreen";
+import { StylesScreen } from "./StylesScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { Updates } from "./Updates";
 import { Tools } from "./Tools";
@@ -28,12 +29,13 @@ import { roleIcon } from "./roleIcons";
 import { setFeatureRows, useFeatureRows } from "./featureRows";
 import { Overview } from "./Overview";
 
-type Screen = "overview" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper" | "modes";
+type Screen = "overview" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper" | "modes" | "styles";
 type Group = "monitor" | "setup" | "maintain" | "assist";
 interface NavItem { id: Screen; label: string; question: string; Icon: typeof LayoutDashboard; group: Group; more?: boolean }
 const NAV: NavItem[] = [
   { id: "overview", label: "Overview", question: "Is everything working?", Icon: LayoutDashboard, group: "monitor" },
   { id: "models", label: "AI and models", question: "Which features are on, and which model does each one use?", Icon: Boxes, group: "setup" },
+  { id: "styles", label: "Styles", question: "Looks you add to pictures and video, and where their files live.", Icon: PaletteIcon, group: "setup", more: true },
   { id: "modes", label: "Modes", question: "Normal or Max coding, and which features are on.", Icon: ToggleRight, group: "setup", more: true },
   { id: "health", label: "Health", question: "Does anything need fixing?", Icon: HeartPulse, group: "monitor" },
   { id: "helper", label: "Helper", question: "Ask in plain words. Nothing changes until you approve.", Icon: Sparkles, group: "assist" },
@@ -46,7 +48,7 @@ const NAV: NavItem[] = [
 /** The sidebar's categories, in the order a person works through them: look, set up, keep tidy, ask. */
 const GROUPS: { id: Group; label: string; order: Screen[] }[] = [
   { id: "monitor", label: "Monitor", order: ["overview", "health", "resources"] },
-  { id: "setup", label: "Set up", order: ["models", "modes", "engines"] },
+  { id: "setup", label: "Set up", order: ["models", "styles", "modes", "engines"] },
   { id: "maintain", label: "Maintain", order: ["updates", "settings", "tools"] },
   { id: "assist", label: "Assist", order: ["helper"] },
 ];
@@ -168,8 +170,8 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
           </div>
         </header>
         <main id="main-scroll" className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto px-4 py-8 md:px-8 md:py-10">
-          {/* The AI and models page (@maipai/ui) writes its own title, so the shell does not repeat it. */}
-          {screen !== "models" && (
+          {/* The AI and models and Styles pages (@maipai/ui) write their own titles, so the shell does not repeat them. */}
+          {screen !== "models" && screen !== "styles" && (
             <div className="mb-8 flex flex-col gap-2">
               <p className="eyebrow">{groupLabel(current.group)}</p>
               <h2 className="page-title">{current.label}</h2>
@@ -182,6 +184,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
             {screen === "health" && <Health snap={snap} refresh={refresh} notify={notify} />}
             {screen === "engines" && <Engines snap={snap} refresh={refresh} notify={notify} />}
             {screen === "models" && <ModelsScreen client={stackClient} snap={snap} refresh={refresh} notify={notify} go={go} />}
+            {screen === "styles" && <StylesScreen client={stackClient} />}
             {screen === "updates" && <Updates refresh={refresh} notify={notify} />}
             {screen === "settings" && <SettingsScreen refresh={refresh} notify={notify} />}
             {screen === "helper" && <Helper />}

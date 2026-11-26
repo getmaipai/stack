@@ -5,7 +5,9 @@ import { createRoute, z } from "@hono/zod-openapi";
 import { apiRouter } from "@maipai/core/src/openapi";
 import type { AppEnv } from "@/types";
 import { LoraError } from "@/lib/media/loraLibrary";
-import { importCatalog, listCatalog, patchCatalog, purgeCatalog, restoreCatalog, trashCatalog, TRASH_DAYS } from "@/lib/media/loraCatalog";
+import { existsSync } from "node:fs";
+import { basename, extname, join } from "node:path";
+import { getCatalog, importCatalog, listCatalog, previewDir, patchCatalog, purgeCatalog, restoreCatalog, trashCatalog, TRASH_DAYS } from "@/lib/media/loraCatalog";
 import { browseSource, setSourceKey, sourceStatus, startCatalogInstall, startLoraMove } from "@/lib/media/loraSources";
 import { LORA_INSTALL_SITES } from "@/lib/media/loraInstallCore";
 
@@ -32,6 +34,8 @@ const installRoute = createRoute({ method: "post", path: "/install", tags, summa
 const sourcesRoute = createRoute({ method: "get", path: "/sources", tags, summary: "The two sources and whether a key is saved (never the key)", responses: { 200: json(z.object({ sources: z.array(z.object({ site: Site, label: z.string(), has_key: z.boolean() })) }), "Sources.") } });
 const keyRoute = createRoute({ method: "put", path: "/sources/{site}/key", tags, summary: "Save a Hugging Face token or Civitai key (null removes it)", request: { params: z.object({ site: Site }), body: { content: { "application/json": { schema: z.object({ key: z.string().nullable() }) } } } }, responses: { 200: json(z.object({ sources: z.array(z.object({ site: Site, label: z.string(), has_key: z.boolean() })) }), "Saved."), ...errors } });
 const searchRoute = createRoute({ method: "get", path: "/sources/{site}/search", tags, summary: "Search a source for LoRAs", request: { params: z.object({ site: Site }), query: z.object({ q: z.string() }) }, responses: { 200: json(z.object({ hits: z.array(z.object({ site: Site, remote_id: z.string(), name: z.string(), base_model: z.string().nullable(), downloads: z.number(), install_url: z.string(), file_name: z.string().nullable(), bytes: z.number().nullable(), audience_hint: Class, licence: z.string().nullable(), page_url: z.string() })) }), "Hits."), ...errors } });
+const PREVIEW_MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif" };
+const previewRoute = createRoute({ method: "get", path: "/{id}/preview", tags, summary: "A LoRA's preview picture", request: { params: z.object({ id: z.string() }) }, responses: { 200: { content: { "image/png": { schema: z.string().openapi({ format: "binary" }) } }, description: "The picture (PNG, JPEG, WebP or GIF), from the Stack's own data directory." }, 404: json(Err, "No such LoRA, or it has no preview.") } });
 
 export const lorasRoutes = apiRouter<AppEnv>();
 type Status = 403 | 404 | 409 | 422 | 429 | 502 | 503;
@@ -60,3 +64,12 @@ lorasRoutes.openapi(installRoute, (c) => {
 lorasRoutes.openapi(sourcesRoute, (c) => c.json({ sources: sourceStatus() }, 200));
 lorasRoutes.openapi(keyRoute, (c) => { try { setSourceKey(c.req.valid("param").site, c.req.valid("json").key); return c.json({ sources: sourceStatus() }, 200); } catch (error) { return fail(c, error) as never; } });
 lorasRoutes.openapi(searchRoute, async (c) => { try { return c.json({ hits: await browseSource(c.req.valid("param").site, c.req.valid("query").q) }, 200); } catch (error) { return fail(c, error) as never; } });
+
+lorasRoutes.openapi(previewRoute, (c) => {
+  const record = getCatalog(c.req.valid("param").id);
+  const name = record?.preview ?? null;
+  // Only a bare file name under data/loras/previews is ever served; anything else is a 404, never a path outside that folder.
+  const file = name && basename(name) === name ? join(previewDir(), name) : null;
+  if (!file || !existsSync(file)) return c.json({ error: "That style has no preview picture.", code: "no_preview" }, 404) as never;
+  return new Response(Bun.file(file), { status: 200, headers: { "content-type": PREVIEW_MIME[extname(file).toLowerCase()] ?? "application/octet-stream", "cache-control": "private, max-age=300" } }) as never;
+});

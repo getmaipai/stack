@@ -1070,7 +1070,7 @@ manifests are left untouched as a backup. Routes (`/stack/v1/loras`, same guard 
 (Home's records and previews, idempotent by id, never creates, never deletes, never lowers an audience; each result is `imported`, `unchanged`, `missing_file`, `conflict` or `invalid`);
 `POST /install` `{ media, source, url, name, disk_id?, audience?, ... }` (an `image.lora.install` or `video.lora.install` job; refused 403 `licence_not_accepted` until the one global licence
 accept is made; the saved site key is used, never sent by the caller); `GET /sources`, `PUT /sources/{site}/key` (a token is stored encrypted and never returned) and
-`GET /sources/{site}/search?q=` (Hugging Face and Civitai search with an `audience_hint` from the site's own fields). The second fence: a request naming an adult-only LoRA must
+`GET /sources/{site}/search?q=` (Hugging Face and Civitai search with an `audience_hint` from the site's own fields); `GET /{id}/preview` (the preview picture from `data/loras/previews`, else 404 `no_preview`; the admin page's Styles screen and Home's Styles tab use it). The second fence: a request naming an adult-only LoRA must
 carry the `adult` audience, and an unknown, trashed or unreadable id counts as adult-only (`lora_not_allowed`, `unknown_lora`); a LoRA on a drive that is not connected is refused
 `drive_missing` with the drive's name. A drive that holds a style cannot be removed. The per-media routes below stay for generation and older callers.
 

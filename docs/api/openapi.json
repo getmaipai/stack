@@ -26479,6 +26479,59 @@
         }
       }
     },
+    "/stack/v1/loras/{id}/preview": {
+      "get": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "A LoRA's preview picture",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The picture (PNG, JPEG, WebP or GIF), from the Stack's own data directory.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA, or it has no preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/events": {
       "get": {
         "tags": [

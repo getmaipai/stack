@@ -32,7 +32,7 @@ test("the sidebar groups every screen once and the palette searches screens, fea
   const app = read("App.tsx");
   const order = [...app.matchAll(/order: \[([^\]]*)\]/g)].flatMap((m) => [...m[1]!.matchAll(/"(\w+)"/g)].map((x) => x[1]!));
   const ids = [...app.matchAll(/\{ id: "(\w+)", label: "[^"]+", question:/g)].map((m) => m[1]!);
-  expect(ids.length).toBe(9);
+  expect(ids.length).toBe(11);
   expect([...order].sort()).toEqual([...ids].sort());
   expect(new Set(order).size).toBe(order.length);
   const palette = read("Palette.tsx");

@@ -7,6 +7,7 @@ import { StackClientError } from "@maipai/ui/src/stack/StackClient";
 import type {
   StackAddModelBody, StackAddModelResult, StackCategoryId, StackClient, StackInstallStarted, StackLevel, StackOrderBody, StackOrderResult, StackPickBody, StackPickResult,
   StackRecommendedResult, StackRemoveBody, StackRemoveResult, StackRemoved, StackUnused, StackChoicesView, StackLicences,
+  StackLora, StackLoraHit, StackLoraInstallBody, StackLoraJob, StackLoraLocked, StackLoraPatch, StackLoraSite, StackLoraSource,
 } from "@maipai/ui/src/stack/StackClient";
 
 const enc = encodeURIComponent;
@@ -53,6 +54,19 @@ export function createStackClient(onWrite?: () => void): AdminStackClient {
     licences: {
       read: () => run(() => call<StackLicences>("GET", "/stack/v1/licences")),
       accept: () => run(async () => wrote(await call<StackLicences>("POST", "/stack/v1/licences", {}))),
+    },
+    loras: {
+      list: (options) => run(() => call<{ loras: Array<StackLora | StackLoraLocked>; trash_days: number }>("GET", `/stack/v1/loras${options?.removed ? "?removed=true" : ""}`)),
+      patch: (id: string, body: StackLoraPatch) => run(async () => wrote(await call<StackLora>("PATCH", `/stack/v1/loras/${enc(id)}`, body))),
+      remove: (id: string, purge?: boolean) => run(async () => wrote(await call<{ ok: true; purged: boolean }>("DELETE", `/stack/v1/loras/${enc(id)}${purge ? "?purge=true" : ""}`))),
+      restore: (id: string) => run(async () => wrote(await call<StackLora>("POST", `/stack/v1/loras/${enc(id)}/restore`, {}))),
+      move: (id: string, diskId: string) => run(async () => wrote(await call<{ job: string }>("POST", `/stack/v1/loras/${enc(id)}/move`, { disk_id: diskId }))),
+      install: (body: StackLoraInstallBody) => run(async () => wrote(await call<{ job: string }>("POST", "/stack/v1/loras/install", body))),
+      sources: () => run(() => call<{ sources: StackLoraSource[] }>("GET", "/stack/v1/loras/sources")),
+      setKey: (site: StackLoraSite, key: string | null) => run(async () => wrote(await call<{ sources: StackLoraSource[] }>("PUT", `/stack/v1/loras/sources/${enc(site)}/key`, { key }))),
+      search: (site: StackLoraSite, query: string) => run(() => call<{ hits: StackLoraHit[] }>("GET", `/stack/v1/loras/sources/${enc(site)}/search?q=${enc(query)}`)),
+      job: (id: string) => run(() => call<StackLoraJob>("GET", `/stack/v1/jobs/${enc(id)}`)),
+      previewUrl: (id: string) => `/stack/v1/loras/${enc(id)}/preview`,
     },
     readChoices: () => run(() => call<StackChoicesView>("GET", "/stack/v1/choices")),
     setRoleEnabled: (role: string, enabled: boolean) => run(async () => { await call("PUT", "/stack/v1/settings", { [`stack.roles.${role}.enabled`]: enabled }); wrote(null); }),
