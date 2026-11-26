@@ -24161,6 +24161,2324 @@
         }
       }
     },
+    "/stack/v1/loras": {
+      "get": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "Every LoRA, pictures and video",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "description": "true lists the trash."
+            },
+            "required": false,
+            "description": "true lists the trash.",
+            "name": "removed",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "picture",
+                "video"
+              ]
+            },
+            "required": false,
+            "name": "media",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The unified library.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "loras": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "media": {
+                            "type": "string",
+                            "enum": [
+                              "picture",
+                              "video"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "base_model": {
+                            "type": "string"
+                          },
+                          "classification": {
+                            "type": "string",
+                            "enum": [
+                              "all-ages",
+                              "adult-only"
+                            ]
+                          },
+                          "sha256": {
+                            "type": "string"
+                          },
+                          "bytes": {
+                            "type": "number"
+                          },
+                          "strength_default": {
+                            "type": "number"
+                          },
+                          "trigger_words": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "licence": {
+                            "type": "string"
+                          },
+                          "source_url": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "added_by": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "added_at": {
+                            "type": "string"
+                          },
+                          "disk_id": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "The Stack drive holding the file; null is the Stack's own data directory."
+                          },
+                          "disk_label": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "ready",
+                              "drive_missing",
+                              "installing",
+                              "failed"
+                            ],
+                            "description": "`drive_missing` when the drive holding the file is not connected. Home treats the style as unavailable."
+                          },
+                          "status_note": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "removed_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "trash_until": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "preview": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "home": {
+                            "type": "object",
+                            "nullable": true,
+                            "additionalProperties": {
+                              "nullable": true
+                            },
+                            "description": "The spec Lora record Home sent on import, kept as sent (description, kind, add-ins, availability, licence text)."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "media",
+                          "name",
+                          "base_model",
+                          "classification",
+                          "sha256",
+                          "bytes",
+                          "strength_default",
+                          "trigger_words",
+                          "licence",
+                          "source_url",
+                          "added_by",
+                          "added_at",
+                          "disk_id",
+                          "disk_label",
+                          "status",
+                          "status_note",
+                          "removed_at",
+                          "trash_until",
+                          "preview",
+                          "home"
+                        ]
+                      }
+                    },
+                    "trash_days": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "loras",
+                    "trash_days"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/loras/{id}": {
+      "patch": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "Edit a LoRA",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "classification": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult-only"
+                    ]
+                  },
+                  "strength_default": {
+                    "type": "number"
+                  },
+                  "trigger_words": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "source_url": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "ticket": {
+                    "type": "string",
+                    "description": "Home's fresh single-use adult-lock ticket. Required to change adult-only to all-ages; marking adult-only needs none."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "media": {
+                      "type": "string",
+                      "enum": [
+                        "picture",
+                        "video"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "base_model": {
+                      "type": "string"
+                    },
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "all-ages",
+                        "adult-only"
+                      ]
+                    },
+                    "sha256": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "number"
+                    },
+                    "strength_default": {
+                      "type": "number"
+                    },
+                    "trigger_words": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "licence": {
+                      "type": "string"
+                    },
+                    "source_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "added_by": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "added_at": {
+                      "type": "string"
+                    },
+                    "disk_id": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "The Stack drive holding the file; null is the Stack's own data directory."
+                    },
+                    "disk_label": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "drive_missing",
+                        "installing",
+                        "failed"
+                      ],
+                      "description": "`drive_missing` when the drive holding the file is not connected. Home treats the style as unavailable."
+                    },
+                    "status_note": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "removed_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "trash_until": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "preview": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "home": {
+                      "type": "object",
+                      "nullable": true,
+                      "additionalProperties": {
+                        "nullable": true
+                      },
+                      "description": "The spec Lora record Home sent on import, kept as sent (description, kind, add-ins, availability, licence text)."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "media",
+                    "name",
+                    "base_model",
+                    "classification",
+                    "sha256",
+                    "bytes",
+                    "strength_default",
+                    "trigger_words",
+                    "licence",
+                    "source_url",
+                    "added_by",
+                    "added_at",
+                    "disk_id",
+                    "disk_label",
+                    "status",
+                    "status_note",
+                    "removed_at",
+                    "trash_until",
+                    "preview",
+                    "home"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A ticket or licence is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Refused, with what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The source did not answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "Move a LoRA to the trash (30 days), or delete it for good with purge=true",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "required": false,
+            "name": "purge",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "purged": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "purged"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A ticket or licence is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Refused, with what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The source did not answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/loras/{id}/restore": {
+      "post": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "Bring a LoRA back from the trash",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Restored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "media": {
+                      "type": "string",
+                      "enum": [
+                        "picture",
+                        "video"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "base_model": {
+                      "type": "string"
+                    },
+                    "classification": {
+                      "type": "string",
+                      "enum": [
+                        "all-ages",
+                        "adult-only"
+                      ]
+                    },
+                    "sha256": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "number"
+                    },
+                    "strength_default": {
+                      "type": "number"
+                    },
+                    "trigger_words": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "licence": {
+                      "type": "string"
+                    },
+                    "source_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "added_by": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "added_at": {
+                      "type": "string"
+                    },
+                    "disk_id": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "The Stack drive holding the file; null is the Stack's own data directory."
+                    },
+                    "disk_label": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "drive_missing",
+                        "installing",
+                        "failed"
+                      ],
+                      "description": "`drive_missing` when the drive holding the file is not connected. Home treats the style as unavailable."
+                    },
+                    "status_note": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "removed_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "trash_until": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "preview": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "home": {
+                      "type": "object",
+                      "nullable": true,
+                      "additionalProperties": {
+                        "nullable": true
+                      },
+                      "description": "The spec Lora record Home sent on import, kept as sent (description, kind, add-ins, availability, licence text)."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "media",
+                    "name",
+                    "base_model",
+                    "classification",
+                    "sha256",
+                    "bytes",
+                    "strength_default",
+                    "trigger_words",
+                    "licence",
+                    "source_url",
+                    "added_by",
+                    "added_at",
+                    "disk_id",
+                    "disk_label",
+                    "status",
+                    "status_note",
+                    "removed_at",
+                    "trash_until",
+                    "preview",
+                    "home"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A ticket or licence is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Refused, with what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The source did not answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/loras/{id}/move": {
+      "post": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "Move a LoRA's file to another drive (lora.move job)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "disk_id": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "disk_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "A `lora.move` job started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "job"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A ticket or licence is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Refused, with what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The source did not answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/loras/import": {
+      "post": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "Take Home's LoRA records and previews (idempotent by id, never deletes)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "lora": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "nullable": true
+                          }
+                        },
+                        "preview": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "content_type": {
+                              "type": "string"
+                            },
+                            "data_base64": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "content_type",
+                            "data_base64"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "lora"
+                      ]
+                    },
+                    "maxItems": 500
+                  }
+                },
+                "required": [
+                  "items"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One result per item. `missing_file` means the Stack has no file with that id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "result": {
+                            "type": "string",
+                            "enum": [
+                              "imported",
+                              "unchanged",
+                              "missing_file",
+                              "conflict",
+                              "invalid"
+                            ]
+                          },
+                          "note": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "result"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "results"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A ticket or licence is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Refused, with what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The source did not answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/loras/install": {
+      "post": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "Download a LoRA from Hugging Face or Civitai (needs the global licence accept)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "media": {
+                    "type": "string",
+                    "enum": [
+                      "picture",
+                      "video"
+                    ]
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "huggingface",
+                      "civitai"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "licence": {
+                    "type": "string"
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "all-ages",
+                      "adult-only"
+                    ]
+                  },
+                  "strength_default": {
+                    "type": "number"
+                  },
+                  "trigger_words": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "added_by": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "disk_id": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "The Stack drive to keep it on; absent is the Stack's own data directory."
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "source_url": {
+                    "type": "string"
+                  },
+                  "base_model": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "media",
+                  "source",
+                  "url",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "A `<media>.lora.install` job started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "job"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A ticket or licence is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Refused, with what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The source did not answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/loras/sources": {
+      "get": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "The two sources and whether a key is saved (never the key)",
+        "responses": {
+          "200": {
+            "description": "Sources.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "site": {
+                            "type": "string",
+                            "enum": [
+                              "huggingface",
+                              "civitai"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "has_key": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "site",
+                          "label",
+                          "has_key"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "sources"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/loras/sources/{site}/key": {
+      "put": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "Save a Hugging Face token or Civitai key (null removes it)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "huggingface",
+                "civitai"
+              ]
+            },
+            "required": true,
+            "name": "site",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "site": {
+                            "type": "string",
+                            "enum": [
+                              "huggingface",
+                              "civitai"
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "has_key": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "site",
+                          "label",
+                          "has_key"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "sources"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A ticket or licence is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Refused, with what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The source did not answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/loras/sources/{site}/search": {
+      "get": {
+        "tags": [
+          "LoRAs"
+        ],
+        "summary": "Search a source for LoRAs",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "huggingface",
+                "civitai"
+              ]
+            },
+            "required": true,
+            "name": "site",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hits": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "site": {
+                            "type": "string",
+                            "enum": [
+                              "huggingface",
+                              "civitai"
+                            ]
+                          },
+                          "remote_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "base_model": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "downloads": {
+                            "type": "number"
+                          },
+                          "install_url": {
+                            "type": "string"
+                          },
+                          "file_name": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "bytes": {
+                            "type": "number",
+                            "nullable": true
+                          },
+                          "audience_hint": {
+                            "type": "string",
+                            "enum": [
+                              "all-ages",
+                              "adult-only"
+                            ]
+                          },
+                          "licence": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "page_url": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "site",
+                          "remote_id",
+                          "name",
+                          "base_model",
+                          "downloads",
+                          "install_url",
+                          "file_name",
+                          "bytes",
+                          "audience_hint",
+                          "licence",
+                          "page_url"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "hits"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A ticket or licence is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such LoRA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Refused, with what to change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many searches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The source did not answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Busy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/events": {
       "get": {
         "tags": [
@@ -42389,2324 +44707,6 @@
                     "accepted_at",
                     "by",
                     "licences"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/loras": {
-      "get": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "Every LoRA, pictures and video",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "true",
-                "false"
-              ],
-              "description": "true lists the trash."
-            },
-            "required": false,
-            "description": "true lists the trash.",
-            "name": "removed",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "picture",
-                "video"
-              ]
-            },
-            "required": false,
-            "name": "media",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The unified library.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "loras": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "media": {
-                            "type": "string",
-                            "enum": [
-                              "picture",
-                              "video"
-                            ]
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "base_model": {
-                            "type": "string"
-                          },
-                          "classification": {
-                            "type": "string",
-                            "enum": [
-                              "all-ages",
-                              "adult-only"
-                            ]
-                          },
-                          "sha256": {
-                            "type": "string"
-                          },
-                          "bytes": {
-                            "type": "number"
-                          },
-                          "strength_default": {
-                            "type": "number"
-                          },
-                          "trigger_words": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "licence": {
-                            "type": "string"
-                          },
-                          "source_url": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "added_by": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "added_at": {
-                            "type": "string"
-                          },
-                          "disk_id": {
-                            "type": "string",
-                            "nullable": true,
-                            "description": "The Stack drive holding the file; null is the Stack's own data directory."
-                          },
-                          "disk_label": {
-                            "type": "string"
-                          },
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "ready",
-                              "drive_missing",
-                              "installing",
-                              "failed"
-                            ],
-                            "description": "`drive_missing` when the drive holding the file is not connected. Home treats the style as unavailable."
-                          },
-                          "status_note": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "removed_at": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "trash_until": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "preview": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "home": {
-                            "type": "object",
-                            "nullable": true,
-                            "additionalProperties": {
-                              "nullable": true
-                            },
-                            "description": "The spec Lora record Home sent on import, kept as sent (description, kind, add-ins, availability, licence text)."
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "media",
-                          "name",
-                          "base_model",
-                          "classification",
-                          "sha256",
-                          "bytes",
-                          "strength_default",
-                          "trigger_words",
-                          "licence",
-                          "source_url",
-                          "added_by",
-                          "added_at",
-                          "disk_id",
-                          "disk_label",
-                          "status",
-                          "status_note",
-                          "removed_at",
-                          "trash_until",
-                          "preview",
-                          "home"
-                        ]
-                      }
-                    },
-                    "trash_days": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "loras",
-                    "trash_days"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/loras/{id}": {
-      "patch": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "Edit a LoRA",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "classification": {
-                    "type": "string",
-                    "enum": [
-                      "all-ages",
-                      "adult-only"
-                    ]
-                  },
-                  "strength_default": {
-                    "type": "number"
-                  },
-                  "trigger_words": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "source_url": {
-                    "type": "string",
-                    "nullable": true
-                  },
-                  "description": {
-                    "type": "string"
-                  },
-                  "kind": {
-                    "type": "string"
-                  },
-                  "ticket": {
-                    "type": "string",
-                    "description": "Home's fresh single-use adult-lock ticket. Required to change adult-only to all-ages; marking adult-only needs none."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "media": {
-                      "type": "string",
-                      "enum": [
-                        "picture",
-                        "video"
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "base_model": {
-                      "type": "string"
-                    },
-                    "classification": {
-                      "type": "string",
-                      "enum": [
-                        "all-ages",
-                        "adult-only"
-                      ]
-                    },
-                    "sha256": {
-                      "type": "string"
-                    },
-                    "bytes": {
-                      "type": "number"
-                    },
-                    "strength_default": {
-                      "type": "number"
-                    },
-                    "trigger_words": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "licence": {
-                      "type": "string"
-                    },
-                    "source_url": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "added_by": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "added_at": {
-                      "type": "string"
-                    },
-                    "disk_id": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "The Stack drive holding the file; null is the Stack's own data directory."
-                    },
-                    "disk_label": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "ready",
-                        "drive_missing",
-                        "installing",
-                        "failed"
-                      ],
-                      "description": "`drive_missing` when the drive holding the file is not connected. Home treats the style as unavailable."
-                    },
-                    "status_note": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "removed_at": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "trash_until": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "preview": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "home": {
-                      "type": "object",
-                      "nullable": true,
-                      "additionalProperties": {
-                        "nullable": true
-                      },
-                      "description": "The spec Lora record Home sent on import, kept as sent (description, kind, add-ins, availability, licence text)."
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "media",
-                    "name",
-                    "base_model",
-                    "classification",
-                    "sha256",
-                    "bytes",
-                    "strength_default",
-                    "trigger_words",
-                    "licence",
-                    "source_url",
-                    "added_by",
-                    "added_at",
-                    "disk_id",
-                    "disk_label",
-                    "status",
-                    "status_note",
-                    "removed_at",
-                    "trash_until",
-                    "preview",
-                    "home"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A ticket or licence is needed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such LoRA.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Not allowed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Refused, with what to change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many searches.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The source did not answer.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Busy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "Move a LoRA to the trash (30 days), or delete it for good with purge=true",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "true",
-                "false"
-              ]
-            },
-            "required": false,
-            "name": "purge",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Done.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    },
-                    "purged": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "ok",
-                    "purged"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A ticket or licence is needed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such LoRA.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Not allowed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Refused, with what to change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many searches.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The source did not answer.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Busy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/loras/{id}/restore": {
-      "post": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "Bring a LoRA back from the trash",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Restored.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "media": {
-                      "type": "string",
-                      "enum": [
-                        "picture",
-                        "video"
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "base_model": {
-                      "type": "string"
-                    },
-                    "classification": {
-                      "type": "string",
-                      "enum": [
-                        "all-ages",
-                        "adult-only"
-                      ]
-                    },
-                    "sha256": {
-                      "type": "string"
-                    },
-                    "bytes": {
-                      "type": "number"
-                    },
-                    "strength_default": {
-                      "type": "number"
-                    },
-                    "trigger_words": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "licence": {
-                      "type": "string"
-                    },
-                    "source_url": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "added_by": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "added_at": {
-                      "type": "string"
-                    },
-                    "disk_id": {
-                      "type": "string",
-                      "nullable": true,
-                      "description": "The Stack drive holding the file; null is the Stack's own data directory."
-                    },
-                    "disk_label": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "ready",
-                        "drive_missing",
-                        "installing",
-                        "failed"
-                      ],
-                      "description": "`drive_missing` when the drive holding the file is not connected. Home treats the style as unavailable."
-                    },
-                    "status_note": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "removed_at": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "trash_until": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "preview": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "home": {
-                      "type": "object",
-                      "nullable": true,
-                      "additionalProperties": {
-                        "nullable": true
-                      },
-                      "description": "The spec Lora record Home sent on import, kept as sent (description, kind, add-ins, availability, licence text)."
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "media",
-                    "name",
-                    "base_model",
-                    "classification",
-                    "sha256",
-                    "bytes",
-                    "strength_default",
-                    "trigger_words",
-                    "licence",
-                    "source_url",
-                    "added_by",
-                    "added_at",
-                    "disk_id",
-                    "disk_label",
-                    "status",
-                    "status_note",
-                    "removed_at",
-                    "trash_until",
-                    "preview",
-                    "home"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A ticket or licence is needed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such LoRA.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Not allowed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Refused, with what to change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many searches.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The source did not answer.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Busy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/loras/{id}/move": {
-      "post": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "Move a LoRA's file to another drive (lora.move job)",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "disk_id": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "disk_id"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "202": {
-            "description": "A `lora.move` job started.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "job": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "job"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A ticket or licence is needed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such LoRA.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Not allowed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Refused, with what to change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many searches.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The source did not answer.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Busy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/loras/import": {
-      "post": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "Take Home's LoRA records and previews (idempotent by id, never deletes)",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "items": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "lora": {
-                          "type": "object",
-                          "additionalProperties": {
-                            "nullable": true
-                          }
-                        },
-                        "preview": {
-                          "type": "object",
-                          "nullable": true,
-                          "properties": {
-                            "content_type": {
-                              "type": "string"
-                            },
-                            "data_base64": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "content_type",
-                            "data_base64"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "lora"
-                      ]
-                    },
-                    "maxItems": 500
-                  }
-                },
-                "required": [
-                  "items"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "One result per item. `missing_file` means the Stack has no file with that id.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "results": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "result": {
-                            "type": "string",
-                            "enum": [
-                              "imported",
-                              "unchanged",
-                              "missing_file",
-                              "conflict",
-                              "invalid"
-                            ]
-                          },
-                          "note": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "result"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "results"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A ticket or licence is needed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such LoRA.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Not allowed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Refused, with what to change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many searches.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The source did not answer.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Busy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/loras/install": {
-      "post": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "Download a LoRA from Hugging Face or Civitai (needs the global licence accept)",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "media": {
-                    "type": "string",
-                    "enum": [
-                      "picture",
-                      "video"
-                    ]
-                  },
-                  "source": {
-                    "type": "string",
-                    "enum": [
-                      "huggingface",
-                      "civitai"
-                    ]
-                  },
-                  "url": {
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "licence": {
-                    "type": "string"
-                  },
-                  "audience": {
-                    "type": "string",
-                    "enum": [
-                      "all-ages",
-                      "adult-only"
-                    ]
-                  },
-                  "strength_default": {
-                    "type": "number"
-                  },
-                  "trigger_words": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "added_by": {
-                    "type": "string",
-                    "nullable": true
-                  },
-                  "disk_id": {
-                    "type": "string",
-                    "nullable": true,
-                    "description": "The Stack drive to keep it on; absent is the Stack's own data directory."
-                  },
-                  "sha256": {
-                    "type": "string"
-                  },
-                  "source_url": {
-                    "type": "string"
-                  },
-                  "base_model": {
-                    "type": "string",
-                    "nullable": true
-                  }
-                },
-                "required": [
-                  "media",
-                  "source",
-                  "url",
-                  "name"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "202": {
-            "description": "A `<media>.lora.install` job started.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "job": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "job"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A ticket or licence is needed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such LoRA.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Not allowed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Refused, with what to change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many searches.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The source did not answer.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Busy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/loras/sources": {
-      "get": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "The two sources and whether a key is saved (never the key)",
-        "responses": {
-          "200": {
-            "description": "Sources.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "sources": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "site": {
-                            "type": "string",
-                            "enum": [
-                              "huggingface",
-                              "civitai"
-                            ]
-                          },
-                          "label": {
-                            "type": "string"
-                          },
-                          "has_key": {
-                            "type": "boolean"
-                          }
-                        },
-                        "required": [
-                          "site",
-                          "label",
-                          "has_key"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "sources"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/loras/sources/{site}/key": {
-      "put": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "Save a Hugging Face token or Civitai key (null removes it)",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "huggingface",
-                "civitai"
-              ]
-            },
-            "required": true,
-            "name": "site",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "key": {
-                    "type": "string",
-                    "nullable": true
-                  }
-                },
-                "required": [
-                  "key"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Saved.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "sources": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "site": {
-                            "type": "string",
-                            "enum": [
-                              "huggingface",
-                              "civitai"
-                            ]
-                          },
-                          "label": {
-                            "type": "string"
-                          },
-                          "has_key": {
-                            "type": "boolean"
-                          }
-                        },
-                        "required": [
-                          "site",
-                          "label",
-                          "has_key"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "sources"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A ticket or licence is needed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such LoRA.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Not allowed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Refused, with what to change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many searches.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The source did not answer.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Busy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/stack/v1/loras/sources/{site}/search": {
-      "get": {
-        "tags": [
-          "LoRAs"
-        ],
-        "summary": "Search a source for LoRAs",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "huggingface",
-                "civitai"
-              ]
-            },
-            "required": true,
-            "name": "site",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "q",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Hits.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "hits": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "site": {
-                            "type": "string",
-                            "enum": [
-                              "huggingface",
-                              "civitai"
-                            ]
-                          },
-                          "remote_id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "base_model": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "downloads": {
-                            "type": "number"
-                          },
-                          "install_url": {
-                            "type": "string"
-                          },
-                          "file_name": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "bytes": {
-                            "type": "number",
-                            "nullable": true
-                          },
-                          "audience_hint": {
-                            "type": "string",
-                            "enum": [
-                              "all-ages",
-                              "adult-only"
-                            ]
-                          },
-                          "licence": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "page_url": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "site",
-                          "remote_id",
-                          "name",
-                          "base_model",
-                          "downloads",
-                          "install_url",
-                          "file_name",
-                          "bytes",
-                          "audience_hint",
-                          "licence",
-                          "page_url"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "hits"
-                  ]
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A ticket or licence is needed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such LoRA.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Not allowed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Refused, with what to change.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Too many searches.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The source did not answer.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Busy.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error",
-                    "code"
                   ]
                 }
               }
