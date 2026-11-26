@@ -3,13 +3,11 @@ import { ROLE_IDS } from "@/roles";
 import { getModel } from "@/lib/modelStore";
 import { loadedRoleForModel, selectedModel } from "@/lib/supervisor";
 import { catalogPins } from "@/lib/tidy";
-import { listLoras, LORA_BASE_LTX25 } from "@/video/loras";
+import { listLoras } from "@/video/loras";
 import { settingValues } from "@/settings";
-import { PART_DEFS } from "@/lib/partDefs";
+import { PART_DEFS, LORA_BASE_MODEL_IDS } from "@/lib/partDefs";
 import { impactOf, buildLinks, type Action, type Facts, type Impact, type Link } from "@/lib/relationships";
 
-/** LoRA base name to the model that carries it (the one place this is said; tidy.ts used to hard-code it). */
-export const LORA_BASE_MODEL_IDS: Record<string, string> = { [LORA_BASE_LTX25]: "ltx-2-5-q8-distilled-mlx" };
 
 export function liveFacts(): Facts {
   const pins = catalogPins();

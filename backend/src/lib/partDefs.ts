@@ -3,6 +3,9 @@
 // StackPart records from it.
 import rows from "@/rows/partDefs.json";
 
+/** LoRA base name to the model that carries it (the one place this is said; model names belong in this table, rule E8). */
+export const LORA_BASE_MODEL_IDS: Record<string, string> = { "ltx-2.5": "ltx-2-5-q8-distilled-mlx" };
+
 export interface PartDef {
   id: string; kind: "model" | "tool" | "engine"; category: string; priority: number; label: string; neutralLabel: string; description: string; adultOnly: boolean; minorOnly?: boolean;
 }
