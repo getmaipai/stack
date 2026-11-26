@@ -98,6 +98,33 @@ async function download(url: URL, site: LoraInstallSite, token: string | null, p
   return done;
 }
 
+/**
+ * The download site's own adult check for the file about to be installed. Returns true (nsfw) when the site says so
+ * and also when it says nothing usable: no answer, an error, or a missing flag all fail toward nsfw.
+ * Civitai: the model's `nsfw` flag and the version's `nsfwLevel`. Hugging Face: the `not-for-all-audiences` tag.
+ */
+export async function siteSaysNsfw(site: LoraInstallSite, url: URL, token: string | null, fetchImpl: typeof fetch): Promise<boolean> {
+  try {
+    const headers: Record<string, string> = { accept: "application/json", "user-agent": "MaiPai-Stack", ...(token ? { authorization: `Bearer ${token}` } : {}) };
+    const signal = AbortSignal.timeout(10_000);
+    if (site === "civitai") {
+      const id = /\/api\/download\/models\/(\d+)/.exec(url.pathname)?.[1]; if (!id) return true;
+      const response = await fetchImpl(`https://civitai.com/api/v1/model-versions/${id}`, { headers, signal });
+      if (!response.ok) return true;
+      const body = await response.json() as { nsfwLevel?: unknown; model?: { nsfw?: unknown } };
+      const flag = body.model?.nsfw; const level = body.nsfwLevel;
+      if (typeof flag !== "boolean" && typeof level !== "number") return true;
+      return flag === true || (typeof level === "number" && level > 1);
+    }
+    const repo = url.pathname.split("/").slice(1, 3).join("/"); if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return true;
+    const response = await fetchImpl(`https://huggingface.co/api/models/${repo}`, { headers, signal });
+    if (!response.ok) return true;
+    const body = await response.json() as { tags?: unknown };
+    if (!Array.isArray(body.tags)) return true;
+    return body.tags.includes("not-for-all-audiences");
+  } catch { return true; }
+}
+
 export function startInstall<T>(input: InstallSource, adapter: InstallAdapter<T>, isBusy: () => boolean, setBusy: (id: string | null) => void, deps: { fetch?: typeof fetch } = {}): Job {
   const fetchImpl = deps.fetch ?? fetch;
   if (!LORA_INSTALL_SITES.includes(input.site)) throw new LoraError("bad_source", "The source is huggingface or civitai.", 422);
@@ -119,7 +146,10 @@ export function startInstall<T>(input: InstallSource, adapter: InstallAdapter<T>
       if (expected && sha256 !== expected) throw new LoraError("hash_mismatch", `The file does not match the fingerprint ${SITE_RULES[input.site].label} published for it, so it was not added. Try again; if it happens twice, the source changed the file.`, 422);
       const existing = adapter.get(`lora-${sha256.slice(0, 16)}`) as { id?: string } | undefined;
       if (existing) throw Object.assign(new LoraError(adapter.duplicateCode ?? "duplicate_lora", "This style is already in the library.", 409), { existingId: existing.id });
-      const record = await adapter.importFile({ path: part, name: input.name, licence: input.licence, licenceAcknowledged: input.licenceAcknowledged, sourceUrl: input.sourceUrl ?? null, classification: input.classification, strengthDefault: input.strengthDefault, triggerWords: input.triggerWords, addedBy: input.addedBy, declaredBase: input.baseModel ?? null, extraDescription: input.extraDescription ?? [], diskId: input.diskId ?? null });
+      // The nsfw tag starts from the site's own check; the caller can only raise it.
+      const nsfw = await siteSaysNsfw(input.site, url, token, fetchImpl);
+      const tag: LoraClass = nsfw || input.classification === "adult-only" ? "adult-only" : "all-ages";
+      const record = await adapter.importFile({ path: part, name: input.name, licence: input.licence, licenceAcknowledged: input.licenceAcknowledged, sourceUrl: input.sourceUrl ?? null, classification: tag, classificationOrigin: "site", strengthDefault: input.strengthDefault, triggerWords: input.triggerWords, addedBy: input.addedBy, declaredBase: input.baseModel ?? null, extraDescription: input.extraDescription ?? [], diskId: input.diskId ?? null });
       finishJob(job.id, { ok: true, result: { lora: record } });
     } catch (error) {
       const isLoraError = error instanceof Error && "code" in error && "status" in error;

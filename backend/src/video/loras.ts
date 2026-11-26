@@ -59,6 +59,8 @@ export interface LoraRecord {
   licence_class: "free" | "acknowledged";
   source_url: string | null;
   classification: LoraClass;
+  /** Where the nsfw tag (`classification`) came from: the download site's own check, or a Stack admin. */
+  classification_origin?: "site" | "admin";
   /** Why the file is adult-only when the importer asked for all-ages (the file's own metadata names adult content). */
   classification_note: string | null;
   strength_default: number;
@@ -274,6 +276,7 @@ export interface ImportInput {
   licenceAcknowledged?: boolean;
   sourceUrl?: string | null;
   classification?: LoraClass;
+  classificationOrigin?: "site" | "admin";
   strengthDefault?: number;
   triggerWords?: string[];
   addedBy?: string | null;
@@ -359,6 +362,7 @@ export async function importLora(input: ImportInput): Promise<LoraRecord> {
     const record: LoraRecord = {
       id, name, file: `${id}.safetensors`, sha256, bytes: stat.size, mtime_ms: Math.floor(statSync(target).mtimeMs), rank: info.rank, modules: info.modules, base_model: base,
       licence, licence_class: klass, source_url: input.sourceUrl?.slice(0, 2000) ?? null, classification,
+      ...(input.classificationOrigin ? { classification_origin: input.classificationOrigin } : {}),
       classification_note: words.adult && asked === "all-ages" ? "The file's own description names adult content, so it is adult-only." : null,
       strength_default: input.strengthDefault ?? 1, trigger_words: triggerWords, added_by: input.addedBy?.slice(0, 200) ?? null, added_at: new Date().toISOString(),
       media: "video", disk_id: input.diskId ?? null, status: "ready", removed_at: null, trash_until: null,
@@ -408,6 +412,7 @@ export function updateLora(id: string, patch: LoraPatch): Promise<LoraRecord> {
         if (words.adult) throw new LoraError("classification_locked", "This file's own description names adult content, so it stays adult-only.", 409);
       }
       next.classification = patch.classification;
+      next.classification_origin = "admin";
       next.classification_note = null;
     }
     records[index] = next;

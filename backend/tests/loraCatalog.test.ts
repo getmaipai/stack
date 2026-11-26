@@ -12,7 +12,7 @@ import { dataDir } from "@/lib/paths";
 import { getJob, __resetJobsForTests } from "@/lib/jobs";
 import { recordGlobalLicenceAcceptance } from "@/lib/licenceAcceptance";
 import { __resetLoraStoreForTests, legacyLoraDir, loraStorePath, mergeLegacyManifests, readAllLoras, writeAllLoras } from "@/lib/media/loraStore";
-import { assertLorasAllowed, getCatalog, importCatalog, listCatalog, patchCatalog, purgeCatalog, restoreCatalog, setAdultTicketVerifier, sweepLoraTrash, trashCatalog } from "@/lib/media/loraCatalog";
+import { assertLorasAllowed, getCatalog, importCatalog, listCatalog, patchCatalog, purgeCatalog, restoreCatalog, sweepLoraTrash, trashCatalog } from "@/lib/media/loraCatalog";
 import { __resetSourceLimitForTests, browseSource, setSourceKey, sourceKey, sourceStatus, startCatalogInstall, startLoraMove, __resetLoraMoveForTests } from "@/lib/media/loraSources";
 import { imageLoras, __resetImageLoraInstallForTests } from "@/images/loras";
 import { getLora as getVideoLora, resolveLoras as resolveVideoLoras } from "@/video/loras";
@@ -35,7 +35,7 @@ async function addPicture(seed: string, extra: { classification?: "all-ages" | "
 }
 
 beforeEach(() => {
-  __resetJobsForTests(); __resetImageLoraInstallForTests(); __resetLoraStoreForTests(); __resetSourceLimitForTests(); __resetLoraMoveForTests(); setAdultTicketVerifier(null);
+  __resetJobsForTests(); __resetImageLoraInstallForTests(); __resetLoraStoreForTests(); __resetSourceLimitForTests(); __resetLoraMoveForTests();
   for (const path of [loraStorePath(), join(dataDir, "licence-acceptances.json"), join(dataDir, "lora-source-keys.json"), join(legacyLoraDir("picture"), "manifest.json"), join(legacyLoraDir("video"), "manifest.json")]) rmSync(path, { force: true });
   rmSync(legacyLoraDir("picture"), { recursive: true, force: true }); rmSync(legacyLoraDir("video"), { recursive: true, force: true }); rmSync(join(dataDir, "loras"), { recursive: true, force: true });
   db.delete(disks).run();
@@ -86,27 +86,26 @@ test("fence on the video path: resolveLoras refuses an unknown id and an adult-o
   await expect(resolveVideoLoras([{ id: "lora-ccccccccccccccc0" }], "all-ages", "ltx-2.5")).rejects.toThrow(/No LoRA/);
 });
 
-test("lowering adult-only to all-ages needs Home's fresh ticket; raising and other edits need none", async () => {
+test("an admin sets or lowers the nsfw tag directly, no ticket; the origin becomes admin", async () => {
   const adult = await addPicture("dark", { classification: "adult-only" });
-  await expect(patchCatalog(adult.id, { classification: "all-ages" })).rejects.toMatchObject({ code: "ticket_required", status: 403 });
-  await expect(patchCatalog(adult.id, { classification: "all-ages", ticket: "t-1" })).rejects.toMatchObject({ code: "ticket_refused" });
-  const used = new Set<string>();
-  setAdultTicketVerifier(async (ticket) => { if (used.has(ticket)) return false; used.add(ticket); return ticket === "t-good" || ticket === "t-used"; });
-  expect((await patchCatalog(adult.id, { classification: "all-ages", ticket: "t-good" })).classification).toBe("all-ages");
+  expect(getCatalog(adult.id)!.classification_origin).toBeNull();
+  const lowered = await patchCatalog(adult.id, { classification: "all-ages" });
+  expect(lowered.classification).toBe("all-ages");
+  expect(lowered.classification_origin).toBe("admin");
   const safe = await addPicture("safe");
   expect((await patchCatalog(safe.id, { classification: "adult-only", name: "Renamed", description: "A soft look" })).classification).toBe("adult-only");
   expect(getCatalog(safe.id)!.name).toBe("Renamed");
   expect((getCatalog(safe.id)!.home as { description: string }).description).toBe("A soft look");
-  setAdultTicketVerifier(async () => { throw new Error("home down"); });
-  await expect(patchCatalog(safe.id, { classification: "all-ages", ticket: "x" })).rejects.toMatchObject({ code: "ticket_refused" });
 });
 
-test("PATCH route: a lowering without a ticket is 403", async () => {
+test("PATCH route: lowering the tag needs no ticket and the body no longer takes one", async () => {
   const adult = await addPicture("dark", { classification: "adult-only" });
   const response = await app.request(`/stack/v1/loras/${adult.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ classification: "all-ages" }) });
-  expect(response.status).toBe(403);
-  expect(((await response.json()) as { code: string }).code).toBe("ticket_required");
-  expect(getCatalog(adult.id)!.classification).toBe("adult-only");
+  expect(response.status).toBe(200);
+  const body = await response.json() as { classification: string; classification_origin: string };
+  expect(body.classification).toBe("all-ages");
+  expect(body.classification_origin).toBe("admin");
+  expect(getCatalog(adult.id)!.classification).toBe("all-ages");
 });
 
 test("trash: unusable at once, listed under removed, restorable, swept after 30 days", async () => {
@@ -159,7 +158,7 @@ test("a drive that is not connected shows drive_missing and the style is refused
 test("install: refused without the global licence accept, then installs onto a second drive using the saved key", async () => {
   const root = scratch(); drives.push(root); const disk = addDisk({ label: "Fast", rootPath: root, removable: false });
   const file = safetensors("dl"); const seen: Array<Record<string, string>> = [];
-  const fetch = (async (_url: string, init?: RequestInit) => { seen.push(Object.fromEntries(new Headers(init?.headers).entries())); return new Response(file, { status: 200, headers: { "content-length": String(file.length) } }); }) as unknown as typeof globalThis.fetch;
+  const fetch = (async (url: string, init?: RequestInit) => { if (url.includes("/api/models/")) return new Response(JSON.stringify({ tags: ["lora"] }), { status: 200 }); seen.push(Object.fromEntries(new Headers(init?.headers).entries())); return new Response(file, { status: 200, headers: { "content-length": String(file.length) } }); }) as unknown as typeof globalThis.fetch;
   const input = { media: "picture" as const, site: "huggingface" as const, url: "https://huggingface.co/owner/name/resolve/main/style.safetensors", name: "From HF", diskId: disk.id, licence: "mit", classification: "all-ages" as const };
   expect(() => startCatalogInstall(input, { fetch })).toThrow(/Accept the licences in the Stack admin/);
   recordGlobalLicenceAcceptance("test");
@@ -169,9 +168,43 @@ test("install: refused without the global licence accept, then installs onto a s
   expect(getJob(job.id)!.state).toBe("done");
   expect(seen[0]!.authorization).toBe("Bearer hf_secret_token_value");
   const id = `lora-${sha(file).slice(0, 16)}`;
-  expect(getCatalog(id)).toMatchObject({ media: "picture", disk_id: disk.id, status: "ready" });
+  expect(getCatalog(id)).toMatchObject({ media: "picture", disk_id: disk.id, status: "ready", classification: "all-ages", classification_origin: "site" });
   expect(existsSync(join(root, "loras", `${id}.safetensors`))).toBe(true);
   expect(() => startCatalogInstall({ ...input, diskId: "ghost" }, { fetch })).toThrow(/not connected/);
+});
+
+/** Installs one Civitai file; `check` answers the version lookup (the site's adult check). */
+async function installFromCivitai(seed: string, check: () => Response | Promise<Response>, classification?: "all-ages" | "adult-only") {
+  recordGlobalLicenceAcceptance("test");
+  const file = safetensors(seed);
+  const fetch = (async (url: string) => { if (url.includes("/api/v1/model-versions/")) return check(); return new Response(file, { status: 200, headers: { "content-length": String(file.length) } }); }) as unknown as typeof globalThis.fetch;
+  const job = startCatalogInstall({ media: "picture", site: "civitai", url: "https://civitai.com/api/download/models/777", name: `Civ ${seed}`, licence: "mit", ...(classification ? { classification } : {}) }, { fetch });
+  for (let i = 0; i < 300 && getJob(job.id)!.state === "running"; i++) await Bun.sleep(10);
+  expect(getJob(job.id)!.state).toBe("done");
+  return getCatalog(`lora-${sha(file).slice(0, 16)}`)!;
+}
+
+test("install: the site says nsfw -> tagged nsfw, origin site, even when the caller asked all-ages", async () => {
+  const record = await installFromCivitai("n1", () => new Response(JSON.stringify({ nsfwLevel: 4, model: { nsfw: true } }), { status: 200 }), "all-ages");
+  expect(record).toMatchObject({ classification: "adult-only", classification_origin: "site" });
+});
+
+test("install: the site says not nsfw -> tagged all-ages, origin site; a caller can still raise it", async () => {
+  const clean = () => new Response(JSON.stringify({ nsfwLevel: 1, model: { nsfw: false } }), { status: 200 });
+  expect(await installFromCivitai("c1", clean)).toMatchObject({ classification: "all-ages", classification_origin: "site" });
+  expect(await installFromCivitai("c2", clean, "adult-only")).toMatchObject({ classification: "adult-only", classification_origin: "site" });
+});
+
+test("install: the check is unavailable, errors, or leaves the flag out -> tagged nsfw", async () => {
+  expect((await installFromCivitai("u1", () => { throw new Error("offline"); }, "all-ages")).classification).toBe("adult-only");
+  expect((await installFromCivitai("u2", () => new Response("no", { status: 503 }), "all-ages")).classification).toBe("adult-only");
+  expect((await installFromCivitai("u3", () => new Response(JSON.stringify({ model: {} }), { status: 200 }), "all-ages")).classification).toBe("adult-only");
+});
+
+test("install: an admin can lower a site-tagged nsfw style afterwards", async () => {
+  const record = await installFromCivitai("l1", () => new Response("no", { status: 500 }));
+  expect(record).toMatchObject({ classification: "adult-only", classification_origin: "site" });
+  expect(await patchCatalog(record.id, { classification: "all-ages" })).toMatchObject({ classification: "all-ages", classification_origin: "admin" });
 });
 
 test("move: copies to another drive, checks the fingerprint, switches the record, removes the original; a failed check keeps the original", async () => {

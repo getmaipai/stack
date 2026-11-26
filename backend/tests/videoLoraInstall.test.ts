@@ -52,16 +52,17 @@ afterEach(async () => { for (const lora of listLoras()) await removeLora(lora.id
 
 test("a Hugging Face file installs: redirect to the CDN, token only to huggingface.co, hash recorded, job names nothing", async () => {
   const bytes = loraBytes("a");
-  const { fetch, seen } = scripted((url) => url.startsWith("https://huggingface.co/") ? redirect("https://cdn-lfs.huggingface.co/blob/abc") : ok(bytes));
+  const { fetch, seen } = scripted((url) => url.startsWith("https://huggingface.co/api/models/") ? new Response(JSON.stringify({ tags: ["lora"] }), { status: 200 }) : url.startsWith("https://huggingface.co/") ? redirect("https://cdn-lfs.huggingface.co/blob/abc") : ok(bytes));
   const job = startVideoLoraInstall(base({ token: "hf_secret_token", sha256Expected: sha(bytes).toUpperCase() }), { fetch });
   expect(JSON.stringify(job)).not.toContain("owner/name");
   expect(JSON.stringify(job)).not.toContain("hf_secret_token");
   const done = await finish(job.id);
   expect(done.state).toBe("done");
   expect(done.result).toMatchObject({ lora: { sha256: sha(bytes), base_model: "ltx-2.5", classification: "all-ages" } });
-  expect(seen).toHaveLength(2);
+  expect(seen).toHaveLength(3);
   expect(seen[0]!.headers.authorization).toBe("Bearer hf_secret_token");
   expect(seen[1]!.headers.authorization).toBeUndefined();
+  expect(seen[2]!.url).toBe("https://huggingface.co/api/models/owner/name");
   expect(JSON.stringify(getJob(job.id))).not.toContain("hf_secret_token");
   expect(parts()).toEqual([]);
   expect(listLoras()).toHaveLength(1);

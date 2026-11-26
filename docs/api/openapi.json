@@ -24229,7 +24229,18 @@
                             "enum": [
                               "all-ages",
                               "adult-only"
-                            ]
+                            ],
+                            "description": "The nsfw tag: `adult-only` means nsfw, `all-ages` means not. Home reads it and applies its own rules."
+                          },
+                          "classification_origin": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "site",
+                              "admin",
+                              null
+                            ],
+                            "description": "Who set the tag: the download site's check or an admin."
                           },
                           "sha256": {
                             "type": "string"
@@ -24309,6 +24320,7 @@
                           "name",
                           "base_model",
                           "classification",
+                          "classification_origin",
                           "sha256",
                           "bytes",
                           "strength_default",
@@ -24373,7 +24385,8 @@
                     "enum": [
                       "all-ages",
                       "adult-only"
-                    ]
+                    ],
+                    "description": "Sets the nsfw tag (`adult-only` is nsfw). An admin may lower or raise it; no ticket."
                   },
                   "strength_default": {
                     "type": "number"
@@ -24408,11 +24421,7 @@
                       "adults",
                       "people"
                     ],
-                    "description": "Who may use it, written to `home.availability.who`. No ticket needed."
-                  },
-                  "ticket": {
-                    "type": "string",
-                    "description": "Home's fresh single-use adult-lock ticket. Required to change adult-only to all-ages; marking adult-only needs none."
+                    "description": "Who may use it, written to `home.availability.who`."
                   }
                 }
               }
@@ -24448,7 +24457,18 @@
                       "enum": [
                         "all-ages",
                         "adult-only"
-                      ]
+                      ],
+                      "description": "The nsfw tag: `adult-only` means nsfw, `all-ages` means not. Home reads it and applies its own rules."
+                    },
+                    "classification_origin": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "site",
+                        "admin",
+                        null
+                      ],
+                      "description": "Who set the tag: the download site's check or an admin."
                     },
                     "sha256": {
                       "type": "string"
@@ -24528,6 +24548,7 @@
                     "name",
                     "base_model",
                     "classification",
+                    "classification_origin",
                     "sha256",
                     "bytes",
                     "strength_default",
@@ -24550,7 +24571,7 @@
             }
           },
           "403": {
-            "description": "A ticket or licence is needed.",
+            "description": "A licence is needed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -24759,7 +24780,7 @@
             }
           },
           "403": {
-            "description": "A ticket or licence is needed.",
+            "description": "A licence is needed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -24960,7 +24981,18 @@
                       "enum": [
                         "all-ages",
                         "adult-only"
-                      ]
+                      ],
+                      "description": "The nsfw tag: `adult-only` means nsfw, `all-ages` means not. Home reads it and applies its own rules."
+                    },
+                    "classification_origin": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "site",
+                        "admin",
+                        null
+                      ],
+                      "description": "Who set the tag: the download site's check or an admin."
                     },
                     "sha256": {
                       "type": "string"
@@ -25040,6 +25072,7 @@
                     "name",
                     "base_model",
                     "classification",
+                    "classification_origin",
                     "sha256",
                     "bytes",
                     "strength_default",
@@ -25062,7 +25095,7 @@
             }
           },
           "403": {
-            "description": "A ticket or licence is needed.",
+            "description": "A licence is needed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -25272,7 +25305,7 @@
             }
           },
           "403": {
-            "description": "A ticket or licence is needed.",
+            "description": "A licence is needed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -25527,7 +25560,7 @@
             }
           },
           "403": {
-            "description": "A ticket or licence is needed.",
+            "description": "A licence is needed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -25784,7 +25817,7 @@
             }
           },
           "403": {
-            "description": "A ticket or licence is needed.",
+            "description": "A licence is needed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -26072,7 +26105,7 @@
             }
           },
           "403": {
-            "description": "A ticket or licence is needed.",
+            "description": "A licence is needed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -26339,7 +26372,7 @@
             }
           },
           "403": {
-            "description": "A ticket or licence is needed.",
+            "description": "A licence is needed.",
             "content": {
               "application/json": {
                 "schema": {

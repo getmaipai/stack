@@ -6,8 +6,10 @@
 //
 // The second fence. A request that names an adult-only LoRA must say its audience is `adult`
 // (the libraries' `resolve` enforces that); an id the Stack cannot find, or that is in the
-// trash, counts as adult-only and is refused too. Lowering a LoRA from adult-only to all-ages
-// needs Home's fresh single-use ticket, checked here through `setAdultTicketVerifier`.
+// trash, counts as adult-only and is refused too. `classification` is the nsfw tag: `adult-only`
+// means nsfw. The Stack does not know users. The tag comes from the download site's check at install
+// or from an admin (a Stack admin, or Home calling with its token after Home's own rules said yes).
+// Changing it needs no ticket here; who may lower it is Home's rule (owner decision 2026-11-26).
 import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Lora as SpecLora } from "@maipai/spec/gen/ts/lora.js";
@@ -20,8 +22,10 @@ import { updateLora as updateVideoLora, isLoraId } from "@/video/loras";
 
 export const TRASH_DAYS = 30;
 export type LoraStatus = "ready" | "drive_missing" | "installing" | "failed";
-export interface CatalogLora extends Omit<LoraRecord, "status"> {
+export interface CatalogLora extends Omit<LoraRecord, "status" | "classification_origin"> {
   media: LoraMedia;
+  /** Who set the nsfw tag: the download site's check, an admin, or null for a record from before this was kept. */
+  classification_origin: "site" | "admin" | null;
   disk_id: string | null;
   disk_label: string;
   /** `drive_missing` is worked out on every read; the rest is stored. */
@@ -41,7 +45,7 @@ function view(record: LoraRecord): CatalogLora {
     ...record, media: record.media ?? "picture", disk_id: diskId, disk_label: diskStatus(diskId).label,
     status: problem ? "drive_missing" : record.status ?? "ready", removed_at: record.removed_at ?? null, trash_until: record.trash_until ?? null,
     status_note: problem ?? (record.status === "failed" ? "The install did not finish. Remove it and add it again." : record.status === "installing" ? "Still downloading." : null),
-    preview: record.preview ?? null, home: record.home ?? null,
+    classification_origin: record.classification_origin ?? null, preview: record.preview ?? null, home: record.home ?? null,
   };
 }
 
@@ -71,19 +75,12 @@ export function getCatalog(id: string): CatalogLora | null {
   return record ? view(record) : null;
 }
 
-export type AdultTicketVerifier = (ticket: string, loraId: string) => Promise<boolean>;
-let verifier: AdultTicketVerifier | null = null;
-/** Home's paired token is how the Stack checks a ticket: whatever calls Home sets this. Until one is set every lowering is refused (fail closed). */
-export function setAdultTicketVerifier(next: AdultTicketVerifier | null): void { verifier = next; }
-
 export interface CatalogPatch {
   name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; description?: string; kind?: string;
-  /** Who may use it, written to `home.availability.who`; no ticket needed. */
+  /** Who may use it, written to `home.availability.who`. */
   availabilityWho?: "admins" | "adults" | "people";
   /** Fields only Home reads, kept in the record's `home` part: add-ins, trigger position, whether chat may suggest it, the strength range. Anything else is refused. */
   homePatch?: Record<string, unknown>;
-  /** Home's fresh single-use ticket, required to change adult-only to all-ages. */
-  ticket?: string;
 }
 const HOME_KEYS = ["allow_suggesting", "trigger_position", "positive_addins", "negative_addins", "avoid_as_positive", "strength"];
 const words = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 8 && value.every((word) => typeof word === "string" && word.length <= 120);
@@ -109,13 +106,6 @@ export async function patchCatalog(id: string, patch: CatalogPatch): Promise<Cat
   if (patch.classification !== undefined && !["all-ages", "adult-only"].includes(patch.classification)) throw new LoraError("bad_classification", "The classification is all-ages or adult-only.", 422);
   if (patch.description !== undefined && patch.description.length > 140) throw new LoraError("bad_description", "Keep the description to 140 characters or fewer.", 422);
   if (patch.kind !== undefined && !KINDS.includes(patch.kind)) throw new LoraError("bad_kind", "The kind is style, character, motion or other.", 422);
-  const lowering = found.classification === "adult-only" && patch.classification === "all-ages";
-  if (lowering) {
-    if (!patch.ticket) throw new LoraError("ticket_required", "Making an adult-only style available to everyone needs the adult lock opened in Home first. Open it in Home, then try again.", 403);
-    let ok = false;
-    try { ok = verifier ? await verifier(patch.ticket, id) : false; } catch { ok = false; }
-    if (!ok) throw new LoraError("ticket_refused", "Home did not accept that confirmation, or it has been used already. Open the adult lock in Home again, then try again.", 403);
-  }
   const libraryPatch = { name: patch.name, classification: patch.classification, strengthDefault: patch.strengthDefault, triggerWords: patch.triggerWords, sourceUrl: patch.sourceUrl };
   if (media === "video") await updateVideoLora(id, libraryPatch); else await imageLoras.update(id, libraryPatch);
   if (patch.availabilityWho !== undefined && !WHO.includes(patch.availabilityWho)) throw new LoraError("bad_availability", "Who can use it is admins, adults or people.", 422);
