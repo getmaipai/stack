@@ -73,3 +73,12 @@ test("availability_who writes home.availability.who and keeps people", async () 
   expect(home.availability).toEqual({ who: "admins", people: ["p1"] });
   expect(home.description).toBe("x");
 });
+
+test("home_patch keeps Home-only fields in the record's home part and refuses anything else", async () => {
+  const item = await imageLoras.importFile({ path: mkLora(), name: "Ink", licence: "mit", classification: "all-ages", diskId: null });
+  await patchCatalog(item.id, { homePatch: { allow_suggesting: false, trigger_position: "end", positive_addins: ["soft light"], strength: { min: 0.2, default: 0.8, max: 1.4 } } });
+  expect(getCatalog(item.id)!.home).toMatchObject({ allow_suggesting: false, trigger_position: "end", positive_addins: ["soft light"], strength: { min: 0.2, default: 0.8, max: 1.4 } });
+  await expect(patchCatalog(item.id, { homePatch: { classification: "adult-only" } })).rejects.toMatchObject({ code: "bad_home_patch", status: 422 });
+  await expect(patchCatalog(item.id, { homePatch: { strength: { min: 1, default: 0.5, max: 2 } } })).rejects.toMatchObject({ code: "bad_home_patch" });
+  await expect(patchCatalog(item.id, { homePatch: { positive_addins: "x" } })).rejects.toMatchObject({ code: "bad_home_patch" });
+});

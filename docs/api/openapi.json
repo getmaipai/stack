@@ -24394,6 +24394,13 @@
                   "kind": {
                     "type": "string"
                   },
+                  "home_patch": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    },
+                    "description": "Fields only Home reads, kept in the record's `home` part: allow_suggesting, trigger_position, positive_addins, negative_addins, avoid_as_positive, strength {min, default, max}. Other keys are refused."
+                  },
                   "availability_who": {
                     "type": "string",
                     "enum": [

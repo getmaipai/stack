@@ -80,8 +80,24 @@ export interface CatalogPatch {
   name?: string; classification?: LoraClass; strengthDefault?: number; triggerWords?: string[]; sourceUrl?: string | null; description?: string; kind?: string;
   /** Who may use it, written to `home.availability.who`; no ticket needed. */
   availabilityWho?: "admins" | "adults" | "people";
+  /** Fields only Home reads, kept in the record's `home` part: add-ins, trigger position, whether chat may suggest it, the strength range. Anything else is refused. */
+  homePatch?: Record<string, unknown>;
   /** Home's fresh single-use ticket, required to change adult-only to all-ages. */
   ticket?: string;
+}
+const HOME_KEYS = ["allow_suggesting", "trigger_position", "positive_addins", "negative_addins", "avoid_as_positive", "strength"];
+const words = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 8 && value.every((word) => typeof word === "string" && word.length <= 120);
+const range = (value: unknown): value is { min: number; default: number; max: number } => {
+  const v = value as { min?: unknown; default?: unknown; max?: unknown } | null;
+  return !!v && [v.min, v.default, v.max].every((n) => typeof n === "number" && n >= 0 && n <= 2) && (v.min as number) <= (v.default as number) && (v.default as number) <= (v.max as number);
+};
+/** The Home-only fields a PATCH may carry, checked one by one. A key outside the list, or a value of the wrong shape, is a plain 422. */
+export function checkHomePatch(patch: Record<string, unknown>): Record<string, unknown> {
+  for (const [key, value] of Object.entries(patch)) {
+    const good = key === "allow_suggesting" ? typeof value === "boolean" : key === "trigger_position" ? value === "start" || value === "end" : key === "strength" ? range(value) : HOME_KEYS.includes(key) && words(value);
+    if (!HOME_KEYS.includes(key) || !good) throw new LoraError("bad_home_patch", `The setting ${key.slice(0, 40)} is not one this can change, or its value is not allowed.`, 422);
+  }
+  return patch;
 }
 const WHO = ["admins", "adults", "people"];
 const KINDS = ["style", "character", "motion", "other"];
@@ -103,11 +119,13 @@ export async function patchCatalog(id: string, patch: CatalogPatch): Promise<Cat
   const libraryPatch = { name: patch.name, classification: patch.classification, strengthDefault: patch.strengthDefault, triggerWords: patch.triggerWords, sourceUrl: patch.sourceUrl };
   if (media === "video") await updateVideoLora(id, libraryPatch); else await imageLoras.update(id, libraryPatch);
   if (patch.availabilityWho !== undefined && !WHO.includes(patch.availabilityWho)) throw new LoraError("bad_availability", "Who can use it is admins, adults or people.", 422);
-  if (patch.description !== undefined || patch.kind !== undefined || patch.availabilityWho !== undefined) {
+  const homePatch = patch.homePatch ? checkHomePatch(patch.homePatch) : null;
+  if (patch.description !== undefined || patch.kind !== undefined || patch.availabilityWho !== undefined || homePatch) {
     const all = readAllLoras(); const index = all.findIndex((record) => record.id === id);
     const home = { ...(all[index]!.home ?? {}) } as Record<string, unknown>;
     if (patch.description !== undefined) home.description = patch.description;
     if (patch.kind !== undefined) home.kind = patch.kind;
+    if (homePatch) Object.assign(home, homePatch);
     if (patch.availabilityWho !== undefined) {
       const current = home.availability && typeof home.availability === "object" ? home.availability as Record<string, unknown> : null;
       home.availability = current ? { ...current, who: patch.availabilityWho } : { who: patch.availabilityWho, people: [] };
