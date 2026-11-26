@@ -21,9 +21,9 @@ export const MODE_WORDS = {
   custom: { title: "Custom", text: "Your own choices, checked for fit." },
 } as const;
 
-/** Settings that belong on the Settings screen: the role switches have their own screens, and secrets are never shown. */
+/** Settings that belong on the Settings screen: the role switches have their own screens. Secrets are shown, but only as a box to paste a new value into; the stored value never leaves the Stack. */
 export function settingsForScreen(doc: SettingsDoc, showAdvanced: boolean): { id: string; label: string; items: Setting[] }[] {
-  const keep = (s: Setting) => !s.key.startsWith("stack.roles.") && !s.secret && (showAdvanced || s.level === "basic");
+  const keep = (s: Setting) => !s.key.startsWith("stack.roles.") && (showAdvanced || s.level === "basic");
   return doc.sections
     .map((sec) => ({ id: sec.id, label: sec.label, items: doc.settings.filter((s) => s.section.id === sec.id && keep(s)).sort((a, b) => a.section.order - b.section.order) }))
     .filter((g) => g.items.length > 0);

@@ -14,20 +14,31 @@ import { coerce, pendingKeys, settingValue, settingsForScreen } from "./manage";
 import { ConfirmButton, Failure, Loading, plainError, useLoad } from "./shared";
 import type { Notify } from "./screens";
 
-function Field({ s, value, error, onChange }: { s: Setting; value: SettingValue; error?: string; onChange: (raw: string | boolean) => void }) {
+/** Whether the Stack says a secret already has a value. The API only reveals whether it is set, never the value itself. */
+function secretIsSet(s: Setting): boolean {
+  const v = s.pending ?? s.in_effect;
+  return v !== null && v !== undefined && v !== "";
+}
+
+function Field({ s, value, typed, error, onChange, onRemove }: { s: Setting; value: SettingValue; typed?: string; error?: string; onChange: (raw: string | boolean) => void; onRemove?: () => void }) {
   const id = `set-${s.key}`;
   return (
     <div className="flex flex-col gap-1.5 py-3">
       <div className="flex items-center gap-3">
         <Label htmlFor={id} className="me-auto text-sm font-medium">{s.label}{s.level !== "basic" && <Pill className="ms-2">{s.level}</Pill>}</Label>
-        {s.selector === "boolean" && <Switch id={id} checked={value === true} onCheckedChange={(v) => onChange(v)} />}
-        {s.selector === "select" && (
+        {s.secret && <span className="text-xs text-muted-foreground" role="status">{secretIsSet(s) ? "Set" : "Not set"}</span>}
+        {s.secret && <Button variant="ghost" size="sm" onClick={() => onRemove?.()}>Remove</Button>}
+        {!s.secret && s.selector === "boolean" && <Switch id={id} checked={value === true} onCheckedChange={(v) => onChange(v)} />}
+        {!s.secret && s.selector === "select" && (
           <Select value={String(value ?? "")} onValueChange={(v) => onChange(v)}>
             <SelectTrigger id={id} className="w-56 max-w-[55vw]"><SelectValue /></SelectTrigger>
             <SelectContent>{(s.range?.options ?? []).map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
           </Select>
         )}
-        {(s.selector === "number" || s.selector === "text") && (
+        {s.secret && (
+          <Input id={id} type="password" autoComplete="off" placeholder="Paste to set" className="w-56 max-w-[55vw]" value={typed ?? ""} aria-invalid={error ? true : undefined} onChange={(e) => onChange(e.target.value)} />
+        )}
+        {!s.secret && (s.selector === "number" || s.selector === "text") && (
           <Input id={id} className="w-56 max-w-[55vw]" inputMode={s.selector === "number" ? "numeric" : undefined} value={String(value ?? "")} aria-invalid={error ? true : undefined} onChange={(e) => onChange(e.target.value)} />
         )}
       </div>
@@ -52,6 +63,12 @@ export function SettingsScreen({ notify }: { refresh: () => void; notify: Notify
   const dirty = Object.keys(draft).length;
 
   function change(s: Setting, raw: string | boolean) {
+    // An emptied secret box means "leave unchanged", so the key drops out of the draft instead of staging "".
+    if (s.secret && typeof raw === "string" && raw === "") {
+      setDraft((d) => { const { [s.key]: _gone, ...rest } = d; return rest; });
+      setErrors((e) => { const { [s.key]: _gone, ...rest } = e; return rest; });
+      return;
+    }
     const result = typeof raw === "boolean" ? { value: raw } : coerce(s, raw);
     if ("error" in result) {
       setErrors((e) => ({ ...e, [s.key]: result.error }));
@@ -102,7 +119,7 @@ export function SettingsScreen({ notify }: { refresh: () => void; notify: Notify
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className="divide-y border-t px-5 pb-2">
-                {g.items.map((s) => <Field key={s.key} s={s} value={settingValue(s, draft)} error={errors[s.key]} onChange={(raw) => change(s, raw)} />)}
+                {g.items.map((s) => <Field key={s.key} s={s} value={settingValue(s, draft)} typed={s.key in draft ? String(draft[s.key] ?? "") : undefined} error={errors[s.key]} onChange={(raw) => change(s, raw)} onRemove={() => { setDraft((d) => ({ ...d, [s.key]: "" })); setErrors((e) => { const { [s.key]: _gone, ...rest } = e; return rest; }); }} />)}
               </CardContent>
             </CollapsibleContent>
           </Card>
