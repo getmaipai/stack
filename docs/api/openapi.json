@@ -23471,6 +23471,66 @@
         }
       }
     },
+    "/stack/v1/admin-access": {
+      "get": {
+        "tags": [
+          "Status"
+        ],
+        "summary": "Where the admin page can be opened from another computer (the Tailscale listener's real state)",
+        "responses": {
+          "200": {
+            "description": "The listener state, the sign-in page URL when it is up, and one plain sentence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tailscale": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "listening",
+                            "restart_pending",
+                            "no_address",
+                            "off"
+                          ]
+                        },
+                        "url": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "address": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "port": {
+                          "type": "integer"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "url",
+                        "address",
+                        "port",
+                        "message"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "tailscale"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/check": {
       "post": {
         "tags": [
