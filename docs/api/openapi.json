@@ -31377,6 +31377,158 @@
         }
       }
     },
+    "/stack/v1/engine-logs": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Recent output of every engine, redacted (admin session only)",
+        "description": "Secrets and prompt text are replaced before a line is stored. Needs a signed-in admin session; Home's token does not open it. `tail` is 1 to 500 lines per role (default 100).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "example": 100
+            },
+            "required": false,
+            "name": "tail",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per role, the newest lines, oldest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "roles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "role": {
+                            "type": "string"
+                          },
+                          "lines": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "seq": {
+                                  "type": "integer"
+                                },
+                                "at": {
+                                  "type": "string"
+                                },
+                                "role": {
+                                  "type": "string"
+                                },
+                                "line": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "seq",
+                                "at",
+                                "role",
+                                "line"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "role",
+                          "lines"
+                        ]
+                      }
+                    },
+                    "redacted": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "roles",
+                    "redacted"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No admin session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/engine-logs/stream": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Live engine output (server-sent events, admin session only)",
+        "responses": {
+          "200": {
+            "description": "One `data:` frame per redacted line, as JSON.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No admin session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/helper/status": {
       "get": {
         "tags": [

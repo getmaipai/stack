@@ -122,6 +122,7 @@ export const api = {
   engines: () => call<{ engines: Engine[] }>("GET", "/stack/v1/engines"),
   restartEngine: (name: string) => call<{ ok: boolean; reason?: string }>("POST", `/stack/v1/engines/${encodeURIComponent(name)}/restart`),
   logs: (tail = 200) => call<{ lines: string[] }>("GET", `/stack/v1/logs?tail=${tail}`),
+  engineLogs: (tail = 100) => call<{ roles: Array<{ role: string; lines: Array<{ seq: number; at: string; line: string }> }> }>("GET", `/stack/v1/engine-logs?tail=${tail}`),
   resourcesSummary: () => call<Summary>("GET", "/stack/v1/resources/summary"),
   resourcesHistory: (range: Range) => call<History>("GET", `/stack/v1/resources/history?range=${range}`),
   settings: () => call<SettingsDoc>("GET", "/stack/v1/settings"),

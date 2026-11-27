@@ -88,6 +88,34 @@ function engineWord(e: Engine): string {
   return e.running ? "Running" : "Ready, not started";
 }
 
+/** Live engine output, redacted by the Stack before it is stored (secrets and prompt text never reach this page); refreshed every few seconds while open. */
+function EngineOutput() {
+  const [roles, setRoles] = useState<Array<{ role: string; lines: Array<{ seq: number; at: string; line: string }> }>>([]);
+  const [pick, setPick] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => api.engineLogs(100).then((r) => { if (live) { setRoles(r.roles); setError(null); } }).catch((e: unknown) => { if (live) setError(e instanceof ApiError ? e.message : "Engine output could not be read."); });
+    void load();
+    const timer = setInterval(() => { void load(); }, 3000);
+    return () => { live = false; clearInterval(timer); };
+  }, []);
+  const current = roles.find((r) => r.role === pick) ?? roles[0];
+  return (
+    <Collapsible className="flex flex-col gap-2">
+      <CollapsibleTrigger asChild><Button variant="ghost" size="sm" className="group self-start text-muted-foreground"><ChevronDown aria-hidden="true" className="transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none" />Live engine output</Button></CollapsibleTrigger>
+      <CollapsibleContent className="flex flex-col gap-2">
+        {error ? <Problem message={error} /> : roles.length === 0 ? <p className="text-sm text-muted-foreground">No engine has printed anything since the Stack started.</p> : (
+          <>
+            <div className="flex flex-wrap gap-2">{roles.map((r) => <Button key={r.role} size="sm" variant={r.role === current?.role ? "default" : "outline"} onClick={() => setPick(r.role)}>{r.role}</Button>)}</div>
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl border bg-card p-4 text-xs leading-5 text-card-foreground" tabIndex={0} aria-label="Engine output">{current?.lines.map((l) => l.line).join("\n") || "No output yet."}</pre>
+          </>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export function Engines({ snap, refresh, notify }: { snap: Snapshot; refresh: () => void; notify: Notify }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[] | null>(null);
@@ -153,6 +181,7 @@ export function Engines({ snap, refresh, notify }: { snap: Snapshot; refresh: ()
           )}
         </CollapsibleContent>
       </Collapsible>
+      <EngineOutput />
     </div>
   );
 }

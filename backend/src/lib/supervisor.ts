@@ -55,6 +55,7 @@ import { raise, resolve as resolveHealth } from "@/lib/health";
 import { ROLES, ROLE_IDS, MODE_FOLLOWER_ROLES, PRIMARY_ROLE, HEAVY_ROLE, PICTURE_READER_ROLE, rolesWith, type RoleId, type RoleState } from "@/roles";
 import { getMemoryReader } from "@/lib/memory";
 import { metalHostFault } from "@/lib/hostProbe";
+import { captureEngineOutput } from "@/lib/engineLogs";
 import { classifyCrash, describeStartFailure, stderrEvidence, type CrashVerdict } from "@/lib/crashClassifier";
 import { memoryLevel } from "@/lib/memoryState";
 import { hfHubRoot } from "@/lib/store/layout";
@@ -1864,7 +1865,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
   const tree = plan.tree ? new TreeSnapshot(handle.pid) : null;
   const owned = registerOwned(role, tree ?? handle.pid);
   const client = plan.client ? plan.client(`http://127.0.0.1:${port}`) : new OpenAIEngineClient(`http://127.0.0.1:${port}`, plan.healthPath, plan.apiKey);
-  const stderrText = handle.stderr ? new Response(handle.stderr).text() : Promise.resolve("");
+  const stderrText = handle.stderr ? captureEngineOutput(role, handle.stderr as ReadableStream<Uint8Array>) : Promise.resolve("");
   let exited = false;
   const exitPromise = handle.exited.then((code) => { exited = true; return code; });
   try {
