@@ -10,6 +10,8 @@ import { __resetPartChoicesForTests } from "@/lib/partChoices";
 import { __resetSettingsForTests } from "@/settings";
 import { __setProfileDepsForTests } from "@/routes/profiles";
 import { resolveTier, TIER_CANDIDATES } from "@/lib/tiers";
+import { __resetGovernorForTests, __setGovernorTuningForTestsOnly, admit, tierRoomBytes } from "@/lib/governor";
+import { recommend } from "@/lib/profilePlanner";
 import type { HardwareInfo } from "@/lib/hardware";
 
 const hw = (gb: number): HardwareInfo => ({ platform: "darwin", arch: "arm64", totalRamGb: gb, cpuCount: 8, isAppleSilicon: true, unifiedMemoryGb: gb, cudaDevices: [], freeDiskBytes: 1e12, osVersion: "test" });
@@ -28,9 +30,9 @@ beforeEach(() => {
   });
   __setProfileDepsForTests({ probe: async () => hw(memory), install: async (pin) => ({ job: `job-${pin.id}`, done: Promise.resolve() }) });
 });
-afterEach(() => { __setChoicesDepsForTests(null); __setProfileDepsForTests(null); __resetSettingsForTests(); __resetChoicesForTests(); __resetPartChoicesForTests(); });
+afterEach(() => { __resetGovernorForTests(); __setChoicesDepsForTests(null); __setProfileDepsForTests(null); __resetSettingsForTests(); __resetChoicesForTests(); __resetPartChoicesForTests(); });
 
-type Level = { tier: string; options: Array<{ model: string; fits: boolean }>; recommended: { model: string | null } };
+type Level = { tier: string; chosen: string | null; chosen_by: string; options: Array<{ model: string; fits: boolean }>; recommended: { model: string | null } };
 type Cat = { id: string; tiers: Level[] };
 async function view(gb: number): Promise<{ profile: string; categories: Cat[] }> {
   memory = gb;
@@ -52,6 +54,54 @@ test("a 128 GB computer recommends the owner's lineup at every level", async () 
     stems: { standard: "htdemucs" },
     wakeword: { standard: "wakeword" },
   });
+});
+
+// The full 128 GB table, read through the code that serves GET /stack/v1/choices (recommended and, with no household pick,
+// what each level uses), with the governor's ledger set the way a 128 GB hub holds it.
+const GIB = 1_073_741_824;
+const LINEUP = {
+  chat: { reduced: "qwen3-4b-q4-k-m", standard: "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m", boost: "qwen3.8-27b-ud-q4-k-m", max: "qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs" },
+  coding: { standard: "qwen3.8-27b-ud-q4-k-m", max: "qwen3-8-flash-next-177b-huihui-abliterated-iq4-xs" },
+  pictures: { standard: "flux3-image-klein", boost: "flux3-image-klein", max: "flux3-image-klein" },
+  video: { standard: "ltx-2-5-q8-distilled-mlx", boost: "ltx-2-5-q8-distilled-mlx", max: "ltx-2-5-bf16-distilled-mlx-max" },
+  music: { standard: "ace-step-1-5-turbo", boost: null, max: null },
+  voice: { reduced: "voxcpm2-4bit", standard: "voxcpm2-bf16" },
+};
+const LINEUP_CATEGORIES = Object.keys(LINEUP);
+const chosenTable = (categories: Cat[]) => Object.fromEntries(categories.filter((item) => LINEUP_CATEGORIES.includes(item.id)).map((item) => [item.id, Object.fromEntries(item.tiers.map((level) => [level.tier, level.chosen]))]));
+async function hub(reserved: Array<[string, string, number]>): Promise<void> {
+  __resetGovernorForTests();
+  __setGovernorTuningForTestsOnly({ totalMemoryBytes: 128 * GIB, freeMemoryBytes: 100 * GIB, tier: "p128" });
+  for (const [id, role, bytes] of reserved) await admit({ id, role: role as never, kind: "resident", class: "reserved", requestedBytes: bytes });
+}
+
+test("the full 128 GB table is the owner's lineup at every category and level, with nothing loaded", async () => {
+  await hub([]);
+  const read = await view(128);
+  expect(table(read.categories, LINEUP_CATEGORIES)).toEqual(LINEUP);
+  expect(chosenTable(read.categories)).toEqual(LINEUP);
+});
+
+test("with the hub's resident set loaded (the 35B's Splash budget, judge, embeddings, speech in and out), video Standard is LTX-2.5 at its Standard size", async () => {
+  // The ledger a 128 GB hub showed on 2026-11-27 (GET /stack/v1/hardware/budget): chat 39.7 GB, judge 5.9, voice 7.5, speech-to-text 2.0, embeddings 0.2.
+  await hub([["chat", "chat", 39_728_447_488], ["judge", "judge", 5_882_101_760], ["tts", "tts", 7_530_321_248], ["stt", "stt", 1_958_936_576], ["embed", "embed", 204_112_880]]);
+  const room = tierRoomBytes();
+  const read = await view(128);
+  const video = read.categories.find((item) => item.id === "video")!.tiers.find((level) => level.tier === "standard")!;
+  expect(video.options.find((option) => option.model === "ltx-2-5-q8-distilled-mlx")?.fits).toBe(true);
+  // FLUX 3 Klein's catalogued peak (37.4 GB, not yet measured with mflux) needs a 62.3 GB room for Standard (0.6 of the room).
+  // Below that the H3 picture model is the Standard fallback; everything else is the lineup either way.
+  const flux = TIER_CANDIDATES.find((row) => row.id === "flux3-image-klein" && row.profiles.includes("p128"))!.peaks[0]!.peakBytes;
+  const pictureStandard = flux <= 0.6 * room ? "flux3-image-klein" : "minimax-h3-image";
+  const expected = { ...LINEUP, pictures: { ...LINEUP.pictures, standard: pictureStandard } };
+  expect(table(read.categories, LINEUP_CATEGORIES)).toEqual(expected);
+  expect(chosenTable(read.categories)).toEqual(expected);
+});
+
+test("the 128 GB planner counts the 35B as the resident chat model; smaller computers keep the 8B", () => {
+  const chatOf = (gb: number) => recommend({ hardware: hw(gb) }).custom_recommended!.plan.roles.find((role) => role.role === "chat")!.model;
+  expect(chatOf(128)).toBe("qwen3-6-35b-a3b-huihui-abliterated-q4-k-m");
+  for (const gb of [16, 32, 64, 96]) expect(chatOf(gb)).toBe("qwen3-8b-instruct-q4-k-m");
 });
 
 test("64 GB and 32 GB computers keep their own recommendations", async () => {

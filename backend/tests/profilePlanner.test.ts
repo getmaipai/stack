@@ -11,7 +11,7 @@ const summary = (gb: number): string => {
   return plan.roles.filter((r) => r.state !== "unavailable" || r.fit === "refused").map((r) => `${r.role}:${r.state}:${r.fit}${r.slot ? `:${r.slot}` : ""}${r.model && ["image", "video", "music"].includes(r.role) ? `=${r.model}` : ""}`).sort().join(" ");
 };
 
-// 96 and 128 GB follow the owner's 128 GB lineup (2026-11-25): FLUX 3 Klein is the Boost picture model there (96 GB looks one profile up), and the VoxCPM2 voice holds 0.5 GB more than Chatterbox.
+// 96 and 128 GB follow the owner's 128 GB lineup (2026-11-25): FLUX 3 Klein is the Boost picture model there (96 GB looks one profile up), the VoxCPM2 voice holds 0.5 GB more than Chatterbox, and the resident chat model at 128 GB is the 35B (23 GB).
 const GOLDEN: Record<number, { matched: ProfileId | null; tier: ProfileId; residentGb: number; roomGb: number; tight: boolean; roles: string }> = {
   16: { matched: "p16", tier: "p16", residentGb: 8.8, roomGb: 0, tight: true, roles: "chat:resident:fits embed:on_demand:queues:standard image:unavailable:refused judge:shared:fits music:unavailable:refused router:shared:fits stt:resident:fits tts:resident:fits video:unavailable:refused wakeword:installed:fits" },
   24: { matched: "p16", tier: "p16", residentGb: 8.8, roomGb: 8.4, tight: false, roles: "chat:resident:fits embed:on_demand:fits:standard image:on_demand:fits:standard=minimax-h3-image judge:shared:fits music:unavailable:refused router:shared:fits stt:resident:fits tts:resident:fits video:unavailable:refused wakeword:installed:fits" },
@@ -19,7 +19,7 @@ const GOLDEN: Record<number, { matched: ProfileId | null; tier: ProfileId; resid
   48: { matched: null, tier: "p32", residentGb: 15.2, roomGb: 27.7, tight: false, roles: "chat:resident:fits embed:resident:fits image:on_demand:fits:boost=minimax-h3-image judge:resident:fits music:on_demand:fits:standard=ace-step-1-5-turbo rerank:on_demand:fits:standard router:shared:fits stt:resident:fits tts:resident:fits video:unavailable:refused wakeword:installed:fits" },
   64: { matched: "p64", tier: "p64", residentGb: 20.1, roomGb: 35.8, tight: false, roles: "chat:resident:fits coding:on_demand:fits:standard embed:resident:fits image:on_demand:fits:boost=minimax-h3-image judge:resident:fits music:on_demand:fits:standard=ace-step-1-5-turbo rerank:resident:fits router:shared:fits stt:resident:fits tts:resident:fits video:on_demand:fits:boost=ltx-2-5-q8-distilled-mlx wakeword:installed:fits" },
   96: { matched: null, tier: "p64", residentGb: 20.1, roomGb: 70.1, tight: false, roles: "chat:resident:fits coding:on_demand:fits:standard embed:resident:fits image:on_demand:fits:boost=flux3-image-klein judge:resident:fits music:on_demand:fits:standard=ace-step-1-5-turbo rerank:resident:fits router:shared:fits stt:resident:fits tts:resident:fits video:on_demand:fits:boost=ltx-2-5-q8-distilled-mlx wakeword:installed:fits" },
-  128: { matched: "p128", tier: "p128", residentGb: 20.6, roomGb: 95.4, tight: false, roles: "chat:resident:fits coding:on_demand:fits:standard embed:resident:fits image:on_demand:fits:boost=flux3-image-klein judge:resident:fits music:on_demand:fits:standard=ace-step-1-5-turbo rerank:resident:fits router:shared:fits stt:resident:fits tts:resident:fits video:on_demand:fits:boost=ltx-2-5-q8-distilled-mlx vision:on_demand:fits:standard wakeword:installed:fits" },
+  128: { matched: "p128", tier: "p128", residentGb: 36.6, roomGb: 79.4, tight: false, roles: "chat:resident:fits coding:on_demand:fits:standard embed:resident:fits image:on_demand:fits:boost=flux3-image-klein judge:resident:fits music:on_demand:fits:standard=ace-step-1-5-turbo rerank:resident:fits router:shared:fits stt:resident:fits tts:resident:fits video:on_demand:fits:boost=ltx-2-5-q8-distilled-mlx vision:on_demand:fits:standard wakeword:installed:fits" },
 };
 
 for (const [size, golden] of Object.entries(GOLDEN)) {
@@ -85,7 +85,8 @@ test("a measured peak replaces the pinned estimate and its basis says measured",
 
 const GB = 1_000_000_000;
 test("a chat upgrade is taken while it leaves headroom and every generator slot", () => {
-  const plan = planFor({ hardware: hw(128), chatLadder: [{ id: "bigger-chat", peakBytes: 22 * GB, verified: false }] })!;
+  // Above the 35B (23 GB), the 128 GB Standard chat model since the owner's lineup of 2026-11-25.
+  const plan = planFor({ hardware: hw(128), chatLadder: [{ id: "bigger-chat", peakBytes: 30 * GB, verified: false }] })!;
   expect(plan.chat_model).toBe("bigger-chat");
   expect(plan.roles.find((r) => r.role === "chat")).toMatchObject({ model: "bigger-chat", basis: "estimated" });
   expect(plan.budget.room_bytes).toBeGreaterThanOrEqual(UPGRADE_HEADROOM_BYTES);
@@ -98,14 +99,14 @@ test("a chat upgrade is refused when it would take the room a picture, video or 
 });
 
 test("a picture role ranked above chat keeps its room: no upgrade, and the plan says why", () => {
-  const ladder = [{ id: "bigger-chat", peakBytes: 22 * GB, verified: false }];
-  expect(planFor({ hardware: hw(128), chatLadder: ladder, priority: { image: 1 } })!.chat_model).toBe("qwen3-8b-instruct-q4-k-m");
+  const ladder = [{ id: "bigger-chat", peakBytes: 30 * GB, verified: false }];
+  expect(planFor({ hardware: hw(128), chatLadder: ladder, priority: { image: 1 } })!.chat_model).toBe("qwen3-6-35b-a3b-huihui-abliterated-q4-k-m");
   expect(planFor({ hardware: hw(128), chatLadder: ladder, priority: { image: 1 } })!.notes[0]).toContain("ranked above it");
 });
 
 test("the fit check (upgrade off) never changes the chat model", () => {
-  const plan = planFor({ hardware: hw(128), chatLadder: [{ id: "bigger-chat", peakBytes: 22 * GB, verified: false }] }, { upgrade: false })!;
-  expect(plan.chat_model).toBe("qwen3-8b-instruct-q4-k-m");
+  const plan = planFor({ hardware: hw(128), chatLadder: [{ id: "bigger-chat", peakBytes: 30 * GB, verified: false }] }, { upgrade: false })!;
+  expect(plan.chat_model).toBe("qwen3-6-35b-a3b-huihui-abliterated-q4-k-m");
 });
 
 test("the uncensored chat pin is never on the automatic ladder", async () => {

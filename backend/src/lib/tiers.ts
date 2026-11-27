@@ -158,7 +158,11 @@ export function tierCandidateLists(category: TierCategory, profile: ProfileId, r
     recommended: ladder.find((row) => row.tier === tier)?.resolved?.model ?? null,
     candidates: pickable.map((candidate) => {
       const displayPeaks = candidate.peaks.filter((item) => item.options.size !== "1920x1088");
-      const peak = displayPeaks.reduce((largest, item) => (item.peakBytes > largest.peakBytes ? item : largest), displayPeaks[0] ?? candidate.peaks[0]!);
+      // A row with several sizes fits a level when one of them does (the resolver runs that one): the level shows the largest size it holds, else the largest size (2026-11-27: LTX-2.5 read as not fitting Standard on p128 because only its Boost size was judged).
+      const cap = tierCapBytes(tier, roomBytes, reducedFreedBytes);
+      const largestOf = (items: typeof displayPeaks) => items.reduce((largest, item) => (item.peakBytes > largest.peakBytes ? item : largest), items[0]!);
+      const fitting = displayPeaks.filter((item) => item.peakBytes <= cap);
+      const peak = fitting.length > 0 ? largestOf(fitting) : displayPeaks.length > 0 ? largestOf(displayPeaks) : candidate.peaks[0]!;
       const refusal = customPickRefusal({ category, tier, profile, roomBytes, reducedFreedBytes, model: candidate.id, options: peak.options });
       return { id: candidate.id, label: tierCandidateLabel(candidate.id, peak.options), family: candidate.family, peakBytes: peak.peakBytes, verified: candidate.peaks.every((item) => item.status === "measured"), fits: refusal === null, refusal };
     }),

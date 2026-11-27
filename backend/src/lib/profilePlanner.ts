@@ -154,7 +154,8 @@ export function planFor(input: PlannerInput, options: PlanOptions = { upgrade: t
 
   // Resident set: the tier's template roles the person left on. The template is the shipped, known-to-run floor, so it is kept even when the estimates read tight.
   let resident = 0;
-  const chatId = bindings.chat ?? PROFILE_MODEL_BINDINGS[SMALLEST_PROFILE]!.chat!;
+  // The resident chat model is the tier table's Standard pick, as the voice below is (the owner's 128 GB lineup puts the 35B there, 2026-11-25); the binding stands in when the table has none.
+  const chatId = resolveTier({ category: PRIMARY_ROLE, tier: "standard", profile: tier.id, roomBytes: Number.MAX_SAFE_INTEGER })?.model ?? bindings.chat ?? PROFILE_MODEL_BINDINGS[SMALLEST_PROFILE]!.chat!;
   let chat = candidatePeak(chatId, input.measuredPeaks) ?? { bytes: 7 * GB, basis: "estimated" as Basis };
   let chosenChat = chatId;
   const need = (role: RoleId): { model: string | null; bytes: number; basis: Basis } => {
