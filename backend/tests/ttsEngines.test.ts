@@ -144,7 +144,7 @@ test("the MLX runtime is a managed runtime for tts with a hashed requirements fi
 
 test("the voice role and each voice carry the tts capability flag; Chatterbox lists its one voice with the tags, Pocket's presets list none", async () => {
   const roles = await (await app.request("/stack/v1/roles")).json() as { roles: Array<{ id: string; tts?: { engine: string; requested: string; tags: string[]; fallback_reason: string | null } }> };
-  expect(roles.roles.find((role) => role.id === "tts")?.tts).toEqual({ engine: "pocket-tts", requested: "pocket-tts", tags: [], fallback_reason: null });
+  expect(roles.roles.find((role) => role.id === "tts")?.tts).toEqual({ delivery_mode: "streaming", engine: "pocket-tts", requested: "pocket-tts", tags: [], fallback_reason: null });
   expect(roles.roles.find((role) => role.id === "chat")?.tts).toBeUndefined();
   const pocketVoices = (await (await app.request("/stack/v1/voices")).json() as { voices: Array<{ tts?: { tags: string[] }; engine?: string }> }).voices;
   expect(pocketVoices.length).toBeGreaterThan(1);
