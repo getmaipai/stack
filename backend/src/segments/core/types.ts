@@ -1,8 +1,8 @@
 // Mirrors planned @maipai/spec media-segments; swap when released.
 import { z } from "zod";
 
-export const SEGMENT_KINDS = ["ad", "sponsor", "selfpromo", "intro", "outro", "recap", "filler"] as const;
-export const SEGMENT_SOURCES = ["fingerprint", "text-pattern", "llm", "alignment", "person", "chapter"] as const;
+export const SEGMENT_KINDS = ["ad", "sponsor", "selfpromo", "intro", "outro", "recap", "filler", "bumper"] as const;
+export const SEGMENT_SOURCES = ["fingerprint", "text-pattern", "llm", "alignment", "person", "chapter", "bumper"] as const;
 export const SEGMENT_STATUSES = ["auto", "held", "confirmed", "rejected"] as const;
 
 export const SegmentKind = z.enum(SEGMENT_KINDS);
@@ -21,6 +21,8 @@ export const MediaSegment = z.object({
   sources: z.array(SegmentSource).optional(),
   status: SegmentStatus,
   label: z.string().optional(),
+  slotRole: z.enum(["lead-stinger", "slot", "tail-stinger"]).optional(),
+  groupId: z.string().optional(),
 }).refine((s) => s.endSec > s.startSec, { message: "endSec must be greater than startSec" });
 
 export const ProducedBy = z.object({

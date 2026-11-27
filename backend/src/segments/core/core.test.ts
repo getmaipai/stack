@@ -235,3 +235,12 @@ describe("parseSilenceDetect", () => {
     expect(parseSilenceDetect("random\nlines")).toEqual([]);
   });
 });
+
+describe("normalizeSegments keeps bumper parts", () => {
+  test("keeps short adjacent stinger, slot and stinger parts apart and sorted", () => {
+    const part = (slotRole: "lead-stinger" | "slot" | "tail-stinger", startSec: number, endSec: number) => ({ id: slotRole, kind: "bumper" as const, startSec, endSec, confidence: 0.9, source: "bumper" as const, sources: ["bumper" as const], status: "auto" as const, slotRole, groupId: "g1" });
+    const out = normalizeSegments([part("tail-stinger", 11.95, 13), part("lead-stinger", 10.1, 11), part("slot", 11, 11.95)] as never, 60);
+    expect(out.map((s) => s.slotRole)).toEqual(["lead-stinger", "slot", "tail-stinger"]);
+    expect(out.every((s) => s.groupId === "g1")).toBe(true);
+  });
+});

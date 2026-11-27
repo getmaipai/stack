@@ -87,3 +87,9 @@ export const mediaSegments = sqliteTable("media_segments", {
   recordJson: text("record_json").notNull(), sourcePath: text("source_path").notNull(),
   createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 });
+
+export const learnedBumpers = sqliteTable("learned_bumpers", {
+  showKey: text("show_key").primaryKey(),
+  fingerprintsJson: text("fingerprints_json").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

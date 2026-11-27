@@ -3,6 +3,7 @@ import type { MediaSegmentT, SegmentSourceT, SegmentStatusT } from "./types";
 export const AUTO_CONFIDENCE = 0.8;
 export const HELD_CONFIDENCE = 0.5;
 export const MIN_SEGMENT_SEC = 1;
+export const MIN_BUMPER_PART_SEC = 0.1;
 export const MERGE_GAP_SEC = 2;
 export const AD_MIN_SEC = 5;
 export const AD_MAX_SEC = 600;
@@ -11,9 +12,11 @@ export const AD_MAX_FRACTION = 0.4;
 /** Sort, clamp to duration, drop under 1 s, merge same-kind overlaps and gaps under 2 s. */
 export function normalizeSegments(segments: readonly MediaSegmentT[], durationSec: number): MediaSegmentT[] {
   const clamped: MediaSegmentT[] = [];
+  const bumperParts: MediaSegmentT[] = []; // stinger, slot, stinger: short by nature, never merged with each other
   for (const s of segments) {
     const startSec = Math.max(0, s.startSec);
     const endSec = Math.min(durationSec, s.endSec);
+    if (s.kind === "bumper") { if (endSec - startSec >= MIN_BUMPER_PART_SEC) bumperParts.push({ ...s, startSec, endSec, sources: [...(s.sources ?? [s.source])] }); continue; }
     if (!(endSec - startSec >= MIN_SEGMENT_SEC)) continue;
     clamped.push({ ...s, startSec, endSec, sources: [...(s.sources ?? [s.source])] });
   }
@@ -45,7 +48,7 @@ export function normalizeSegments(segments: readonly MediaSegmentT[], durationSe
       out.push(s);
     }
   }
-  return out.sort((a, b) => a.startSec - b.startSec || a.endSec - b.endSec);
+  return [...out, ...bumperParts].sort((a, b) => a.startSec - b.startSec || a.endSec - b.endSec);
 }
 
 export interface Decision {

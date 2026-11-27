@@ -23242,7 +23242,8 @@
                                   "intro",
                                   "outro",
                                   "recap",
-                                  "filler"
+                                  "filler",
+                                  "bumper"
                                 ]
                               },
                               "startSec": {
@@ -23266,7 +23267,8 @@
                                   "llm",
                                   "alignment",
                                   "person",
-                                  "chapter"
+                                  "chapter",
+                                  "bumper"
                                 ]
                               },
                               "sources": {
@@ -23279,7 +23281,8 @@
                                     "llm",
                                     "alignment",
                                     "person",
-                                    "chapter"
+                                    "chapter",
+                                    "bumper"
                                   ]
                                 }
                               },
@@ -23293,6 +23296,17 @@
                                 ]
                               },
                               "label": {
+                                "type": "string"
+                              },
+                              "slotRole": {
+                                "type": "string",
+                                "enum": [
+                                  "lead-stinger",
+                                  "slot",
+                                  "tail-stinger"
+                                ]
+                              },
+                              "groupId": {
                                 "type": "string"
                               }
                             },
@@ -23602,7 +23616,8 @@
                                   "intro",
                                   "outro",
                                   "recap",
-                                  "filler"
+                                  "filler",
+                                  "bumper"
                                 ]
                               },
                               "startSec": {
@@ -23626,7 +23641,8 @@
                                   "llm",
                                   "alignment",
                                   "person",
-                                  "chapter"
+                                  "chapter",
+                                  "bumper"
                                 ]
                               },
                               "sources": {
@@ -23639,7 +23655,8 @@
                                     "llm",
                                     "alignment",
                                     "person",
-                                    "chapter"
+                                    "chapter",
+                                    "bumper"
                                   ]
                                 }
                               },
@@ -23653,6 +23670,17 @@
                                 ]
                               },
                               "label": {
+                                "type": "string"
+                              },
+                              "slotRole": {
+                                "type": "string",
+                                "enum": [
+                                  "lead-stinger",
+                                  "slot",
+                                  "tail-stinger"
+                                ]
+                              },
+                              "groupId": {
                                 "type": "string"
                               }
                             },
@@ -23778,7 +23806,8 @@
                         "intro",
                         "outro",
                         "recap",
-                        "filler"
+                        "filler",
+                        "bumper"
                       ]
                     },
                     "default": [

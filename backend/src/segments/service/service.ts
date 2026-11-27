@@ -8,7 +8,7 @@ import { join, extname, basename } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { mediaSegments } from "@/db/schema";
+import { mediaSegments, learnedBumpers } from "@/db/schema";
 import { dataDir } from "@/lib/paths";
 import { sha256OfFile } from "@/lib/fileHash";
 import { mediaDeps } from "@/media/jobs";
@@ -22,12 +22,14 @@ import { detectFromTranscript } from "../detect/detect";
 import { findHeuristicCandidates } from "../detect/heuristics";
 import { applyDecisions, normalizeSegments } from "../core/validate";
 import { MediaSegmentsRecord, type MediaSegmentT, type MediaSegmentsRecordT, type SegmentKindT } from "../core/types";
+import { bumperCandidates, findDigitalSilences, type LearnedBumper } from "../bumper";
+import { decodePcm16 } from "../bumper/decode";
 
 export const SEGMENTS_JOB_KIND = "media.segments";
 export const SEGMENTS_PIPELINE_VERSION = "1";
 export const SEGMENTS_MAX_FETCH_BYTES = TRANSCRIPTION_MAX_BYTES;
 const SegmentRecord = MediaSegmentsRecord.extend({ cleanCopy: z.union([z.boolean(), z.literal("unknown")]).optional() });
-const Input = z.object({ url: z.string().url().optional(), path: z.string().min(1).optional(), referenceUrl: z.string().url().optional(), referencePath: z.string().min(1).optional(), kinds: z.array(z.enum(["ad", "sponsor", "selfpromo", "intro", "outro", "recap", "filler"])).optional(), fetch: z.object({ userAgent: z.string().min(1).max(256).optional() }).default({}), allowPrivate: z.boolean().default(false), keepCopy: z.boolean().default(true), expectedDurationSec: z.number().positive().optional() }).strict().refine(v => Boolean(v.url || v.path), "url or path is required").refine(v => !(v.url && v.path), "send url or path, not both").refine(v => !(v.referenceUrl && v.referencePath), "send referenceUrl or referencePath, not both");
+const Input = z.object({ url: z.string().url().optional(), path: z.string().min(1).optional(), referenceUrl: z.string().url().optional(), referencePath: z.string().min(1).optional(), showKey: z.string().min(1).max(256).optional(), kinds: z.array(z.enum(["ad", "sponsor", "selfpromo", "intro", "outro", "recap", "filler", "bumper"])).optional(), fetch: z.object({ userAgent: z.string().min(1).max(256).optional() }).default({}), allowPrivate: z.boolean().default(false), keepCopy: z.boolean().default(true), expectedDurationSec: z.number().positive().optional() }).strict().refine(v => Boolean(v.url || v.path), "url or path is required").refine(v => !(v.url && v.path), "send url or path, not both").refine(v => !(v.referenceUrl && v.referencePath), "send referenceUrl or referencePath, not both");
 export type SegmentsInput = z.infer<typeof Input>;
 const PRIVATE_V4 = [/^0\./, /^10\./, /^127\./, /^169\.254\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./, /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, /^198\.18\./, /^198\.19\./, /^224\./, /^23[5-9]\./, /^24\d\./, /^25[0-5]\./];
 function privateAddress(address: string): boolean {
@@ -89,6 +91,8 @@ export interface SegmentDeps {
   detect: typeof detectFromTranscript;
   /** Optional audio decoder for feature extraction; an injected implementation makes tests independent of engines. */
   decodeFeatures: (path: string, signal: AbortSignal) => Promise<unknown>;
+  /** 16 kHz mono PCM for bumper analysis; injectable so tests need no ffmpeg. */
+  decodePcm: (path: string, signal: AbortSignal) => Promise<Int16Array | Float32Array>;
   chat: (messages: Array<{ role: "system" | "user"; content: string }>, signal: AbortSignal) => Promise<string>;
 }
 const unavailable = async (): Promise<never> => { throw new Error("The media-segments audio feature adapter is unavailable."); };
@@ -108,7 +112,7 @@ export const segmentDeps: SegmentDeps = {
     if (!settled || settled.state !== "done") throw new Error(transcriptionFailure(submitted.job.id)?.message ?? settled?.reason ?? "STT transcription did not finish.");
     progress({ status: "transcription complete" }); return transcriptionOutput(settled.id);
   },
-  align: alignClean, features: featuresFromSamples, detect: detectFromTranscript as SegmentDeps["detect"], decodeFeatures: (path, signal) => segmentFeatureDecoder(path, signal),
+  align: alignClean, features: featuresFromSamples, detect: detectFromTranscript as SegmentDeps["detect"], decodeFeatures: (path, signal) => segmentFeatureDecoder(path, signal), decodePcm: (path, signal) => decodePcm16(path, { signal }),
   chat: async (messages, signal) => { const { requestRole } = await import("@/lib/supervisor"); const result = await requestRole("chat", "/v1/chat/completions", { model: "chat", messages, temperature: 0, max_tokens: 1200 }, signal); return JSON.stringify(result.body); },
 };
 export function setSegmentDepsForTests(next: Partial<SegmentDeps> & { runner?: SegmentRunner; featureDecoder?: (path: string, signal: AbortSignal) => Promise<unknown> }): void { const { runner, featureDecoder, ...deps } = next; if (runner) segmentRunner = runner; if (featureDecoder) segmentFeatureDecoder = featureDecoder; Object.assign(segmentDeps, deps); }
@@ -151,7 +155,27 @@ export async function runSegmentsForTests(job: Job, signal: AbortSignal, progres
   const timed = transcript.segments.map(s=>({startSec:s.start,endSec:s.end,text:s.text})); const heuristic = findHeuristicCandidates(timed).map((s,i)=>({id:`heuristic-${i}`,kind:"ad" as SegmentKindT,startSec:s.startSec,endSec:s.endSec,confidence:s.score,source:"text-pattern" as const,sources:["text-pattern" as const],status:"held" as const,label:s.reasons.join(", ")}));
   progress({status:"detecting segments",percent:70}); const detected = await segmentDeps.detect(timed,{llm: async messages => segmentDeps.chat(messages,signal)});
   const llm = (Array.isArray(detected) ? detected : []).map((s:any,i:number)=>({id:`detected-${i}`,kind:(s.kind === "sponsor" || s.kind === "selfpromo" ? s.kind : "ad") as SegmentKindT,startSec:s.startSec,endSec:s.endSec,confidence:s.confidence,source:s.source === "text-pattern" ? "text-pattern" as const : "llm" as const,sources:[s.source === "text-pattern" ? "text-pattern" as const : "llm" as const],status:"held" as const,...(s.label?{label:s.label}:{})})) as MediaSegmentT[];
-  const segments = applyDecisions(normalizeSegments([...alignment,...heuristic,...llm],probe.duration_s),probe.duration_s);
+  let bumpers: MediaSegmentT[] = [];
+  const showKey = input.showKey;
+  const prior = showKey ? db.select().from(learnedBumpers).where(eq(learnedBumpers.showKey, showKey)).get() : undefined;
+  const learned: LearnedBumper[] = prior ? JSON.parse(prior.fingerprintsJson) as LearnedBumper[] : [];
+  try {
+    const pcm = await segmentDeps.decodePcm(mediaPath, signal);
+    const silences = findDigitalSilences(pcm, 16000);
+    const result = bumperCandidates(pcm, silences, learned, 16000);
+    bumpers = result.segments;
+    if (showKey && result.learnedBumper.length) {
+      const merged = [...learned, ...result.learnedBumper].slice(-64);
+      const now = new Date().toISOString();
+      db.insert(learnedBumpers).values({showKey, fingerprintsJson:JSON.stringify(merged),updatedAt:now}).onConflictDoUpdate({target:learnedBumpers.showKey,set:{fingerprintsJson:JSON.stringify(merged),updatedAt:now}}).run();
+    }
+  } catch (error) { if (signal.aborted) throw new Error("Cancelled."); }
+  const all: MediaSegmentT[] = [...alignment,...heuristic,...llm,...bumpers];
+  for (const bumper of bumpers) {
+    const adjacent = all.filter(s => s.kind !== "bumper" && s.startSec <= bumper.endSec + 3 && s.endSec >= bumper.startSec - 3);
+    for (const ad of adjacent) ad.groupId = bumper.groupId;
+  }
+  const segments = applyDecisions(normalizeSegments(all,probe.duration_s),probe.duration_s);
   const record = SegmentRecord.parse({fileSha256:source.fileSha256,durationSec:probe.duration_s,segments,producedBy:{transcriptRevision:"stt-current",modelId:"chat-current",pipelineVersion:SEGMENTS_PIPELINE_VERSION,createdAt:new Date().toISOString()},cleanCopy});
   const previous=getSegments(source.fileSha256); if(previous){for(const old of previous.segments){if(old.source==="person"||old.status==="confirmed"||old.status==="rejected"){const overlapping=record.segments.findIndex(s=>s.startSec<old.endSec&&s.endSec>old.startSec);if(overlapping>=0)record.segments.splice(overlapping,1);record.segments.push(old);}}record.segments.sort((a,b)=>a.startSec-b.startSec);}
   const now = new Date().toISOString(); db.insert(mediaSegments).values({fileSha256:source.fileSha256,pipelineVersion:SEGMENTS_PIPELINE_VERSION,recordJson:JSON.stringify(record),sourcePath:mediaPath,createdAt:now,updatedAt:now}).onConflictDoUpdate({target:mediaSegments.fileSha256,set:{pipelineVersion:SEGMENTS_PIPELINE_VERSION,recordJson:JSON.stringify(record),sourcePath:mediaPath,updatedAt:now}}).run(); progress({status:"segments ready",percent:100}); return record;

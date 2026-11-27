@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dataDir } from "@/lib/paths";
 import { db } from "@/db";
-import { mediaSegments } from "@/db/schema";
+import { mediaSegments, learnedBumpers } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { setSegmentDepsForTests, resetSegmentDepsForTests, runSegmentsForTests, runSegmentsSingleFlightForTests, SEGMENTS_PIPELINE_VERSION, SEGMENTS_MAX_FETCH_BYTES, SEGMENTS_STORE_CAP_BYTES, correctSegment, getSegments, fetchSegmentBytesForTests, setSegmentNetworkForTests, validateSegmentPathForTests, segmentStoredFileNameForTests, segmentMediaStoreDirForTests, enforceSegmentStoreCapForTests } from "./service";
 import { setRoots, __resetRootsForTests } from "@/media/paths";
 import type { Job } from "@/lib/jobs";
@@ -38,6 +39,23 @@ describe("media.segments service wiring",()=>{
     const first=await runSegmentsForTests(job({url:"https://example.test/audio.mp3"}),new AbortController().signal,()=>{});
     const second=await runSegmentsForTests(job({url:"https://example.test/audio.mp3"}),new AbortController().signal,()=>{});
     expect(first.fileSha256).toBe(second.fileSha256);expect(first.producedBy.pipelineVersion).toBe(SEGMENTS_PIPELINE_VERSION);expect(fetches).toBe(2);expect(transcribes).toBe(1);expect(getSegments(first.fileSha256)?.segments).toEqual([]);
+    rmSync(dir,{recursive:true,force:true});
+  });
+  it("adds grouped bumper segments from decoded audio and stores the learned bumper per show",async()=>{
+    const rate=16000,pcm=new Int16Array(rate*12); let seed=99;
+    const noise=()=>{seed=(Math.imul(seed,1103515245)+12345)>>>0;return ((seed>>>8)/16777216-0.5)*6000;};
+    for(let i=0;i<pcm.length;i++) pcm[i]=noise();
+    const stinger=(start:number,secs:number)=>{for(let i=0;i<secs*rate;i++){const t=i/rate;pcm[start*rate+i]=Math.round(9000*(Math.sin(2*Math.PI*(700+400*t)*t)+0.6*Math.sin(2*Math.PI*1900*t)));}};
+    for(const [a,b] of [[2,3],[7,8]] as const){stinger(a-0.8,0.8);pcm.fill(0,a*rate,(a+0.95)*rate);stinger(a+0.95,1.0);void b;}
+    const dir=join(dataDir,"segments-bumper-fixture");mkdirSync(dir,{recursive:true});const bytes=new Uint8Array(Buffer.from("bumper fixture bytes"));
+    setSegmentDepsForTests({fetch:async()=>bytes,probe:async()=>({duration_s:12,has_audio:true} as never),transcribe:async()=>({language:"en",segments:[{start:0,end:1,text:"hello",words:[]}],vocabulary_applied:false}),detect:async()=>[],chat:async()=>"[]",decodePcm:async()=>pcm});
+    const record=await runSegmentsForTests(job({url:"https://example.test/bumper.mp3",showKey:"show-a"}),new AbortController().signal,()=>{});
+    const bumpers=record.segments.filter(x=>x.kind==="bumper");
+    expect(bumpers.filter(x=>x.slotRole==="slot")).toHaveLength(2);
+    for(const role of ["lead-stinger","tail-stinger"] as const) expect(bumpers.filter(x=>x.slotRole===role)).toHaveLength(2);
+    const groups=new Set(bumpers.map(x=>x.groupId)); expect(groups.size).toBe(2);
+    const lead=bumpers.find(x=>x.slotRole==="lead-stinger")!; expect(lead.endSec-lead.startSec).toBeGreaterThanOrEqual(0.75); expect(lead.endSec-lead.startSec).toBeLessThanOrEqual(1.1);
+    const stored=db.select().from(learnedBumpers).where(eq(learnedBumpers.showKey,"show-a")).get(); expect(stored).toBeTruthy();
     rmSync(dir,{recursive:true,force:true});
   });
   it("records a person correction without person identity",()=>{
