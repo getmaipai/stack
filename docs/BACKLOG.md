@@ -973,3 +973,5 @@ delete/render routes, privacy declaration, and API integration notes.
 Not built/known gaps: test and gate validation still pending; clean-reference decoding
 and ffmpeg render need integration fixtures; fingerprint matching, correction learning,
 and transcription/model provenance beyond current-role identifiers are not implemented.
+Segment record schemas, `normalizeSegments` and `skipPlan` come from `@maipai/spec`
+(`spec-v0.1.489`); Stack retains status decisions, boundary snapping, and render/time helpers.

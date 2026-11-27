@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { MediaSegmentsRecord, type MediaSegmentT, type MediaSegmentsRecordT } from "./types";
+import { MediaSegmentsSchema as MediaSegmentsRecord, type MediaSegment as MediaSegmentT, type MediaSegmentsRecord as MediaSegmentsRecordT, skipPlan } from "@maipai/spec/media/ts/segments";
 import { applyDecisions, decideStatus, normalizeSegments } from "./validate";
-import { mapTime, renderKeepRanges, skipPlan, unmapTime } from "./skipPlan";
+import { mapTime, renderKeepRanges, unmapTime } from "./skipPlan";
 import { parseSilenceDetect, snapAll, snapToSilence } from "./boundarySnap";
 
 let n = 0;
@@ -14,6 +14,9 @@ function rec(segments: MediaSegmentT[], durationSec = 1000): MediaSegmentsRecord
     durationSec,
     segments,
     producedBy: { transcriptRevision: "t1", modelId: "m", pipelineVersion: "1", createdAt: "2026-11-27T00:00:00Z" },
+    created_at: "2026-11-27T00:00:00Z",
+    hlc: "1:0:segmentsnode",
+    provenance: "stack:media.segments",
   };
 }
 
@@ -238,7 +241,7 @@ describe("parseSilenceDetect", () => {
 
 describe("normalizeSegments keeps bumper parts", () => {
   test("keeps short adjacent stinger, slot and stinger parts apart and sorted", () => {
-    const part = (slotRole: "lead-stinger" | "slot" | "tail-stinger", startSec: number, endSec: number) => ({ id: slotRole, kind: "bumper" as const, startSec, endSec, confidence: 0.9, source: "bumper" as const, sources: ["bumper" as const], status: "auto" as const, slotRole, groupId: "g1" });
+    const part = (slotRole: "lead-stinger" | "slot" | "tail-stinger", startSec: number, endSec: number) => ({ id: slotRole, kind: "bumper" as const, startSec, endSec, confidence: 0.9, source: "fingerprint" as const, sources: ["fingerprint" as const], status: "auto" as const, slotRole, groupId: "g1" });
     const out = normalizeSegments([part("tail-stinger", 11.95, 13), part("lead-stinger", 10.1, 11), part("slot", 11, 11.95)] as never, 60);
     expect(out.map((s) => s.slotRole)).toEqual(["lead-stinger", "slot", "tail-stinger"]);
     expect(out.every((s) => s.groupId === "g1")).toBe(true);

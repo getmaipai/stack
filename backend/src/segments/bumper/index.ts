@@ -155,7 +155,7 @@ export function bumperCandidates(input: Features | Float32Array | Int16Array, si
       ["lead-stinger", Math.max(0, c.s.startSec - c.lead), c.s.startSec], ["slot", c.s.startSec, c.s.endSec], ["tail-stinger", c.s.endSec, c.s.endSec + c.tail],
     ];
     parts.forEach(([slotRole, startSec, endSec], j) => {
-      if (endSec > startSec) segments.push({ id: `${groupId}-${j}`, kind: "bumper", startSec, endSec, confidence: c.sim, source: "bumper", sources: ["bumper"], status: c.matched ? "auto" : "held", slotRole, groupId } as MediaSegmentT);
+      if (endSec > startSec) segments.push({ id: `${groupId}-${j}`, kind: "bumper", startSec, endSec, confidence: c.sim, source: "fingerprint", sources: ["fingerprint"], status: c.matched ? "auto" : "held", slotRole, groupId });
     });
     if (c.matched) {
       const leadN = Math.round(c.lead * BUMPER_RATE), tailN = Math.round(c.tail * BUMPER_RATE);

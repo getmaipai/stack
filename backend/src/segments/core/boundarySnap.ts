@@ -1,4 +1,4 @@
-import type { Range } from "./types";
+import type { Range } from "@maipai/spec/media/ts/segments";
 
 export const DEFAULT_MAX_SHIFT_SEC = 2.5;
 

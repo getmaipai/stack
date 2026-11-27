@@ -14,6 +14,7 @@ import { setMediaDepsForTests, resetMediaDepsForTests } from "@/media/jobs";
 beforeAll(async()=>{ await import("@/app"); });
 beforeEach(()=>{ resetSegmentDepsForTests(); resetMediaDepsForTests(); setMediaDepsForTests({toolbox:{path:async()=>"stub"} as never}); db.delete(mediaSegments).run(); });
 const job=(input:Record<string,unknown>)=>({id:"segments-test",kind:"media.segments",role:null,state:"running",createdAt:new Date().toISOString(),input} as unknown as Job);
+const recordFixture=(over:Record<string,unknown>={})=>({fileSha256:"a".repeat(64),durationSec:60,segments:[{id:"s1",kind:"ad",startSec:5,endSec:15,confidence:0.9,source:"llm",status:"auto"}],producedBy:{transcriptRevision:"r1",modelId:"m1",pipelineVersion:"1",createdAt:"2026-11-27T00:00:00.000Z"},created_at:"2026-11-27T00:00:00.000Z",hlc:"1:0:segmentsnode",provenance:"stack:media.segments",...over});
 
 describe("media.segments service wiring",()=>{
   it("refuses a private DNS answer before the stand-in fetcher is called", async()=>{
@@ -59,7 +60,7 @@ describe("media.segments service wiring",()=>{
     rmSync(dir,{recursive:true,force:true});
   });
   it("records a person correction without person identity",()=>{
-    const hash="a".repeat(64); const record={fileSha256:hash,durationSec:60,segments:[{id:"s1",kind:"ad",startSec:5,endSec:15,confidence:0.9,source:"llm",status:"auto"}],producedBy:{transcriptRevision:"r1",modelId:"m1",pipelineVersion:"1",createdAt:new Date().toISOString()}};
+    const hash="a".repeat(64); const record=recordFixture({fileSha256:hash});
     db.insert(mediaSegments).values({fileSha256:hash,pipelineVersion:"1",recordJson:JSON.stringify(record),sourcePath:"/tmp/audio",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}).run();
     const corrected=correctSegment(hash,"s1","rejected");expect(corrected?.segments[0]?.status).toBe("rejected");expect(corrected?.segments[0]?.source).toBe("person");
   });

@@ -23217,7 +23217,7 @@
                       "properties": {
                         "fileSha256": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{64}$/i"
+                          "pattern": "^[0-9a-fA-F]{64}$"
                         },
                         "durationSec": {
                           "type": "number",
@@ -23267,8 +23267,7 @@
                                   "llm",
                                   "alignment",
                                   "person",
-                                  "chapter",
-                                  "bumper"
+                                  "chapter"
                                 ]
                               },
                               "sources": {
@@ -23281,8 +23280,7 @@
                                     "llm",
                                     "alignment",
                                     "person",
-                                    "chapter",
-                                    "bumper"
+                                    "chapter"
                                   ]
                                 }
                               },
@@ -23307,7 +23305,8 @@
                                 ]
                               },
                               "groupId": {
-                                "type": "string"
+                                "type": "string",
+                                "minLength": 1
                               }
                             },
                             "required": [
@@ -23318,7 +23317,9 @@
                               "confidence",
                               "source",
                               "status"
-                            ]
+                            ],
+                            "additionalProperties": false,
+                            "description": "Section labels cold-open, theme, main, interview, pretape, credits and plugs are reserved for an additive enum extension."
                           }
                         },
                         "producedBy": {
@@ -23346,7 +23347,8 @@
                             "modelId",
                             "pipelineVersion",
                             "createdAt"
-                          ]
+                          ],
+                          "additionalProperties": false
                         },
                         "cleanCopy": {
                           "anyOf": [
@@ -23360,14 +23362,30 @@
                               ]
                             }
                           ]
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "hlc": {
+                          "type": "string",
+                          "pattern": "^[0-9]+:[0-9]+:[a-z0-9]{6,}$"
+                        },
+                        "provenance": {
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [
                         "fileSha256",
                         "durationSec",
                         "segments",
-                        "producedBy"
-                      ]
+                        "producedBy",
+                        "created_at",
+                        "hlc",
+                        "provenance"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -23591,7 +23609,7 @@
                       "properties": {
                         "fileSha256": {
                           "type": "string",
-                          "pattern": "^[0-9a-f]{64}$/i"
+                          "pattern": "^[0-9a-fA-F]{64}$"
                         },
                         "durationSec": {
                           "type": "number",
@@ -23641,8 +23659,7 @@
                                   "llm",
                                   "alignment",
                                   "person",
-                                  "chapter",
-                                  "bumper"
+                                  "chapter"
                                 ]
                               },
                               "sources": {
@@ -23655,8 +23672,7 @@
                                     "llm",
                                     "alignment",
                                     "person",
-                                    "chapter",
-                                    "bumper"
+                                    "chapter"
                                   ]
                                 }
                               },
@@ -23681,7 +23697,8 @@
                                 ]
                               },
                               "groupId": {
-                                "type": "string"
+                                "type": "string",
+                                "minLength": 1
                               }
                             },
                             "required": [
@@ -23692,7 +23709,9 @@
                               "confidence",
                               "source",
                               "status"
-                            ]
+                            ],
+                            "additionalProperties": false,
+                            "description": "Section labels cold-open, theme, main, interview, pretape, credits and plugs are reserved for an additive enum extension."
                           }
                         },
                         "producedBy": {
@@ -23720,7 +23739,8 @@
                             "modelId",
                             "pipelineVersion",
                             "createdAt"
-                          ]
+                          ],
+                          "additionalProperties": false
                         },
                         "cleanCopy": {
                           "anyOf": [
@@ -23734,14 +23754,30 @@
                               ]
                             }
                           ]
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "hlc": {
+                          "type": "string",
+                          "pattern": "^[0-9]+:[0-9]+:[a-z0-9]{6,}$"
+                        },
+                        "provenance": {
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [
                         "fileSha256",
                         "durationSec",
                         "segments",
-                        "producedBy"
-                      ]
+                        "producedBy",
+                        "created_at",
+                        "hlc",
+                        "provenance"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [

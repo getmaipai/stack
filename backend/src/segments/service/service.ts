@@ -7,6 +7,7 @@ import { mkdirSync, writeFileSync, existsSync, realpathSync, unlinkSync, renameS
 import { join, extname, basename } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { createHlcClock } from "@maipai/core/src/hlc";
 import { db } from "@/db";
 import { mediaSegments, learnedBumpers } from "@/db/schema";
 import { dataDir } from "@/lib/paths";
@@ -21,14 +22,30 @@ import { featuresFromFile, featuresFromSamples } from "../align/features";
 import { detectFromTranscript } from "../detect/detect";
 import { findHeuristicCandidates } from "../detect/heuristics";
 import { applyDecisions, normalizeSegments } from "../core/validate";
-import { MediaSegmentsRecord, type MediaSegmentT, type MediaSegmentsRecordT, type SegmentKindT } from "../core/types";
+import { MediaSegmentsSchema, type MediaSegment as MediaSegmentT, type MediaSegmentsRecord as MediaSegmentsRecordT } from "@maipai/spec/media/ts/segments";
+import type { SegmentKindT } from "../core/types";
 import { bumperCandidates, findDigitalSilences, type LearnedBumper } from "../bumper";
 import { decodePcm16 } from "../bumper/decode";
 
 export const SEGMENTS_JOB_KIND = "media.segments";
 export const SEGMENTS_PIPELINE_VERSION = "1";
 export const SEGMENTS_MAX_FETCH_BYTES = TRANSCRIPTION_MAX_BYTES;
-const SegmentRecord = MediaSegmentsRecord.extend({ cleanCopy: z.union([z.boolean(), z.literal("unknown")]).optional() });
+const SegmentRecord = MediaSegmentsSchema.extend({ cleanCopy: z.union([z.boolean(), z.literal("unknown")]).optional() });
+const segmentsClock = createHlcClock("stacksegments");
+let segmentsClockSeeded = false;
+function nextSegmentsHlc(): string {
+  if (!segmentsClockSeeded) {
+    segmentsClockSeeded = true;
+    for (const row of db.select({ recordJson: mediaSegments.recordJson }).from(mediaSegments).all()) {
+      try { const hlc = (JSON.parse(row.recordJson) as { hlc?: unknown }).hlc; if (typeof hlc === "string") segmentsClock.seed(hlc); } catch {}
+    }
+  }
+  return segmentsClock.next();
+}
+function readSegmentRecord(recordJson: string, rowCreatedAt: string): MediaSegmentsRecordT {
+  const value = JSON.parse(recordJson) as Record<string, unknown>;
+  return SegmentRecord.parse({ ...value, created_at: value.created_at ?? rowCreatedAt, hlc: value.hlc ?? nextSegmentsHlc(), provenance: value.provenance ?? "stack:media.segments" });
+}
 const Input = z.object({ url: z.string().url().optional(), path: z.string().min(1).optional(), referenceUrl: z.string().url().optional(), referencePath: z.string().min(1).optional(), showKey: z.string().min(1).max(256).optional(), kinds: z.array(z.enum(["ad", "sponsor", "selfpromo", "intro", "outro", "recap", "filler", "bumper"])).optional(), fetch: z.object({ userAgent: z.string().min(1).max(256).optional() }).default({}), allowPrivate: z.boolean().default(false), keepCopy: z.boolean().default(true), expectedDurationSec: z.number().positive().optional() }).strict().refine(v => Boolean(v.url || v.path), "url or path is required").refine(v => !(v.url && v.path), "send url or path, not both").refine(v => !(v.referenceUrl && v.referencePath), "send referenceUrl or referencePath, not both");
 export type SegmentsInput = z.infer<typeof Input>;
 const PRIVATE_V4 = [/^0\./, /^10\./, /^127\./, /^169\.254\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./, /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, /^198\.18\./, /^198\.19\./, /^224\./, /^23[5-9]\./, /^24\d\./, /^25[0-5]\./];
@@ -127,19 +144,19 @@ function enforceStoreCap(incoming: number, exclude?: string): void {
   while(total+incoming>SEGMENTS_STORE_CAP_BYTES && entries.length){const e=entries.shift()!;require("node:fs").unlinkSync(e.path);total-=e.size;}
   if(total+incoming>SEGMENTS_STORE_CAP_BYTES) throw new Error("The media cache is full. Remove old segment files and try again.");
 }
-export function getSegments(hash: string): MediaSegmentsRecordT | null { const row = db.select().from(mediaSegments).where(eq(mediaSegments.fileSha256, hash.toLowerCase())).get(); if (!row) return null; return SegmentRecord.parse(JSON.parse(row.recordJson)); }
+export function getSegments(hash: string): MediaSegmentsRecordT | null { const row = db.select().from(mediaSegments).where(eq(mediaSegments.fileSha256, hash.toLowerCase())).get(); if (!row) return null; return readSegmentRecord(row.recordJson, row.createdAt); }
 export function segmentMediaStoreDirForTests():string{return storeDir();}
 export function enforceSegmentStoreCapForTests(incoming:number):void{enforceStoreCap(incoming);}
 export function segmentStoredFileNameForTests(hash:string):string{if(!/^[a-f0-9]{64}$/.test(hash))throw new Error("Invalid media hash.");return join(storeDir(),`${hash}.audio`);}
 export function deleteSegments(hash: string): boolean { const result = db.delete(mediaSegments).where(eq(mediaSegments.fileSha256, hash.toLowerCase())).run() as unknown as { changes: number }; return result.changes > 0; }
-export function correctSegment(hash: string, id: string, status: "confirmed" | "rejected"): MediaSegmentsRecordT | null { const record = getSegments(hash); if (!record) return null; const index = record.segments.findIndex(s => s.id === id); if (index < 0) return null; record.segments[index] = { ...record.segments[index]!, status, source: "person", sources: [...new Set<MediaSegmentT["source"]>([...(record.segments[index]!.sources ?? []), "person"])] }; db.update(mediaSegments).set({ recordJson: JSON.stringify(record), updatedAt: new Date().toISOString() }).where(eq(mediaSegments.fileSha256, hash.toLowerCase())).run(); return record; }
+export function correctSegment(hash: string, id: string, status: "confirmed" | "rejected"): MediaSegmentsRecordT | null { const record = getSegments(hash); if (!record) return null; const index = record.segments.findIndex(s => s.id === id); if (index < 0) return null; record.segments[index] = { ...record.segments[index]!, status, source: "person", sources: [...new Set<MediaSegmentT["source"]>([...(record.segments[index]!.sources ?? []), "person"])] }; record.hlc = nextSegmentsHlc(); db.update(mediaSegments).set({ recordJson: JSON.stringify(record), updatedAt: new Date().toISOString() }).where(eq(mediaSegments.fileSha256, hash.toLowerCase())).run(); return record; }
 async function bytesFromInput(input: SegmentsInput, signal: AbortSignal): Promise<{ bytes: Uint8Array; path: string; fileSha256: string }> {
   if (input.path) { const path = resolveReadable(input.path); const bytes = new Uint8Array(await Bun.file(path).arrayBuffer()); if (bytes.length > SEGMENTS_MAX_FETCH_BYTES) throw new Error("The media file exceeds the 250 MB limit."); return { bytes, path, fileSha256: await sha256OfFile(path) }; }
   if(signal.aborted)throw new Error("Cancelled.");const bytes = await segmentDeps.fetch(input.url!, input.fetch.userAgent ?? "MaiPai-Stack/1", signal, input.allowPrivate);if(signal.aborted)throw new Error("Cancelled."); const fileSha256 = createHash("sha256").update(bytes).digest("hex"); const path = join(storeDir(), `${fileSha256}.audio`); if (!existsSync(path)) { enforceStoreCap(bytes.length);const partial=join(storeDir(),`.${fileSha256}.${crypto.randomUUID()}.partial`);try{writeFileSync(partial,bytes,{mode:0o600,flag:"wx"});if(signal.aborted)throw new Error("Cancelled.");try{renameSync(partial,path);}catch(e){if((e as NodeJS.ErrnoException).code!=="EEXIST"&&!existsSync(path))throw e;}}finally{try{unlinkSync(partial);}catch{}} } return { bytes, path, fileSha256 };
 }
 export async function runSegmentsForTests(job: Job, signal: AbortSignal, progress: JobProgress): Promise<MediaSegmentsRecordT> {
   const input = Input.parse(job.input ?? {}); if(signal.aborted)throw new Error("Cancelled."); progress({status:"fetching audio", percent:2}); const source = await bytesFromInput(input, signal);
-  const cached = db.select().from(mediaSegments).where(and(eq(mediaSegments.fileSha256, source.fileSha256),eq(mediaSegments.pipelineVersion,SEGMENTS_PIPELINE_VERSION))).get(); if (cached) return SegmentRecord.parse(JSON.parse(cached.recordJson));
+  const cached = db.select().from(mediaSegments).where(and(eq(mediaSegments.fileSha256, source.fileSha256),eq(mediaSegments.pipelineVersion,SEGMENTS_PIPELINE_VERSION))).get(); if (cached) return readSegmentRecord(cached.recordJson, cached.createdAt);
   const mediaPath = source.path.startsWith(storeDir()) ? source.path : join(storeDir(), `${source.fileSha256}${extname(source.path) || ".audio"}`); if (mediaPath !== source.path && !existsSync(mediaPath)) { enforceStoreCap(source.bytes.length); writeFileSync(mediaPath, source.bytes, {mode:0o600}); }
   const tools = await Promise.all([mediaDeps.toolbox.path("ffprobe", status=>progress({status}),signal),mediaDeps.toolbox.path("ffmpeg", status=>progress({status}),signal)]);
   let probe;try{probe=await segmentDeps.probe(segmentRunner, tools[0]!, mediaPath, signal);}catch{if(signal.aborted)throw new Error("Cancelled.");throw new Error("The media file could not be read. Check that it is a supported audio or video file.");} if (!probe.has_audio || probe.duration_s === null) throw new Error("This file has no readable audio track."); if (probe.duration_s > TRANSCRIPTION_MAX_SECONDS) throw new Error("The audio is longer than 3 hours.");
@@ -176,9 +193,10 @@ export async function runSegmentsForTests(job: Job, signal: AbortSignal, progres
     for (const ad of adjacent) ad.groupId = bumper.groupId;
   }
   const segments = applyDecisions(normalizeSegments(all,probe.duration_s),probe.duration_s);
-  const record = SegmentRecord.parse({fileSha256:source.fileSha256,durationSec:probe.duration_s,segments,producedBy:{transcriptRevision:"stt-current",modelId:"chat-current",pipelineVersion:SEGMENTS_PIPELINE_VERSION,createdAt:new Date().toISOString()},cleanCopy});
+  const now = new Date().toISOString();
+  const record = SegmentRecord.parse({fileSha256:source.fileSha256,durationSec:probe.duration_s,segments,producedBy:{transcriptRevision:"stt-current",modelId:"chat-current",pipelineVersion:SEGMENTS_PIPELINE_VERSION,createdAt:now},created_at:now,hlc:nextSegmentsHlc(),provenance:"stack:media.segments",cleanCopy});
   const previous=getSegments(source.fileSha256); if(previous){for(const old of previous.segments){if(old.source==="person"||old.status==="confirmed"||old.status==="rejected"){const overlapping=record.segments.findIndex(s=>s.startSec<old.endSec&&s.endSec>old.startSec);if(overlapping>=0)record.segments.splice(overlapping,1);record.segments.push(old);}}record.segments.sort((a,b)=>a.startSec-b.startSec);}
-  const now = new Date().toISOString(); db.insert(mediaSegments).values({fileSha256:source.fileSha256,pipelineVersion:SEGMENTS_PIPELINE_VERSION,recordJson:JSON.stringify(record),sourcePath:mediaPath,createdAt:now,updatedAt:now}).onConflictDoUpdate({target:mediaSegments.fileSha256,set:{pipelineVersion:SEGMENTS_PIPELINE_VERSION,recordJson:JSON.stringify(record),sourcePath:mediaPath,updatedAt:now}}).run(); progress({status:"segments ready",percent:100}); return record;
+  db.insert(mediaSegments).values({fileSha256:source.fileSha256,pipelineVersion:SEGMENTS_PIPELINE_VERSION,recordJson:JSON.stringify(record),sourcePath:mediaPath,createdAt:now,updatedAt:now}).onConflictDoUpdate({target:mediaSegments.fileSha256,set:{pipelineVersion:SEGMENTS_PIPELINE_VERSION,recordJson:JSON.stringify(record),sourcePath:mediaPath,updatedAt:now}}).run(); progress({status:"segments ready",percent:100}); return record;
 }
 const inFlightSegments=new Map<string,Promise<MediaSegmentsRecordT>>();
 export async function runSegmentsSingleFlightForTests(job:Job,signal:AbortSignal,progress:JobProgress):Promise<MediaSegmentsRecordT>{const key=`${(job.input as any)?.fileSha256??JSON.stringify(job.input)}:${SEGMENTS_PIPELINE_VERSION}`;const running=inFlightSegments.get(key);if(running)return running;const work=runSegmentsForTests(job,signal,progress);inFlightSegments.set(key,work);try{return await work;}finally{if(inFlightSegments.get(key)===work)inFlightSegments.delete(key);}}

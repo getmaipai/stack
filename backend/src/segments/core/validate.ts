@@ -1,4 +1,16 @@
-import type { MediaSegmentT, SegmentSourceT, SegmentStatusT } from "./types";
+import type { MediaSegment as MediaSegmentT } from "@maipai/spec/media/ts/segments";
+import { normalizeSegments as normalizeSpecSegments } from "@maipai/spec/media/ts/segments";
+import type { SegmentSourceT, SegmentStatusT } from "./types";
+
+/** Keep the short stinger and slot pieces that form a detected bumper group. */
+export function normalizeSegments(segments: readonly MediaSegmentT[], durationSec: number): MediaSegmentT[] {
+  const bumpers = segments.filter(s => s.kind === "bumper").flatMap(s => {
+    const startSec = Math.max(0, s.startSec), endSec = Math.min(durationSec, s.endSec);
+    return endSec > startSec ? [{ ...s, startSec, endSec, sources: [...(s.sources ?? [s.source])] }] : [];
+  });
+  return [...normalizeSpecSegments(segments.filter(s => s.kind !== "bumper"), durationSec), ...bumpers]
+    .sort((a, b) => a.startSec - b.startSec || a.endSec - b.endSec);
+}
 
 export const AUTO_CONFIDENCE = 0.8;
 export const HELD_CONFIDENCE = 0.5;
@@ -10,47 +22,6 @@ export const AD_MAX_SEC = 600;
 export const AD_MAX_FRACTION = 0.4;
 
 /** Sort, clamp to duration, drop under 1 s, merge same-kind overlaps and gaps under 2 s. */
-export function normalizeSegments(segments: readonly MediaSegmentT[], durationSec: number): MediaSegmentT[] {
-  const clamped: MediaSegmentT[] = [];
-  const bumperParts: MediaSegmentT[] = []; // stinger, slot, stinger: short by nature, never merged with each other
-  for (const s of segments) {
-    const startSec = Math.max(0, s.startSec);
-    const endSec = Math.min(durationSec, s.endSec);
-    if (s.kind === "bumper") { if (endSec - startSec >= MIN_BUMPER_PART_SEC) bumperParts.push({ ...s, startSec, endSec, sources: [...(s.sources ?? [s.source])] }); continue; }
-    if (!(endSec - startSec >= MIN_SEGMENT_SEC)) continue;
-    clamped.push({ ...s, startSec, endSec, sources: [...(s.sources ?? [s.source])] });
-  }
-  clamped.sort((a, b) => a.startSec - b.startSec || a.endSec - b.endSec);
-
-  const out: MediaSegmentT[] = [];
-  const lastOfKind = new Map<string, number>(); // kind -> index in out
-  for (const s of clamped) {
-    const idx = lastOfKind.get(s.kind);
-    const prev = idx === undefined ? undefined : out[idx];
-    if (prev && s.startSec - prev.endSec < MERGE_GAP_SEC) {
-      const sources = [...new Set<SegmentSourceT>([...(prev.sources ?? []), ...(s.sources ?? [])])];
-      const best = s.confidence > prev.confidence ? s : prev;
-      const status: SegmentStatusT =
-        prev.status === "confirmed" || s.status === "confirmed" ? "confirmed" : best.status;
-      const label = prev.label ?? s.label;
-      const merged: MediaSegmentT = {
-        ...prev,
-        endSec: Math.max(prev.endSec, s.endSec),
-        confidence: best.confidence,
-        source: best.source,
-        sources,
-        status,
-      };
-      if (label !== undefined) merged.label = label;
-      out[idx as number] = merged;
-    } else {
-      lastOfKind.set(s.kind, out.length);
-      out.push(s);
-    }
-  }
-  return [...out, ...bumperParts].sort((a, b) => a.startSec - b.startSec || a.endSec - b.endSec);
-}
-
 export interface Decision {
   status: SegmentStatusT;
   reason: string;
