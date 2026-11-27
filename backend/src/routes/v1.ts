@@ -38,6 +38,7 @@ import { IMAGE_FAMILIES } from "@/images/models";
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
 const ChatRequestSchema = RoleRequest.extend({ messages: z.array(MessageSchema) });
 const EmbeddingsRequestSchema = RoleRequest.extend({ input: z.union([z.string(), z.array(z.string())]) });
+const RerankRequestSchema = RoleRequest.extend({ query: z.string().min(1), documents: z.array(z.string()).min(1), top_n: z.number().int().positive().optional() });
 // The transcription form is spec/voice's (multipart `file`, a 16-bit
 // PCM WAV); `model` and `timeout_ms` ride as text fields and `model`
 // is optional because this path serves one role.
@@ -101,9 +102,9 @@ const inferenceResponses = {
   503: { content: { "application/json": { schema: NoEngineSchema } }, description: "No engine is ready for the role; offline_reason says why." },
 } as const;
 
-type Wire = "chat" | "embeddings" | "transcription" | "speech" | "job";
+type Wire = "chat" | "embeddings" | "rerank" | "transcription" | "speech" | "job";
 const DEFAULT_RENDER_WAIT_MS = 120_000;
-const WIRE_PATHS: Record<Exclude<Wire, "job">, string> = { chat: "/v1/chat/completions", embeddings: "/v1/embeddings", transcription: "/v1/audio/transcriptions", speech: "/v1/audio/speech" };
+const WIRE_PATHS: Record<Exclude<Wire, "job">, string> = { chat: "/v1/chat/completions", embeddings: "/v1/embeddings", rerank: "/v1/rerank", transcription: "/v1/audio/transcriptions", speech: "/v1/audio/speech" };
 
 function jsonReply<T extends Context>(c: T, body: unknown, status: number, headers: Record<string, string>) {
   for (const [name, value] of Object.entries(RoleReplyHeaders.parse(headers))) c.header(name, value);
@@ -252,6 +253,7 @@ const countTokensRoute = createRoute({ method: "post", path: "/messages/count_to
 const responsesRoute = createRoute({ method: "post", path: "/responses", tags: ["Roles"], summary: "OpenAI Responses for the coding role (the engine's native wire)", request: { body: { content: { "application/json": { schema: ResponsesRequestSchema } } } }, responses: codingWireResponses });
 const chatRoute = createRoute({ method: "post", path: "/chat/completions", tags: ["Roles"], summary: "Chat completions by role", request: { body: { content: { "application/json": { schema: ChatRequestSchema } } } }, responses: inferenceResponses });
 const tokenizeRoute = createRoute({ method: "post", path: "/tokenize", tags: ["Roles"], summary: "Token count by role, from the engine's own template and tokenizer", request: { body: { content: { "application/json": { schema: TokenizeRequestSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TokenizeResponseSchema } }, description: "The engine's token count: `messages` (with `tools` and `chat_template_kwargs` when sent) rendered with its chat template, no generation prompt, or `content` as given, with the identity headers. Image parts count as the template's media marker only, not the image's own tokens." }, 501: { content: { "application/json": { schema: CannotCountSchema } }, description: "The engine bound to the role has no token-count route." } } });
+const rerankRoute = createRoute({ method: "post", path: "/rerank", tags: ["Roles"], summary: "Re-rank passages against a query, by role", request: { body: { content: { "application/json": { schema: RerankRequestSchema } } } }, responses: inferenceResponses });
 const embeddingsRoute = createRoute({ method: "post", path: "/embeddings", tags: ["Roles"], summary: "Embeddings by role", request: { body: { content: { "application/json": { schema: EmbeddingsRequestSchema } } } }, responses: inferenceResponses });
 const transcriptionsRoute = createRoute({ method: "post", path: "/audio/transcriptions", tags: ["Roles"], summary: "Speech to text (one WAV file, spec/voice's transcribe form)", request: { body: { content: { "multipart/form-data": { schema: TranscriptionFormSchema } } } }, responses: { ...inferenceResponses, 200: { content: { "application/json": { schema: TranscriptionResponseSchema } }, description: "SttTranscribeResponse: the transcript, empty when the file holds no speech, with the identity headers." } } });
 const speakerEmbeddingRoute = createRoute({
@@ -289,6 +291,16 @@ v1Routes.openapi(countTokensRoute, (c) => codingWireReply(c, "count_tokens", c.r
 v1Routes.openapi(responsesRoute, (c) => codingWireReply(c, "responses", c.req.valid("json")) as never);
 v1Routes.openapi(chatRoute, (c) => reply(c, "chat", c.req.valid("json")) as never);
 v1Routes.openapi(tokenizeRoute, (c) => tokenizeReply(c, c.req.valid("json")) as never);
+// STACK-RERANK-FILL-01: llama-server's native /v1/rerank, with the results sorted best first (the Stack owns the order) and cut to top_n.
+v1Routes.openapi(rerankRoute, (async (c: Context) => {
+  const body = c.req.valid("json" as never) as Record<string, unknown> & { top_n?: number };
+  const answered = await reply(c, "rerank", body) as Response;
+  if (answered.status !== 200) return answered;
+  const payload = await answered.json() as { results?: Array<{ index: number; relevance_score: number }> };
+  const sorted = [...(payload.results ?? [])].sort((a, b) => b.relevance_score - a.relevance_score);
+  const results = body.top_n ? sorted.slice(0, body.top_n) : sorted;
+  return new Response(JSON.stringify({ ...payload, results }), { status: 200, headers: answered.headers });
+}) as never);
 v1Routes.openapi(embeddingsRoute, (c) => reply(c, "embeddings", c.req.valid("json")) as never);
 v1Routes.openapi(transcriptionsRoute, async (c) => {
   const form = c.req.valid("form");

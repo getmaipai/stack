@@ -20,6 +20,8 @@ const VISION = r("vision", "Qwen3-VL 4B", "Describes pictures for the parts of H
 const JUDGE = r("judge", "Qwen3 4B", "A second, smaller AI that double-checks answers.", "required", ["qwen3-4b-q4-k-m"]);
 const CODING = r("coding", "Qwen3.8 27B", "The model that writes code for the coding tools you connect. Its Max level uses the Max chat model, chosen under Chat.", "recommended", ["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft"]);
 const EMBED = r("embed", "Memory and search model", "Lets Home find the right memory or page by meaning.", "required", ["nomic-embed-text-v1-5-q4-k-m"]);
+// STACK-RERANK-FILL-01: the re-ranker is a recommended row beside the embedding model on every template that lists the rerank role.
+const RERANK = r("rerank", "Search re-ranker", "Puts the best search results first.", "recommended", ["bge-reranker-v2-m3-q4-k-m"]);
 const STT_SMALL = r("stt", "Moonshine Tiny English", "Turns what you say into text.", "required", ["moonshine-tiny-en-int8", "silero-vad", "pyannote-segmentation-3.0-int8", "titanet-small-en", "smart-turn-v3.2"]);
 const STT_BIG = r("stt", "Moonshine Tiny English", "Turns what you say into text.", "required", ["parakeet-tdt-0.6b-v2-int8", "silero-vad", "pyannote-segmentation-3.0-int8", "titanet-small-en", "smart-turn-v3.2"]);
 const VOICE_SMALL = r("voice", "Pocket TTS", "The standard speaking voice.", "required", ["pocket-tts-english", "pocket-tts-english-tokenizer", "pocket-tts-voice-alba"]);
@@ -108,7 +110,9 @@ const P128_LINEUP: SnapRow[] = SNAPSHOT.p128!.filter((row) => !["chat-splash-qwe
 test("every template's rows match the snapshot taken before the model rows moved to data", () => {
   for (const tier of PROFILE_TIERS) {
     const rows = buildDiskPlan(tier).rows.map((row) => ({ id: row.id, label: row.label, note: row.note, need: row.need, model_ids: row.model_ids }));
-    const expected = (tier.id === "p128" ? P128_LINEUP : SNAPSHOT[tier.id]!) as unknown as typeof rows;
+    const base = (tier.id === "p128" ? P128_LINEUP : SNAPSHOT[tier.id]!) as unknown as typeof rows;
+    const at = base.findIndex((row) => row.id === "embed");
+    const expected = rows.some((row) => row.id === "rerank") && at >= 0 ? [...base.slice(0, at + 1), RERANK as unknown as (typeof rows)[number], ...base.slice(at + 1)] : base;
     expect(rows).toEqual(expected);
   }
 });

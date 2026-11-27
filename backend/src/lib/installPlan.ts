@@ -34,7 +34,7 @@ export interface InstallPlan {
 
 /** Role importance for ordering: chat first, then speech in, speech out,
  * embeddings, the judge, the router, anything else. */
-const ROLE_ORDER: RoleId[] = [PRIMARY_ROLE, "stt", "tts", "embed", "judge", "router", HEAVY_ROLE];
+const ROLE_ORDER: RoleId[] = [PRIMARY_ROLE, "stt", "tts", "embed", "rerank", "judge", "router", HEAVY_ROLE];
 /** Roles whose bound model is in the recommended setup but removable afterwards: the coding model (CODE-STACK-01), which only p64 and p128 bind. */
 const REMOVABLE_ROLES: RoleId[] = [HEAVY_ROLE, PICTURE_READER_ROLE];
 const rank = (role: RoleId): number => { const index = ROLE_ORDER.indexOf(role); return index === -1 ? ROLE_ORDER.length : index; };

@@ -4,5 +4,6 @@
   { "role": "coding", "group": "chat", "serves": "coding", "usedBy": ["Coding"] },
   { "role": "vision", "group": "chat", "serves": "vision", "usedBy": ["Describing pictures"] },
   { "role": "embed", "group": "chat", "serves": "embed", "usedBy": ["Memory and search"] },
+  { "role": "rerank", "group": "chat", "serves": "rerank", "usedBy": ["Search re-ranking"] },
   { "role": "stt", "group": "voice", "serves": "stt", "usedBy": ["Listening"] }
 ]

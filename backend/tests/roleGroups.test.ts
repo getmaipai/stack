@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { rolesWith } from "@/roles";
 
-const SPAWNABLE = ["chat", "coding", "judge", "embed", "vision", "stt", "tts", "image", "helper"];
+const SPAWNABLE = ["chat", "coding", "judge", "embed", "rerank", "vision", "stt", "tts", "image", "helper"];
 const SPEECH = ["stt"];
 const MANAGED = ["tts", "image"];
 const GENERATOR = ["image"];

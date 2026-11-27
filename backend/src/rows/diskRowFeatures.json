@@ -40,6 +40,7 @@
   "coding": "coding",
   "stt": "stt",
   "embed": "embeddings",
+  "rerank": "embeddings",
   "home": null,
   "judge": null,
   "ffmpeg": null,

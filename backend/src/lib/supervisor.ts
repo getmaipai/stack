@@ -455,6 +455,7 @@ export const VISION_PROBE_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
 
 export function probeRequest(role: RoleId): { path: string; body: Record<string, unknown> } {
   if (ROLES[role].wire === "embeddings") return { path: "/v1/embeddings", body: { model: role, input: "OK" } };
+  if (ROLES[role].wire === "rerank") return { path: "/v1/rerank", body: { model: role, query: "OK", documents: ["OK", "No"] } };
   if (ROLES[role].wire === "transcription") return { path: TRANSCRIBE_PATH, body: { model: role, audio_base64: bundledClipBase64() } };
   // The speech wire's probe is a form, sent by `probeSpeech`; this shape
   // is what a JSON caller would see and is never sent as JSON.
@@ -475,6 +476,10 @@ export function probeReplyOk(role: RoleId, result: { status: number; body: unkno
   if (ROLES[role].wire === "embeddings") {
     const data = (result.body as { data?: Array<{ embedding?: unknown }> }).data;
     return Array.isArray(data) && Array.isArray(data[0]?.embedding) && data[0].embedding.length > 0;
+  }
+  if (ROLES[role].wire === "rerank") {
+    const results = (result.body as { results?: Array<{ relevance_score?: unknown }> }).results;
+    return Array.isArray(results) && results.length > 0 && typeof results[0]?.relevance_score === "number";
   }
   if (ROLES[role].wire === "transcription") {
     const text = (result.body as { text?: unknown }).text;
@@ -737,7 +742,7 @@ function engineForRole(role: RoleId): string | null {
   // bind a 4B model to it) runs on llama-server whatever engine chat uses:
   // the MLX pin is chat's model, not the judge's.
   if (CHAT_WIRE_ROLES.includes(role)) return processRoleFor(role) === PRIMARY_ROLE ? chatEngine() : "llama-server";
-  if (role === "embed") return "llama-server";
+  if (role === "embed" || role === "rerank") return "llama-server";
   // The voice role's records name the engine they are for; the engine in
   // effect (the setting, the tier, what is installed) decides which.
   if (role === "tts") return TTS_ENGINES[activeTtsChoice().engine].catalogEngine;
@@ -1579,7 +1584,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
   const projector = launchProjectorFor(role, model);
   if (role === PICTURE_READER_ROLE && !projector?.modelPath) throw new EngineUnavailableError(`The ${model.id} projector is not installed.`);
   const pictureTokensMax = projector?.modelPath ? declaredPictureTokensMax(model) : null;
-  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), gpuLayers: gpuLayersFor(role), embeddings: role === "embed", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === PICTURE_READER_ROLE, imageMaxTokens: pictureTokensMax ?? undefined, chatTemplateKwargs: declaredChatTemplateKwargs(model) ?? undefined });
+  const args = llamaServerArgs({ modelPath: model.modelPath!, port, config, contextLength, kvCacheType: defaultKvCacheType(), gpuLayers: gpuLayersFor(role), embeddings: role === "embed", reranking: role === "rerank", projectorPath: projector?.modelPath ?? undefined, onePictureSlot: role === PICTURE_READER_ROLE, imageMaxTokens: pictureTokensMax ?? undefined, chatTemplateKwargs: declaredChatTemplateKwargs(model) ?? undefined });
   return { command: [binary, ...args], apiKey: newLaunchKey(), engine: "llama-server", build: currentEngineTag("llama-server") ?? pin.tag, stdin: "ignore", contextLength, slots, contextScope: "per slot", kind: "spawned", imageInput: !!projector?.modelPath, pictureTokensMax };
 }
 
@@ -1951,7 +1956,7 @@ async function startSpawnedProcess(role: RoleId, modelId?: string): Promise<Role
 }
 
 const modelMissingReason = (role: RoleId): string => `No verified and installed ${role} model is available.`;
-const LLAMA_RESIDENTS: RoleId[] = [PRIMARY_ROLE, "embed", "judge", "router"];
+const LLAMA_RESIDENTS: RoleId[] = [PRIMARY_ROLE, "embed", "rerank", "judge", "router"];
 /** Why a resident llama-server role cannot start now (no installed engine build, no verified model), or null. A scripted engine stands in for both. */
 export function residentStartBlocker(role: RoleId, modelId?: string): string | null {
   // A scripted engine stands in for an installed model, as it does for an installed engine, unless the test says it checks models.
@@ -2768,6 +2773,11 @@ export function scriptedProcess(role: RoleId, overrides: Partial<RoleProcess> = 
       // whitespace-separated pieces.
       if (path === "/apply-template") return { status: 200, body: { prompt: (Array.isArray(body.messages) ? body.messages as Array<{ content?: unknown }> : []).map((m) => `<m> ${String(m.content ?? "")} </m>`).join(" ") + (Array.isArray(body.tools) ? ` <tools> ${(body.tools as unknown[]).map(() => "tool").join(" ")} </tools>` : "") } };
       if (path === "/tokenize") return { status: 200, body: { tokens: String(body.content ?? "").split(/\s+/).filter(Boolean).map((_, i) => i) } };
+      if (path === "/v1/rerank") {
+        const documents = Array.isArray(body.documents) ? body.documents : [];
+        // Unsorted on purpose: the route, not the engine, owns the order.
+        return { status: 200, body: { model: role, object: "list", usage: { prompt_tokens: documents.length, total_tokens: documents.length }, results: documents.map((_, index) => ({ index, relevance_score: ((index * 7) % documents.length) / Math.max(1, documents.length) })) } };
+      }
       if (path === "/v1/embeddings") return { status: 200, body: { object: "list", data: [{ object: "embedding", index: 0, embedding: [0.1, 0.2, 0.3] }], model: role, usage: { prompt_tokens: 1, total_tokens: 1 } } };
       // The transcription wire: the bundled clip's sentence for any WAV
       // with bytes in it, an empty transcript for an empty one.

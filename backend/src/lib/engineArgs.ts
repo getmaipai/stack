@@ -17,6 +17,8 @@ export interface LlamaServerArgsOptions {
   gpuLayers?: "all" | 0;
   /** Serve `/v1/embeddings` instead of chat: the `embed` role's launch. */
   embeddings?: boolean;
+  /** Serve `/v1/rerank` (llama-server's own `--reranking`, pooling rank from the GGUF): the `rerank` role's launch. */
+  reranking?: boolean;
   /** The multimodal projector a model loads beside its weights
    * (`--mmproj`): the `vision` role's launch (VISION-01b), or a chat model
    * that reads pictures itself (VISION-02b). */
@@ -131,7 +133,7 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   // hybrid model, so a chat process always spells the slots its settings
   // declare (one by default).
   if (options.onePictureSlot) args.push("--parallel", "1");
-  else if (!options.embeddings) args.push("--parallel", String(Math.max(1, slots)));
+  else if (!options.embeddings && !options.reranking) args.push("--parallel", String(Math.max(1, slots)));
   const threads = typeof config.threads === "number" ? config.threads : 0;
   if (threads > 0) args.push("--threads", String(threads));
   // The prompt cache that llama-server keeps in host memory defaults to
@@ -143,7 +145,7 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   // was reprocessed in full every turn (7 to 8 s). `--checkpoint-min-step 0`
   // lets a snapshot land wherever the prompt ended; measured on the Studio, a
   // repeat turn reused 4429 of 4451 tokens (0.6 s). Eight snapshots bound memory.
-  if (!options.embeddings) {
+  if (!options.embeddings && !options.reranking) {
     args.push("--cache-ram", String(llamaCacheRamMib(config)));
     args.push("--checkpoint-min-step", "0");
     args.push("--ctx-checkpoints", String(LLAMA_CTX_CHECKPOINTS));
@@ -153,6 +155,8 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   if (kvCacheType !== "f16") args.push("-ctk", kvCacheType, "-ctv", kvCacheType);
   // An embedding model is served with pooling on and no chat template.
   if (options.embeddings) args.push("--embeddings");
+  // A re-ranker is served with the engine's native ranking mode (it implies pooling rank).
+  if (options.reranking) args.push("--reranking");
   return args;
 }
 

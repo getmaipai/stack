@@ -16,18 +16,18 @@
     "p32.needed_bytes": 43914403488,
     "p32.home_required_free_bytes": 3176323277,
     "p32.ai_required_free_bytes": 48589999960,
-    "p64.required_free_bytes": 194408088009,
+    "p64.required_free_bytes": 194934140245,
     "p64.minimum_required_free_bytes": 37187160053,
-    "p64.everything_required_free_bytes": 311569731337,
-    "p64.needed_bytes": 163132456740,
+    "p64.everything_required_free_bytes": 312095783574,
+    "p64.needed_bytes": 163570833604,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 191231764732,
-    "p128.required_free_bytes": 227254640604,
+    "p64.ai_required_free_bytes": 191757816969,
+    "p128.required_free_bytes": 227780692841,
     "p128.minimum_required_free_bytes": 71002279038,
-    "p128.everything_required_free_bytes": 761179363073,
-    "p128.needed_bytes": 190416791375,
+    "p128.everything_required_free_bytes": 761705415310,
+    "p128.needed_bytes": 190855168239,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 224078317327
+    "p128.ai_required_free_bytes": 224604369564
   },
   "tiers": {
     "p16": {
@@ -1323,6 +1323,25 @@
           "minors_only": false
         },
         {
+          "id": "rerank",
+          "label": "Search re-ranker",
+          "note": "Puts the best search results first.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 438376864,
+          "installed_bytes": 438376864,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "bge-reranker-v2-m3-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins",
+          "feature": "embeddings",
+          "minors_only": false
+        },
+        {
           "id": "stt",
           "label": "Moonshine Tiny English",
           "note": "Turns what you say into text.",
@@ -2221,11 +2240,11 @@
         }
       ],
       "default": {
-        "download_bytes": 152708111642,
-        "installed_bytes": 156378156341,
+        "download_bytes": 153146488506,
+        "installed_bytes": 156816533205,
         "peak_temp_bytes": 6754300399,
-        "needed_bytes": 163132456740,
-        "required_free_bytes": 194408088009
+        "needed_bytes": 163570833604,
+        "required_free_bytes": 194934140245
       },
       "minimum": {
         "download_bytes": 26431347205,
@@ -2235,11 +2254,11 @@
         "required_free_bytes": 37187160053
       },
       "everything": {
-        "download_bytes": 242192771148,
-        "installed_bytes": 249074688892,
+        "download_bytes": 242631148012,
+        "installed_bytes": 249513065756,
         "peak_temp_bytes": 12680104666,
-        "needed_bytes": 261754793558,
-        "required_free_bytes": 311569731337
+        "needed_bytes": 262193170422,
+        "required_free_bytes": 312095783574
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2248,6 +2267,7 @@
         "judge",
         "coding",
         "embed",
+        "rerank",
         "stt",
         "voice",
         "voice-better",
@@ -2396,6 +2416,25 @@
           "peak_temp_bytes": 0,
           "model_ids": [
             "nomic-embed-text-v1-5-q4-k-m"
+          ],
+          "engines": [],
+          "installed": false,
+          "basis": "pins",
+          "feature": "embeddings",
+          "minors_only": false
+        },
+        {
+          "id": "rerank",
+          "label": "Search re-ranker",
+          "note": "Puts the best search results first.",
+          "kind": "model",
+          "need": "recommended",
+          "selectable": true,
+          "download_bytes": 438376864,
+          "installed_bytes": 438376864,
+          "peak_temp_bytes": 0,
+          "model_ids": [
+            "bge-reranker-v2-m3-q4-k-m"
           ],
           "engines": [],
           "installed": false,
@@ -3504,11 +3543,11 @@
         }
       ],
       "default": {
-        "download_bytes": 180772228293,
-        "installed_bytes": 184189246142,
+        "download_bytes": 181210605157,
+        "installed_bytes": 184627623006,
         "peak_temp_bytes": 6227545233,
-        "needed_bytes": 190416791375,
-        "required_free_bytes": 227254640604
+        "needed_bytes": 190855168239,
+        "required_free_bytes": 227780692841
       },
       "minimum": {
         "download_bytes": 54868791750,
@@ -3518,11 +3557,11 @@
         "required_free_bytes": 71002279038
       },
       "everything": {
-        "download_bytes": 614922035282,
-        "installed_bytes": 623263821304,
+        "download_bytes": 615360412146,
+        "installed_bytes": 623702198168,
         "peak_temp_bytes": 13262777508,
-        "needed_bytes": 636526598812,
-        "required_free_bytes": 761179363073
+        "needed_bytes": 636964975676,
+        "required_free_bytes": 761705415310
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -3532,6 +3571,7 @@
         "judge",
         "coding",
         "embed",
+        "rerank",
         "stt",
         "voice",
         "image-tools",

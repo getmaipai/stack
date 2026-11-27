@@ -489,6 +489,10 @@
       "download_bytes": 84106624,
       "installed_bytes": 84106624
     },
+    "bge-reranker-v2-m3-q4-k-m": {
+      "download_bytes": 438376864,
+      "installed_bytes": 438376864
+    },
     "qwen3-vl-4b-instruct-q4-k-m": {
       "download_bytes": 2497281664,
       "installed_bytes": 2497281664

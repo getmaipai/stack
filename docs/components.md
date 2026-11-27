@@ -154,9 +154,9 @@ Engines per platform:
 | Profile | Stance | Model | Quantization | File size | Measured footprint | Measured context | Licence | Source | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | p16 | not available |  |  |  |  |  |  |  | not available |
-| p32 | on demand |  |  |  |  |  |  |  | not yet |
-| p64 | resident |  |  |  |  |  |  |  | not yet |
-| p128 | resident |  |  |  |  |  |  |  | not yet |
+| p32 | on demand | `bge-reranker-v2-m3-q4-k-m` | q4_k_m | 0.41 GB | not measured | not measured | Apache-2.0 | gpustack/bge-reranker-v2-m3-GGUF @ 3093af03b1a635e67b084b1d8c03c5f5e020fd05 | pinned |
+| p64 | resident | `bge-reranker-v2-m3-q4-k-m` | q4_k_m | 0.41 GB | not measured | not measured | Apache-2.0 | gpustack/bge-reranker-v2-m3-GGUF @ 3093af03b1a635e67b084b1d8c03c5f5e020fd05 | pinned |
+| p128 | resident | `bge-reranker-v2-m3-q4-k-m` | q4_k_m | 0.41 GB | not measured | not measured | Apache-2.0 | gpustack/bge-reranker-v2-m3-GGUF @ 3093af03b1a635e67b084b1d8c03c5f5e020fd05 | pinned |
 
 ## vision (Vision)
 

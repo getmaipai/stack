@@ -66,12 +66,12 @@ test("plan: every model is a complete pull body from a shipped pin", () => {
   expect(plan.models.find((model) => model.id === "pocket-tts-english")).toMatchObject({ hub_file: "languages/english/model.safetensors" });
   expect(plan.models.find((model) => model.id === "parakeet-tdt-0.6b-v2-int8")).toMatchObject({ archive: true });
 });
-test("plan: the chat model is first and the only starter, then stt, tts, embed, judge", () => {
+test("plan: the chat model is first and the only starter, then stt, tts, embed, rerank, judge", () => {
   const plan = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }));
   expect(plan.models[0]).toMatchObject({ id: "qwen3-8b-instruct-q4-k-m", starter: true });
   expect(plan.models.filter((model) => model.starter)).toHaveLength(1);
   // Klein is a required disk-plan row on p64 (AIMODELS-DATA-01), so the picture model rides the plan.
-  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "stt", "tts", "tts", "embed", "judge", "coding", "image"]);
+  expect(plan.models.filter((model) => !model.component).map((model) => model.role)).toEqual(["chat", "stt", "tts", "tts", "embed", "rerank", "judge", "coding", "image"]);
   // No smaller starter ships ahead of the chat model.
   expect(plan.models.map((model) => model.id)).not.toContain("qwen3-1.7b-q8-0");
 });

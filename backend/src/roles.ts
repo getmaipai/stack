@@ -131,8 +131,9 @@ export const ROLES = {
     wire: "rerank",
     residency: "resident",
     memoryClass: "reserved",
-    endpoints: [],
+    endpoints: ["/v1/rerank"],
     quality: [],
+    spawnable: true,
   },
   // VISION-01b: its own model and process (a vision-language model with
   // its projector), loaded on a picture request and evicted when idle;

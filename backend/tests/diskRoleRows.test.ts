@@ -13,12 +13,13 @@ test("the plain-role rows appear in order with the same needs as before", () => 
   const ids = plan.rows.map((row) => row.id);
   const start = ids.indexOf("vision");
   expect(start).toBeGreaterThan(-1);
-  expect(ids.slice(start, start + 5)).toEqual(["vision", "judge", "coding", "embed", "stt"]);
+  expect(ids.slice(start, start + 6)).toEqual(["vision", "judge", "coding", "embed", "rerank", "stt"]);
   const need = (id: string) => plan.rows.find((row) => row.id === id)!.need;
   expect(need("vision")).toBe("recommended");
   expect(need("judge")).toBe("required");
   expect(need("coding")).toBe("recommended");
   expect(need("embed")).toBe("required");
+  expect(need("rerank")).toBe("recommended");
   expect(need("stt")).toBe("required");
 });
 
