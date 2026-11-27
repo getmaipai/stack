@@ -48,3 +48,9 @@ test("nothing installed is an honest empty run, not a green one", async () => {
   expect(run.ok).toBe(false);
   expect(run.reason).toMatch(/Nothing to check/);
 });
+
+test("music and video run as jobs on their own worker: the check skips them and raises no 'No engine can be started' problem", async () => {
+  const run = await runCheck({ roleIds: ["music", "video"] });
+  expect(run.results.map((r) => [r.role, r.skipped])).toEqual([["music", true], ["video", true]]);
+  expect(listHealth().filter((item) => item.code.startsWith("check-role."))).toEqual([]);
+});

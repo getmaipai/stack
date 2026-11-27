@@ -66,6 +66,11 @@ async function checkRole(role: RoleId, options: CheckOptions): Promise<CheckRole
       resolveHealth(`check-role.${role}`);
       return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason: `Skipped: no ${wire} engine is ready for ${role}.`, loadMs: null };
     }
+    // A generator with no engine process of its own (music and video run in the governor's warm workers, one job at a time) has nothing to start or list: a probe would fail with "No engine can be started" while the worker is fine. Its own media check covers it.
+    if (wire === "job" && !(ROLES[role] as { spawnable?: boolean }).spawnable) {
+      resolveHealth(`check-role.${role}`);
+      return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason: `Skipped: ${role} runs as a job on its own worker, so the check does not start an engine for it.`, loadMs: null };
+    }
     if (wire === "job") {
       // A generator's probe is its checkpoint list, never a render.
       const answer = await runOnRole(role, (processRecord) => probeGenerator(processRecord.client, expectedCheckpoint(role)));
