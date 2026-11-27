@@ -17,6 +17,8 @@ is published yet. This file tracks what either picks up.
 
 ### Changed
 
+- The 128 GB recommended preset is a new lineup (2026-11-27): chat is Qwen3.6 35B Huihui with its draft, the voice is VoxCPM2 (the default engine on that tier), pictures are FLUX 3 Image Klein. Qwen3 8B, Pocket TTS, Chatterbox Turbo (with its parts and de-reverb) and FLUX.2 Klein 4B are left out of that preset only: they stay in the catalog and Custom, and nothing installed is removed. Other tiers are unchanged.
+
 - LTX-2.5 is off the vetting list (owner, 2026-11-22: it was vetted): it is the recommended Standard and Boost video model on a 128 GB computer, ahead of MiniMax H3, and LTX-2.5 Max stays the Max pick.
 - The recommended Standard picture model on a 64 GB computer or bigger is FLUX 3 (the 2026-11-17 owner decision); MiniMax H3-Image stays the Boost pick and is one choice away.
 - Home's installer now builds the admin page with the UI package's own shared spec (Home `e5fb717`), so `/admin/` is served again after a Home ship. This entry also gives the Stack a new commit, which makes Home's installer rebuild the Stack once and pick the page up.

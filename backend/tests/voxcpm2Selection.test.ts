@@ -55,13 +55,15 @@ const CLIP = "http://127.0.0.1:8787/api/voice/cloned/voice-abc123def456/file";
 test("with the setting untouched nothing about VoxCPM2 is chosen, installed or in the first-run plan", () => {
   for (const tier of ["p16", "p32", "p64", "p128"] as const) {
     setMachineTier(tier);
-    expect(activeTtsChoice().requested).toBe(tier === "p64" || tier === "p128" ? "chatterbox-turbo" : "pocket");
+    expect(activeTtsChoice().requested).toBe(tier === "p128" ? "voxcpm2" : tier === "p64" ? "chatterbox-turbo" : "pocket");
   }
   const ids = new Set(voxcpm2PackFor(VOXCPM2_ENGINE).concat(voxcpm2PackFor(VOXCPM2_REDUCED_ENGINE)).map((pin) => pin.id));
-  for (const gb of [16, 32, 64, 128]) {
-    const plan = buildInstallPlan({ platform: "darwin", arch: "arm64", totalRamGb: gb, cpuCount: 8, isAppleSilicon: true, unifiedMemoryGb: gb, cudaDevices: [], freeDiskBytes: 500e9, osVersion: "test" });
-    for (const model of plan.models) expect(ids.has(model.id)).toBe(false);
-  }
+  const planFor = (gb: number) => buildInstallPlan({ platform: "darwin", arch: "arm64", totalRamGb: gb, cpuCount: 8, isAppleSilicon: true, unifiedMemoryGb: gb, cudaDevices: [], freeDiskBytes: 500e9, osVersion: "test" });
+  for (const gb of [16, 32, 64]) for (const model of planFor(gb).models) expect(ids.has(model.id)).toBe(false);
+  // The 128 GB lineup plans the full-size VoxCPM2 (its default voice) but never the smaller size.
+  const p128 = planFor(128).models.map((model) => model.id);
+  for (const pin of voxcpm2PackFor(VOXCPM2_ENGINE)) expect(p128).toContain(pin.id);
+  for (const pin of voxcpm2PackFor(VOXCPM2_REDUCED_ENGINE)) if (!pin.id.startsWith("voxcpm2-clip-stt-")) expect(p128).not.toContain(pin.id);
   for (const tier of PROFILE_TIERS) for (const row of buildDiskPlan(tier).rows) if (row.id.startsWith("voice-voxcpm2")) expect(row.need).toBe("optional");
 });
 
@@ -69,8 +71,10 @@ test("the disk plan offers each size as an optional row (bf16 from 64 GB, 4-bit 
   const rowsOf = (id: string) => buildDiskPlan(PROFILE_TIERS.find((tier) => tier.id === id)!).rows.filter((row) => row.id.startsWith("voice-voxcpm2")).map((row) => row.id);
   expect(rowsOf("p16")).toEqual([]);
   expect(rowsOf("p32")).toEqual(["voice-voxcpm2-reduced"]);
-  expect(rowsOf("p128")).toEqual(["voice-voxcpm2", "voice-voxcpm2-reduced"]);
-  const row = buildDiskPlan(PROFILE_TIERS.find((tier) => tier.id === "p128")!).rows.find((item) => item.id === "voice-voxcpm2")!;
+  expect(rowsOf("p64")).toEqual(["voice-voxcpm2", "voice-voxcpm2-reduced"]);
+  // On p128 the full size is the required voice row itself, so only the smaller size stays optional.
+  expect(rowsOf("p128")).toEqual(["voice-voxcpm2-reduced"]);
+  const row = buildDiskPlan(PROFILE_TIERS.find((tier) => tier.id === "p64")!).rows.find((item) => item.id === "voice-voxcpm2")!;
   expect(row.model_ids).toContain("voxcpm2-clip-stt-model");
   expect(row.model_ids).toContain("voxcpm2-bf16");
   expect(row.engines).toEqual(["engine:voice-voxcpm2", "engine:python"]);
@@ -139,6 +143,7 @@ test("on VoxCPM2 a clip with no words is sent without them (the engine reads the
 });
 
 test("on Chatterbox the clip's words are not sent and the tokenizer is still fetched (unchanged)", async () => {
+  setMachineTier("p64"); // Chatterbox is the default voice on p64 (p128 defaults to VoxCPM2)
   for (const pin of [STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS]) upsertModel({ id: pin.id, roles: ["tts"], ...verified, engineRequirements: { engine: "chatterbox-turbo", ...(pin.component ? { component: pin.component } : {}) } });
   const root = mlxAudioRoot(); mkdirSync(join(root, "venv", "bin"), { recursive: true });
   for (const name of ["mlx_audio.tts.generate", "python"]) { const path = join(root, "venv", "bin", name); writeFileSync(path, "#!/bin/sh\n"); chmodSync(path, 0o755); }

@@ -75,8 +75,12 @@ test("plan: the chat model is first and the only starter, then stt, tts, embed, 
   // No smaller starter ships ahead of the chat model.
   expect(plan.models.map((model) => model.id)).not.toContain("qwen3-1.7b-q8-0");
 });
-test("plan: the chat pull is the 8B on every tier, with no larger chat pin", () => {
-  for (const gb of [16, 24, 32, 64, 128]) {
+test("plan: the chat pull is the 8B on every tier but p128 (the 35B Huihui lineup), with no larger chat pin elsewhere", () => {
+  const p128 = buildInstallPlan(hw({ unifiedMemoryGb: 128, totalRamGb: 128 }));
+  expect(p128.models.filter((model) => model.role === "chat" && !model.component).map((model) => model.id)).toEqual(["qwen3-6-35b-a3b-huihui-abliterated-q4-k-m"]);
+  expect(p128.models.find((model) => model.id === "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m")).toMatchObject({ approx_bytes: 21_166_758_784, starter: true });
+  expect(p128.models.map((model) => model.id)).not.toContain("qwen3-8b-instruct-q4-k-m");
+  for (const gb of [16, 24, 32, 64]) {
     const plan = buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb }));
     expect(plan.models.filter((model) => model.role === "chat" && !model.component).map((model) => model.id)).toEqual(["qwen3-8b-instruct-q4-k-m"]);
     expect(plan.models.find((model) => model.id === "qwen3-8b-instruct-q4-k-m")).toMatchObject({ approx_bytes: 5_027_783_488, starter: true });
@@ -127,8 +131,8 @@ test("plan: p64 and p128 include the coding model as a removable pull body; p16 
     expect(coding[0]).toMatchObject({ id: "qwen3.8-27b-ud-q4-k-m", removable: true, starter: false, installed: false, approx_bytes: 16_464_440_224, licence: "Apache-2.0", engine: "llama-server", revision: "4ca720788d1e01f1bff70c033e0d0028fd02e502", sha256: "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482" });
     // Only the coding model, its draft and (p128) the picture reader are flagged removable; everything else is required.
     expect(plan.models.filter((model) => model.removable).map((model) => model.id).filter((id) => id !== "qwen3-vl-4b-instruct-q4-k-m")).toEqual(["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft"]);
-    // Chat is still the starter and still first; coding changes neither.
-    expect(plan.models[0]).toMatchObject({ id: "qwen3-8b-instruct-q4-k-m", starter: true });
+    // Chat is still the starter and still first; coding changes neither (p128 starts with the 35B Huihui, p64 with the 8B).
+    expect(plan.models[0]).toMatchObject({ id: gb === 128 ? "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m" : "qwen3-8b-instruct-q4-k-m", starter: true });
   }
   for (const gb of [16, 24, 32]) {
     const plan = buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb }));
@@ -146,8 +150,9 @@ test("plan: the coding model adds its size to the totals and a pull body for it 
   const both = buildInstallPlan(hw({ unifiedMemoryGb: 64, totalRamGb: 64 }), { installedIds: ["qwen3.8-27b-ud-q4-k-m", "qwen3.8-27b-dflash2-draft"] });
   expect(both.remaining_bytes).toBe(with64.total_bytes - 16_464_440_224 - 3_848_817_896);
 });
-test("plan: the optional 35B and its draft are offered as removable parts and never join a tier's plan", () => {
-  for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.map((model) => model.id)).not.toContain("qwen3-6-35b-a3b-huihui-abliterated-q4-k-m");
+test("plan: the optional 35B and its draft are offered as removable parts; only the p128 lineup plans them", () => {
+  expect(buildInstallPlan(hw({ unifiedMemoryGb: 128, totalRamGb: 128 })).models.map((model) => model.id)).toEqual(expect.arrayContaining(["qwen3-6-35b-a3b-huihui-abliterated-q4-k-m", "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft"]));
+  for (const gb of [16, 32, 64]) expect(buildInstallPlan(hw({ unifiedMemoryGb: gb, totalRamGb: gb })).models.map((model) => model.id)).not.toContain("qwen3-6-35b-a3b-huihui-abliterated-q4-k-m");
   const optional = splashChatInstallModels([], "p64");
   expect(optional.map((model) => model.id)).toEqual(["qwen3-6-35b-a3b-huihui-abliterated-q4-k-m", "qwen3-6-35b-a3b-huihui-abliterated-dflash2-draft"]);
   expect(optional[0]).toMatchObject({ removable: true, approx_bytes: 21_166_758_784, engine: "splash" });

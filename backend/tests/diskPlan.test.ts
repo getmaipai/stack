@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildDiskPlan, diskPlanExport, diskTotalsFor } from "@/lib/diskPlan";
 import { plannedPinsFor } from "@/lib/installPlan";
-import { STACK_MODELS, STACK_VIDEO_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_ZIMAGE_MODELS } from "@/lib/modelCatalog";
+import { STACK_MODELS, STACK_VIDEO_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_ZIMAGE_MODELS } from "@/lib/modelCatalog";
 import measured from "@/lib/diskPlanMeasured.json";
 import { PROFILE_TIERS } from "@/profiles";
 import { partDef } from "@/lib/partDefs";
@@ -33,9 +33,10 @@ test("every model the install plan installs belongs to exactly one row, in every
     const plan = buildDiskPlan(tier);
     const counts = new Map<string, number>();
     for (const row of plan.rows) for (const id of row.model_ids) counts.set(id, (counts.get(id) ?? 0) + 1);
-    for (const { pin } of plannedPinsFor(tier)) expect([tier.id, pin.id, counts.get(pin.id)]).toEqual([tier.id, pin.id, 1]);
     // The VoxCPM2 clip speech-to-text is the one shared companion: each size's optional row lists it (the rows are alternatives, each sized alone).
-    const voxcpm2Rows = plan.rows.filter((row) => row.id.startsWith("voice-voxcpm2")).length;
+    // On p128 the required voice row is VoxCPM2 itself, so it holds the companion too.
+    const voxcpm2Rows = plan.rows.filter((row) => row.id.startsWith("voice-voxcpm2") || (row.id === "voice" && row.model_ids.includes("voxcpm2-bf16"))).length;
+    for (const { pin } of plannedPinsFor(tier)) expect([tier.id, pin.id, counts.get(pin.id)]).toEqual([tier.id, pin.id, pin.id.startsWith("voxcpm2-clip-stt-") ? voxcpm2Rows : 1]);
     for (const [id, count] of counts) expect([tier.id, id, count]).toEqual([tier.id, id, id.startsWith("voxcpm2-clip-stt-") ? voxcpm2Rows : 1]);
   }
 });
@@ -87,17 +88,18 @@ test("tiers: p16 and p32 have no generators, p64 has Klein and ERNIE, p128 adds 
     const plan = buildDiskPlan(PROFILE_TIERS.find((candidate) => candidate.id === tier)!);
     const klein = plan.rows.find((row) => row.id === "pictures")!;
     const ernie = plan.rows.find((row) => row.id === "pictures-ernie")!;
-    expect(klein).toMatchObject({ label: partDef("flux2-klein-4b")!.label, note: partDef("flux2-klein-4b")!.description, need: "required" });
+    const kleinPart = tier === "p128" ? "flux3-image-klein" : "flux2-klein-4b";
+    expect(klein).toMatchObject({ label: partDef(kleinPart)!.label, note: partDef(kleinPart)!.description, need: "required" });
     expect(ernie).toMatchObject({ label: partDef("ernie-image-turbo")!.label, note: partDef("ernie-image-turbo")!.description, need: "recommended" });
     expect(plan.default_selected).toContain("pictures");
     expect(plan.default_selected).toContain("pictures-ernie");
     expect(ernie.download_bytes).toBe(STACK_IMAGE_ERNIE_MODELS.reduce((sum, pin) => sum + pin.download!.approx_bytes, 0));
   }
   expect(p128.rows.find((r) => r.id === "video")!.download_bytes).toBe(STACK_VIDEO_MODELS.reduce((s, p) => s + p.download!.approx_bytes, 0));
-  expect(p128.rows.find((r) => r.id === "pictures")!.download_bytes).toBe(STACK_IMAGE_KLEIN_MODELS.reduce((s, p) => s + p.download!.approx_bytes, 0));
+  expect(p128.rows.find((r) => r.id === "pictures")!.download_bytes).toBe(STACK_IMAGE_KLEIN3_MODELS.reduce((s, p) => s + p.download!.approx_bytes, 0));
   expect(p128.rows.find((r) => r.id === "pictures-zimage")!.download_bytes).toBe(STACK_IMAGE_ZIMAGE_MODELS.reduce((s, p) => s + p.download!.approx_bytes, 0));
-  // The sizes the owner quoted, to the gigabyte: Klein about 16, ERNIE about 24, Z-Image about 33.
-  expect(Math.round(p128.rows.find((r) => r.id === "pictures")!.installed_bytes / GB)).toBe(15);
+  // The sizes the owner quoted, to the gigabyte: FLUX 3 Image Klein (the p128 pictures row) about 19, ERNIE about 24, Z-Image about 33.
+  expect(Math.round(p128.rows.find((r) => r.id === "pictures")!.installed_bytes / GB)).toBe(19);
   expect(Math.round(p128.rows.find((r) => r.id === "pictures-ernie")!.installed_bytes / 1_000_000_000)).toBe(24);
   expect(Math.round(p128.rows.find((r) => r.id === "pictures-zimage")!.installed_bytes / GB)).toBe(31);
 });
@@ -173,10 +175,13 @@ test("pictures is required on every tier that makes pictures", () => {
     const plan = buildDiskPlan(tier);
     const row = plan.rows.find((candidate) => candidate.id === "pictures");
     if (tier.notAvailable.includes("image")) { expect(row).toBeUndefined(); continue; }
-    expect(row).toMatchObject({ label: partDef("flux2-klein-4b")!.label, note: partDef("flux2-klein-4b")!.description, need: "required", selectable: false });
-    // A required part rides the first-run install plan: Klein's pins are planned on exactly the tiers that have a pictures row.
+    // p128's lineup plans FLUX 3 Image Klein as its required picture model; every other tier plans FLUX.2 Klein.
+    const part = tier.id === "p128" ? "flux3-image-klein" : "flux2-klein-4b";
+    expect(row).toMatchObject({ label: partDef(part)!.label, note: partDef(part)!.description, need: "required", selectable: false });
+    // A required part rides the first-run install plan: the tier's pictures pins are planned on exactly the tiers that have a pictures row.
     const planned = new Set(plannedPinsFor(tier).map((entry) => entry.pin.id));
-    for (const pin of STACK_IMAGE_KLEIN_MODELS) expect(planned.has(pin.id)).toBe(true);
+    for (const pin of tier.id === "p128" ? STACK_IMAGE_KLEIN3_MODELS : STACK_IMAGE_KLEIN_MODELS) expect(planned.has(pin.id)).toBe(true);
+    if (tier.id === "p128") for (const pin of STACK_IMAGE_KLEIN_MODELS) expect(planned.has(pin.id)).toBe(false);
   }
   for (const tier of ["p16", "p32"]) {
     const planned = new Set(plannedPinsFor(PROFILE_TIERS.find((candidate) => candidate.id === tier)!).map((entry) => entry.pin.id));

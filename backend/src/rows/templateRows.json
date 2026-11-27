@@ -156,6 +156,6 @@
     "recordedSpeech": true,
     "heavyLaneSlots": 2,
     "pictures": true,
-    "defaultTts": "chatterbox-turbo"
+    "defaultTts": "voxcpm2"
   }
 ]

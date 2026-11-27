@@ -67,18 +67,19 @@ test("the clip speech-to-text is pinned as a companion of both sizes: exact revi
   expect(readFileSync(new URL("../src/speech/mlx_tts_server.py", import.meta.url), "utf8")).toContain('STT_REPO = "mlx-community/parakeet-tdt-0.6b-v2"');
 });
 
-test("Chatterbox Turbo stays the default voice on every tier; VoxCPM2 is chosen only by name, in two sizes, and never by auto", () => {
-  expect(TTS_DEFAULT_BY_TIER).toEqual({ p16: "pocket", p32: "pocket", p64: "chatterbox-turbo", p128: "chatterbox-turbo" });
+test("Chatterbox Turbo stays the default voice on p64 and VoxCPM2 is the p128 default; below p128 VoxCPM2 is chosen only by name, in two sizes, and never by auto", () => {
+  expect(TTS_DEFAULT_BY_TIER).toEqual({ p16: "pocket", p32: "pocket", p64: "chatterbox-turbo", p128: "voxcpm2" });
   expect(TTS_ENGINE_CHOICES).toEqual(expect.arrayContaining(["voxcpm2", "voxcpm2-reduced"]));
   expect(isVoxcpm2Engine("voxcpm2")).toBe(true);
   expect(isVoxcpm2Engine("voxcpm2-reduced")).toBe(true);
   expect(isVoxcpm2Engine("chatterbox-turbo")).toBe(false);
   expect(TTS_ENGINES.voxcpm2).toMatchObject({ repo: "mlx-community/VoxCPM2-bf16", runtime: "voxcpm2", catalogEngine: VOXCPM2_ENGINE });
   expect(TTS_ENGINES["voxcpm2-reduced"]).toMatchObject({ repo: "mlx-community/VoxCPM2-4bit", catalogEngine: VOXCPM2_REDUCED_ENGINE });
-  for (const tier of ["p16", "p32", "p64", "p128"] as const) {
+  for (const tier of ["p16", "p32", "p64"] as const) {
     const auto = resolveTtsEngine({ setting: "auto", tier, installed: () => true });
     expect(isVoxcpm2Engine(auto.engine)).toBe(false);
   }
+  expect(resolveTtsEngine({ setting: "auto", tier: "p128", installed: () => true }).engine).toBe("voxcpm2");
 });
 
 test("a named VoxCPM2 size runs when installed and falls back to Pocket with a reason when not", () => {

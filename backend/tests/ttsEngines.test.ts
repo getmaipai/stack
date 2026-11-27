@@ -51,32 +51,34 @@ test("the registry holds five engines, four built (VoxCPM2 in two sizes); Chatte
   expect(TTS_ENGINES["chatterbox-turbo"].catalogEngine).toBe("chatterbox-turbo");
 });
 
-test("the default engine per tier: Chatterbox Turbo where it fits (p64, p128), Pocket TTS below and with no tier", () => {
-  expect(TTS_DEFAULT_BY_TIER).toEqual({ p16: "pocket", p32: "pocket", p64: "chatterbox-turbo", p128: "chatterbox-turbo" });
+test("the default engine per tier: VoxCPM2 on p128, Chatterbox Turbo on p64, Pocket TTS below and with no tier", () => {
+  expect(TTS_DEFAULT_BY_TIER).toEqual({ p16: "pocket", p32: "pocket", p64: "chatterbox-turbo", p128: "voxcpm2" });
   expect(tierDefaultTtsEngine(undefined)).toBe("pocket");
-  expect(tierDefaultTtsEngine("p128")).toBe("chatterbox-turbo");
+  expect(tierDefaultTtsEngine("p128")).toBe("voxcpm2");
+  expect(tierDefaultTtsEngine("p64")).toBe("chatterbox-turbo");
 });
 
 test("resolving the engine: auto follows the tier; a missing, failed or unbuilt engine falls back to Pocket with the reason; Pocket is never a fallback of itself", () => {
   const installed = () => true;
-  expect(resolveTtsEngine({ setting: "auto", tier: "p128", installed })).toEqual({ engine: "chatterbox-turbo", requested: "chatterbox-turbo", reason: null });
+  expect(resolveTtsEngine({ setting: "auto", tier: "p128", installed })).toEqual({ engine: "voxcpm2", requested: "voxcpm2", reason: null });
+  expect(resolveTtsEngine({ setting: "auto", tier: "p64", installed })).toEqual({ engine: "chatterbox-turbo", requested: "chatterbox-turbo", reason: null });
   expect(resolveTtsEngine({ setting: "auto", tier: "p16", installed })).toEqual({ engine: "pocket", requested: "pocket", reason: null });
   expect(resolveTtsEngine({ setting: "chatterbox-turbo", tier: "p16", installed }).engine).toBe("chatterbox-turbo");
   expect(resolveTtsEngine({ setting: "pocket", tier: "p128", installed }).engine).toBe("pocket");
   expect(resolveTtsEngine({ setting: "nonsense", tier: "p64", installed }).requested).toBe("chatterbox-turbo");
-  const missing = resolveTtsEngine({ setting: "auto", tier: "p128", installed: (id) => id === "pocket" });
+  const missing = resolveTtsEngine({ setting: "auto", tier: "p64", installed: (id) => id === "pocket" });
   expect(missing).toMatchObject({ engine: "pocket", requested: "chatterbox-turbo" });
   expect(missing.reason).toMatch(/not installed/);
   const orpheus = resolveTtsEngine({ setting: "orpheus", tier: "p128", installed });
   expect(orpheus).toMatchObject({ engine: "pocket", requested: "orpheus" });
   expect(orpheus.reason).toMatch(/not available/);
   markTtsEngineFailed("chatterbox-turbo", "exited with code 3");
-  const failed = resolveTtsEngine({ setting: "auto", tier: "p128", installed });
+  const failed = resolveTtsEngine({ setting: "auto", tier: "p64", installed });
   expect(failed.engine).toBe("pocket");
   expect(failed.reason).toMatch(/exited with code 3/);
   markTtsEngineFailed("pocket", "never recorded");
   clearTtsEngineFailures();
-  expect(resolveTtsEngine({ setting: "auto", tier: "p128", installed }).engine).toBe("chatterbox-turbo");
+  expect(resolveTtsEngine({ setting: "auto", tier: "p64", installed }).engine).toBe("chatterbox-turbo");
 });
 
 test("stack.voice.engine is one declared select that defaults to auto and applies at the engine's restart", () => {
@@ -115,13 +117,15 @@ test("recorded Fish speech is a separate pinned tts component and does not repla
   expect(STACK_TTS_CHATTERBOX_MODEL.engine).toBe("chatterbox-turbo");
 });
 
-test("the install plan brings Chatterbox Turbo beside Pocket TTS on p64 and p128, and only there", () => {
+test("the install plan brings Chatterbox Turbo beside Pocket TTS on p64 only; p128 brings VoxCPM2 instead of both", () => {
   const ids = (gb: number) => buildInstallPlan({ unifiedMemoryGb: gb, totalRamGb: gb, platform: "darwin", arch: "arm64", cudaDevices: [], freeDiskBytes: null } as never).models.map((model) => model.id);
-  for (const gb of [64, 128]) {
+  for (const gb of [64]) {
     expect(ids(gb)).toContain("chatterbox-turbo-fp16");
     expect(ids(gb)).toContain("chatterbox-turbo-fp16-conds");
     expect(ids(gb)).toContain("pocket-tts-english");
   }
+  expect(ids(128)).toContain("voxcpm2-bf16");
+  for (const gone of ["chatterbox-turbo-fp16", "chatterbox-turbo-fp16-conds", "pocket-tts-english"]) expect(ids(128)).not.toContain(gone);
   for (const gb of [16, 24, 32]) { expect(ids(gb).some((id) => id.startsWith("chatterbox"))).toBe(false); expect(ids(gb)).toContain("pocket-tts-english"); }
 });
 
@@ -151,7 +155,7 @@ test("the voice role and each voice carry the tts capability flag; Chatterbox li
 });
 
 test("with Chatterbox installed and chosen the engine in effect, the selected model and the voice list are Chatterbox's; a voice name Home saved from Pocket's list is not refused", async () => {
-  setMachineTier("p128");
+  setMachineTier("p64");
   installPocketRecords();
   installChatterboxRecords();
   fakeEnvironment(pocketTtsRoot(), { "pocket-tts": "#!/bin/sh\n" });
@@ -173,7 +177,7 @@ test("with Chatterbox installed and chosen the engine in effect, the selected mo
 });
 
 test("a chosen engine that is not installed leaves the voice on Pocket TTS and the role says why", async () => {
-  setMachineTier("p128");
+  setMachineTier("p64");
   installPocketRecords();
   fakeEnvironment(pocketTtsRoot(), { "pocket-tts": "#!/bin/sh\n" });
   expect(activeTtsChoice()).toMatchObject({ engine: "pocket", requested: "chatterbox-turbo" });
@@ -185,7 +189,7 @@ test("a chosen engine that is not installed leaves the voice on Pocket TTS and t
 
 test("a Chatterbox engine that exits before it is healthy never fails the voice: it is marked failed, a warning explains, and Pocket TTS answers", async () => {
   setSupervisorFactoryForTests(null);
-  setMachineTier("p128");
+  setMachineTier("p64");
   installPocketRecords();
   installChatterboxRecords();
   // The MLX environment is a Python that dies on start; Pocket's is a tiny Bun server on the same wire.
@@ -218,7 +222,7 @@ Bun.serve({ port, hostname: "127.0.0.1", async fetch(request) {
 
 test("resetSupervisorForTests stops an engine a test really started, so no Pocket TTS outlives the run (2026-10-30 leak)", async () => {
   setSupervisorFactoryForTests(null);
-  setMachineTier("p128");
+  setMachineTier("p64");
   installPocketRecords();
   const stub = "#!" + process.execPath + `
 const port = Number(process.argv[process.argv.indexOf("--port") + 1]);

@@ -20,7 +20,7 @@ import { __resetSettingsForTests, applyPendingSettings, updateSettings } from "@
 const verified = { source: "catalog" as const, provenance: { repo: "example/repo" }, revision: "r", sha256: "c".repeat(64), licence: "MIT", verifiedAt: new Date().toISOString(), modelPath: "/tmp/never/x" };
 let clonerFetches = 0;
 beforeEach(() => {
-  __resetHealthForTests(); __resetSettingsForTests(); clearModelsForTests(); clearTtsEngineFailures(); setMachineTier("p128");
+  __resetHealthForTests(); __resetSettingsForTests(); clearModelsForTests(); clearTtsEngineFailures(); setMachineTier("p64");
   setSupervisorFactoryForTests(async (role) => scriptedProcess(role));
   scriptedSpeechLog.length = 0; clonerFetches = 0;
   __setClonerForTests(async () => { clonerFetches += 1; });

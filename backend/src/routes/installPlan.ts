@@ -59,6 +59,8 @@ installPlanRoutes.openapi(planRoute, async (c) => {
   const rows = new Set(disk?.rows.map((row) => row.id) ?? []);
   const optional = [
     ...PLAN_FAMILIES.filter((family) => rows.has(diskRowOfFamily(family))).flatMap((family) => imageInstallModels(family, installedIds)),
+    // A tier whose lineup plans another everyday picture model (p128: FLUX 3 Image Klein) holds it in the required pictures row.
+    ...(disk?.rows.find((row) => row.id === "pictures")?.model_ids.includes(IMAGE_FAMILIES["flux3-image-klein"].pins[0]?.id ?? "") ? imageInstallModels("flux3-image-klein", installedIds) : []),
     ...(rows.has("pictures-clearer") ? restoreInstallModels(installedIds) : []),
     ...(rows.has("talking-pictures") ? talkingPicturesInstallModels(installedIds) : []),
     ...(rows.has("video") ? videoInstallModels(installedIds) : []),

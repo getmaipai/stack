@@ -337,7 +337,9 @@ test("the coding model is a removable component on p128 and p64 (not required), 
     expect(coding.full_bytes).toBe(process.platform === "darwin" && process.arch === "arm64" ? 16_464_440_224 + 3_848_817_896 : 16_464_440_224);
     expect(coding.install_block).toBeNull();
     // The chat models are still required; the coding model is the only coding row.
-    expect(list.components.find((c) => c.id === "qwen3-8b-instruct-q4-k-m")!.requirement).toBe("required");
+    // p128 plans the 35B Huihui (and leaves the 8B out of its preset, so the 8B is removable there); p64 still plans the 8B.
+    expect(list.components.find((c) => c.id === (gb === 128 ? "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m" : "qwen3-8b-instruct-q4-k-m"))!.requirement).toBe("required");
+    if (gb === 128) expect(list.components.find((c) => c.id === "qwen3-8b-instruct-q4-k-m")!.requirement).toBe("optional");
   }
   const small = await listComponents(hw({ unifiedMemoryGb: 32, totalRamGb: 32 }));
   expect(small.components.find((c) => c.id === "qwen3.8-27b-ud-q4-k-m")!.requirement).toBe("unsupported");
@@ -350,7 +352,11 @@ test("every picture family has a component of its own, sized by its install-plan
   const ids = new Set(componentDefs().map((def) => def.id));
   for (const family of Object.keys(IMAGE_FAMILIES)) expect(ids.has(family)).toBe(true);
   const planRows = new Set(diskPlanForTier("p128")!.rows.map((row) => row.id));
-  for (const [component, row] of Object.entries(DISK_ROW)) if (ids.has(component)) expect(planRows.has(row)).toBe(true);
+  // A component's row is the plan row named for it, or (where the tier's lineup swaps a part, as p128 does for pictures and voice) the row that holds its model.
+  const planned = new Set(diskPlanForTier("p128")!.rows.flatMap((row) => row.model_ids));
+  const left = new Set(["flux3-image-klein", "voxcpm2-bf16", "chatterbox-turbo-fp16", "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m"]);
+  for (const [component, row] of Object.entries(DISK_ROW)) if (ids.has(component) && !left.has(component)) expect([component, planRows.has(row)]).toEqual([component, true]);
+  for (const component of left) expect(planned.has(component)).toBe(component !== "chatterbox-turbo-fp16");
   const ernie = (await listComponents(hw())).components.find((c) => c.id === "ernie-image-turbo")!;
   expect(ernie).toMatchObject({ label: partDef("ernie-image-turbo")!.label, group: "pictures", can_install: expect.any(Boolean) });
   expect(ernie.full_bytes).toBeGreaterThan(15e9);

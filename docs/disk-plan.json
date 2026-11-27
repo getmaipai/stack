@@ -22,12 +22,12 @@
     "p64.needed_bytes": 163132456740,
     "p64.home_required_free_bytes": 3176323277,
     "p64.ai_required_free_bytes": 191231764732,
-    "p128.required_free_bytes": 197949595170,
-    "p128.minimum_required_free_bytes": 37187160053,
-    "p128.everything_required_free_bytes": 792728818332,
-    "p128.needed_bytes": 166083712708,
+    "p128.required_free_bytes": 227254640604,
+    "p128.minimum_required_free_bytes": 71002279038,
+    "p128.everything_required_free_bytes": 761179363073,
+    "p128.needed_bytes": 190416791375,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 194773271893
+    "p128.ai_required_free_bytes": 224078317327
   },
   "tiers": {
     "p16": {
@@ -2287,30 +2287,11 @@
         },
         {
           "id": "chat",
-          "label": "Chat AI (Qwen3 8B)",
+          "label": "Chat AI (Qwen3.6 35B A3B (Huihui))",
           "note": "The AI you talk to.",
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 5027783488,
-          "installed_bytes": 5027783488,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "qwen3-8b-instruct-q4-k-m"
-          ],
-          "engines": [],
-          "installed": false,
-          "basis": "pins",
-          "feature": "chat",
-          "minors_only": false
-        },
-        {
-          "id": "chat-splash-qwen36-abliterated",
-          "label": "Qwen3.6 35B A3B (Huihui)",
-          "note": "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.",
-          "kind": "model",
-          "need": "optional",
-          "selectable": true,
           "download_bytes": 22219272240,
           "installed_bytes": 22219272240,
           "peak_temp_bytes": 0,
@@ -2447,65 +2428,11 @@
         },
         {
           "id": "voice",
-          "label": "Pocket TTS",
-          "note": "The standard speaking voice.",
+          "label": "VoxCPM2",
+          "note": "An optional, very natural speaking voice that can copy a voice from a short recording. The full-size version, for larger computers.",
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 335935587,
-          "installed_bytes": 335935587,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "pocket-tts-english",
-            "pocket-tts-english-tokenizer",
-            "pocket-tts-voice-alba",
-            "mossformer2-se-48k"
-          ],
-          "engines": [
-            "engine:voice",
-            "engine:python"
-          ],
-          "installed": false,
-          "basis": "pins",
-          "feature": "voice",
-          "minors_only": false
-        },
-        {
-          "id": "voice-better",
-          "label": "Chatterbox Turbo",
-          "note": "A more expressive speaking voice for larger computers.",
-          "kind": "model",
-          "need": "recommended",
-          "selectable": true,
-          "download_bytes": 2987618173,
-          "installed_bytes": 2987618173,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "chatterbox-turbo-fp16",
-            "chatterbox-turbo-fp16-config",
-            "chatterbox-turbo-fp16-added-tokens",
-            "chatterbox-turbo-fp16-merges",
-            "chatterbox-turbo-fp16-special-tokens-map",
-            "chatterbox-turbo-fp16-tokenizer-config",
-            "chatterbox-turbo-fp16-vocab",
-            "chatterbox-turbo-fp16-conds"
-          ],
-          "engines": [
-            "engine:voice-better",
-            "engine:python"
-          ],
-          "installed": false,
-          "basis": "pins",
-          "feature": "voice",
-          "minors_only": false
-        },
-        {
-          "id": "voice-voxcpm2",
-          "label": "VoxCPM2",
-          "note": "An optional, very natural speaking voice that can copy a voice from a short recording. The full-size version, for larger computers. Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.",
-          "kind": "model",
-          "need": "optional",
-          "selectable": true,
           "download_bytes": 7430868198,
           "installed_bytes": 7430868198,
           "peak_temp_bytes": 0,
@@ -2638,31 +2565,31 @@
         },
         {
           "id": "pictures",
-          "label": "FLUX.2 Klein 4B",
-          "note": "The everyday picture model.",
+          "label": "FLUX 3 Image Klein",
+          "note": "Makes and edits pictures from words, including legible lettering, with up to nine reference pictures.",
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 15980130813,
-          "installed_bytes": 15980130813,
+          "download_bytes": 20320943472,
+          "installed_bytes": 20320943472,
           "peak_temp_bytes": 0,
           "model_ids": [
-            "flux2-klein-4b",
-            "flux2-klein-4b-text-encoder-config",
-            "flux2-klein-4b-text-encoder-generation-config",
-            "flux2-klein-4b-text-encoder-model-00001-of-00002",
-            "flux2-klein-4b-text-encoder-model-00002-of-00002",
-            "flux2-klein-4b-text-encoder-model-safetensors-index",
-            "flux2-klein-4b-tokenizer-added-tokens",
-            "flux2-klein-4b-tokenizer-chat-template",
-            "flux2-klein-4b-tokenizer-merges",
-            "flux2-klein-4b-tokenizer-special-tokens-map",
-            "flux2-klein-4b-tokenizer-tokenizer",
-            "flux2-klein-4b-tokenizer-tokenizer-config",
-            "flux2-klein-4b-tokenizer-vocab",
-            "flux2-klein-4b-transformer-config",
-            "flux2-klein-4b-vae-config",
-            "flux2-klein-4b-vae-diffusion-pytorch-model"
+            "flux3-image-klein",
+            "flux3-image-klein-transformer-config",
+            "flux3-image-klein-transformer-diffusion-pytorch-model-00002-of-00002",
+            "flux3-image-klein-transformer-diffusion-pytorch-model-safetensors-index",
+            "flux3-image-klein-text-encoder-config",
+            "flux3-image-klein-text-encoder-generation-config",
+            "flux3-image-klein-text-encoder-model-00001-of-00002",
+            "flux3-image-klein-text-encoder-model-00002-of-00002",
+            "flux3-image-klein-text-encoder-model-safetensors-index",
+            "flux3-image-klein-text-encoder-tokenizer",
+            "flux3-image-klein-text-encoder-tokenizer-config",
+            "flux3-image-klein-text-encoder-chat-template",
+            "flux3-image-klein-text-encoder-merges",
+            "flux3-image-klein-text-encoder-vocab",
+            "flux3-image-klein-vae-config",
+            "flux3-image-klein-vae-diffusion-pytorch-model"
           ],
           "engines": [
             "engine:pictures",
@@ -2725,43 +2652,6 @@
           ],
           "engines": [
             "engine:pictures-h3",
-            "engine:python"
-          ],
-          "installed": false,
-          "basis": "pins",
-          "feature": "pictures",
-          "minors_only": false
-        },
-        {
-          "id": "pictures-klein3",
-          "label": "FLUX 3 Image Klein",
-          "note": "Makes and edits pictures from words, including legible lettering, with up to nine reference pictures.",
-          "kind": "model",
-          "need": "optional",
-          "selectable": true,
-          "download_bytes": 20320943472,
-          "installed_bytes": 20320943472,
-          "peak_temp_bytes": 0,
-          "model_ids": [
-            "flux3-image-klein",
-            "flux3-image-klein-transformer-config",
-            "flux3-image-klein-transformer-diffusion-pytorch-model-00002-of-00002",
-            "flux3-image-klein-transformer-diffusion-pytorch-model-safetensors-index",
-            "flux3-image-klein-text-encoder-config",
-            "flux3-image-klein-text-encoder-generation-config",
-            "flux3-image-klein-text-encoder-model-00001-of-00002",
-            "flux3-image-klein-text-encoder-model-00002-of-00002",
-            "flux3-image-klein-text-encoder-model-safetensors-index",
-            "flux3-image-klein-text-encoder-tokenizer",
-            "flux3-image-klein-text-encoder-tokenizer-config",
-            "flux3-image-klein-text-encoder-chat-template",
-            "flux3-image-klein-text-encoder-merges",
-            "flux3-image-klein-text-encoder-vocab",
-            "flux3-image-klein-vae-config",
-            "flux3-image-klein-vae-diffusion-pytorch-model"
-          ],
-          "engines": [
-            "engine:pictures",
             "engine:python"
           ],
           "installed": false,
@@ -3324,40 +3214,6 @@
           "minors_only": false
         },
         {
-          "id": "engine:voice",
-          "label": "Voice engine tools",
-          "note": "What the voice runs on.",
-          "kind": "engine",
-          "need": "required",
-          "selectable": false,
-          "download_bytes": 519789477,
-          "installed_bytes": 755810304,
-          "peak_temp_bytes": 519789477,
-          "model_ids": [],
-          "engines": [],
-          "installed": false,
-          "basis": "measured",
-          "feature": null,
-          "minors_only": false
-        },
-        {
-          "id": "engine:voice-better",
-          "label": "Better voice engine tools",
-          "note": "What the expressive voice runs on.",
-          "kind": "engine",
-          "need": "required",
-          "selectable": false,
-          "download_bytes": 336965689,
-          "installed_bytes": 489971712,
-          "peak_temp_bytes": 336965689,
-          "model_ids": [],
-          "engines": [],
-          "installed": false,
-          "basis": "measured",
-          "feature": null,
-          "minors_only": false
-        },
-        {
           "id": "engine:voice-voxcpm2",
           "label": "Optional voice engine tools",
           "note": "What the optional natural voice runs on.",
@@ -3648,25 +3504,25 @@
         }
       ],
       "default": {
-        "download_bytes": 155659367610,
-        "installed_bytes": 159329412309,
-        "peak_temp_bytes": 6754300399,
-        "needed_bytes": 166083712708,
-        "required_free_bytes": 197949595170
+        "download_bytes": 180772228293,
+        "installed_bytes": 184189246142,
+        "peak_temp_bytes": 6227545233,
+        "needed_bytes": 190416791375,
+        "required_free_bytes": 227254640604
       },
       "minimum": {
-        "download_bytes": 26431347205,
-        "installed_bytes": 28447816188,
-        "peak_temp_bytes": 3049780627,
-        "needed_bytes": 31497596815,
-        "required_free_bytes": 37187160053
+        "download_bytes": 54868791750,
+        "installed_bytes": 56785239906,
+        "peak_temp_bytes": 2859991150,
+        "needed_bytes": 59645231056,
+        "required_free_bytes": 71002279038
       },
       "everything": {
-        "download_bytes": 640110258509,
-        "installed_bytes": 648841071381,
-        "peak_temp_bytes": 14119532674,
-        "needed_bytes": 662960604055,
-        "required_free_bytes": 792728818332
+        "download_bytes": 614922035282,
+        "installed_bytes": 623263821304,
+        "peak_temp_bytes": 13262777508,
+        "needed_bytes": 636526598812,
+        "required_free_bytes": 761179363073
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -3678,7 +3534,6 @@
         "embed",
         "stt",
         "voice",
-        "voice-better",
         "image-tools",
         "talking-pictures",
         "pictures",

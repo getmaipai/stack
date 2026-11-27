@@ -572,7 +572,8 @@ export async function listComponents(hw?: HardwareInfo): Promise<ComponentList> 
     const state: ComponentState = job ? "installing" : installed ? "installed" : failure ? "failed" : "notInstalled";
     const { requirement, reason } = requirementFor(unit, tier, planned);
     const remaining = installed ? 0 : remainingDownload(unit);
-    const row = disk?.rows.find((candidate) => candidate.id === DISK_ROW[unit.id]) ?? null;
+    const rowOfPin = unit.pins[0] ? disk?.rows.find((candidate) => candidate.kind === "model" && candidate.model_ids.includes(unit.pins[0]!.id)) : undefined;
+    const row = rowOfPin ?? disk?.rows.find((candidate) => candidate.id === DISK_ROW[unit.id]) ?? null;
     const totals = row && disk ? diskTotalsFor(disk, [row.id]) : null;
     // The plan's own sums (margin and peak temporary space included) decide the fit; a part the plan has no row for falls back to its download plus a fixed margin.
     const requiredFree = installed ? 0 : totals ? totals.required_free_bytes : remaining + DISK_MARGIN_BYTES;

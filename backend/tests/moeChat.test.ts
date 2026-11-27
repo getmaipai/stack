@@ -68,13 +68,17 @@ test("pins are complete: revision, sha256, size and licence on the target, and e
 
 test("install order: the optional part list is the target then its draft, and no tier plan or default binding carries either", () => {
   expect(splashChatInstallModels([], "p64").map((model) => model.id)).toEqual([MOE.id, DRAFT.id]);
-  for (const gb of [16, 32, 64, 128]) expect(buildInstallPlan(hw(gb)).models.map((model) => model.id)).not.toContain(MOE.id);
+  for (const gb of [16, 32, 64]) expect(buildInstallPlan(hw(gb)).models.map((model) => model.id)).not.toContain(MOE.id);
+  // Only the 128 GB lineup plans it (as its chat model, with the draft).
+  expect(buildInstallPlan(hw(128)).models.map((model) => model.id)).toEqual(expect.arrayContaining([MOE.id, DRAFT.id]));
   expect(Object.values(PROFILE_MODEL_BINDINGS).flatMap((bound) => Object.values(bound ?? {}))).not.toContain(MOE.id);
   for (const profile of ["p64", "p128"] as const) expect(resolveLadder("chat", profile, 100 * GB).map((row) => row.resolved?.model)).not.toContain(MOE.id);
   // The disk plan offers it as an optional row on p64 and p128 only.
   const row = (id: string) => buildDiskPlan(PROFILE_TIERS.find((tier) => tier.id === id)!).rows.find((item) => item.id === "chat-splash-qwen36-abliterated");
   expect(row("p64")).toMatchObject({ need: "optional", model_ids: [MOE.id, DRAFT.id] });
   expect(row("p32")).toBeUndefined();
+  // On p128 the same models are the planned chat row, so the optional row is not repeated.
+  expect(row("p128")).toBeUndefined();
 });
 
 test("pickable at Standard on p64 and p128, never the recommendation: the resolved recommendation is what it was before, for every profile, tier and room", () => {

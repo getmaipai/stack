@@ -1,6 +1,6 @@
 [
   { "id": "talking-pictures", "part": "liveportrait", "need": "recommended", "engines": ["engine:liveportrait", "engine:python"], "pins": "STACK_LIVEPORTRAIT_MODELS", "unlessNotAvailable": "image", "noteExtra": " MIT licence; about 0.6 GB of model files plus a 1.5 GB engine, built on this computer. Mac with Apple silicon only." },
-  { "id": "pictures", "part": "flux2-klein-4b", "need": "required", "engines": ["engine:pictures", "engine:python"], "pins": "STACK_IMAGE_KLEIN_MODELS", "unlessNotAvailable": "image" },
+  { "id": "pictures", "part": "flux2-klein-4b", "need": "required", "engines": ["engine:pictures", "engine:python"], "pins": "STACK_IMAGE_KLEIN_MODELS", "unlessNotAvailable": "image", "plannedInstead": { "part": "flux3-image-klein", "pins": "STACK_IMAGE_KLEIN3_MODELS" } },
   { "id": "pictures-ernie", "part": "ernie-image-turbo", "need": "recommended", "engines": ["engine:pictures", "engine:python"], "pins": "STACK_IMAGE_ERNIE_MODELS", "unlessNotAvailable": "image", "family": "ernie-image-turbo" },
   { "id": "pictures-h3", "part": "minimax-h3-image", "need": "optional", "engines": ["engine:pictures-h3", "engine:python"], "pins": "STACK_IMAGE_H3_MODELS", "unlessNotAvailable": "image", "family": "minimax-h3-image", "recommendedFrom": "p64" },
   { "id": "pictures-klein3", "part": "flux3-image-klein", "need": "optional", "engines": ["engine:pictures", "engine:python"], "pins": "STACK_IMAGE_KLEIN3_MODELS", "unlessNotAvailable": "image", "family": "flux3-image-klein" },

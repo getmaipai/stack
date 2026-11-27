@@ -93,7 +93,7 @@ interface DiskRoleRow { id: string; role: string; part: string; need: DiskNeed; 
 const DISK_ROLE_ROWS = diskRoleRowsJson as DiskRoleRow[];
 
 /** One entry of rows/diskModelRows.json: an optional model row. The part gives the label and the default note, `pins` names the pin set the row installs. Any of `unlessNotAvailable` (a feature this template does without), `gate` (a gated row id) and `family` (a picture family that lists the templates it runs on) may be present; every guard the row carries has to pass before the template is offered it. `noteExtra` is appended to the default note and `recommendedFrom` turns the row recommended at that template and above. */
-interface DiskModelRow { id: string; part: string; need: DiskNeed; engines: string[]; pins: string; unlessNotAvailable?: string; gate?: string; family?: string; noteExtra?: string; recommendedFrom?: string }
+interface DiskModelRow { id: string; part: string; need: DiskNeed; engines: string[]; pins: string; unlessNotAvailable?: string; gate?: string; family?: string; plannedInstead?: { part: string; pins: string }; noteExtra?: string; recommendedFrom?: string }
 const DISK_MODEL_ROWS = diskModelRowsJson as DiskModelRow[];
 
 /** The pin sets a model row installs, under the names rows/diskModelRows.json gives them. A single pin is listed as a one-item set. */
@@ -209,7 +209,9 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
   if (chat.length) {
     rows.push(modelRow({ id: PRIMARY_ROLE, label: `Chat AI (${chatName(bigChat!)})`, note: "The AI you talk to.", need: "required", engines: chat.some((pin) => pin.engine === "omlx") ? ["engine:chat-mlx", "engine:python"] : [] }, chat));
   }
-  for (const entry of SPLASH_LOCAL_CHAT_MODELS) if (entry.profiles.includes(tier.id)) rows.push(modelRow({ id: entry.row, label: partLabel(entry.pin.id), note: "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.", need: "optional", engines: [] }, [entry.pin, entry.draftPin]));
+  // A row that would list a model an earlier row already holds is left out: the plan names each model once (the 128 GB lineup plans the Splash 35B as its chat model).
+  const held = (pins: CatalogModelLike[]) => rows.some((row) => row.model_ids.includes(pins[0]?.id ?? ""));
+  for (const entry of SPLASH_LOCAL_CHAT_MODELS) if (entry.profiles.includes(tier.id) && !held([entry.pin])) rows.push(modelRow({ id: entry.row, label: partLabel(entry.pin.id), note: "Optional chat model run by Splash, with its speed-up files. Install both, then choose it in Settings.", need: "optional", engines: [] }, [entry.pin, entry.draftPin]));
   const reads = plannedWhere((pin) => projectors.has(pin.id) && pin.role !== PICTURE_READER_ROLE);
   if (reads.length) rows.push(modelRow({ id: "reads-pictures", label: partLabel("qwen3-vl-8b-instruct-q4-k-m"), note: "Lets the chat AI look at a picture you send it.", need: "recommended", engines: [] }, reads));
   // The plain-role rows (the picture reader that checks finished clips and pictures for safety when chat cannot read
@@ -220,12 +222,15 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
     if (pins.length) rows.push(modelRow({ id: entry.id, label: partLabel(entry.part), note: entry.note ?? partDef(entry.part)!.description, need: entry.need, engines: entry.engines }, pins));
   }
   const voice = plannedWhere((pin) => pin.role === "tts" && !chatterbox.has(pin.id));
-  if (voice.length) rows.push(modelRow({ id: "voice", label: partLabel("pocket-tts-english"), note: partDef("pocket-tts-english")!.description, need: "required", engines: ["engine:voice", "engine:python"] }, voice));
+  // The voice row is Pocket TTS, or VoxCPM2 where the template's plan brings that voice instead (the 128 GB lineup).
+  const voiceIsVoxcpm2 = voice.some((pin) => pin.id === "voxcpm2-bf16");
+  const voicePart = voiceIsVoxcpm2 ? "voxcpm2-bf16" : "pocket-tts-english";
+  if (voice.length) rows.push(modelRow({ id: "voice", label: partLabel(voicePart), note: partDef(voicePart)!.description, need: "required", engines: voiceIsVoxcpm2 ? ["engine:voice-voxcpm2", "engine:python"] : ["engine:voice", "engine:python"] }, voice));
   const better = plannedWhere((pin) => chatterbox.has(pin.id));
   if (better.length) rows.push(modelRow({ id: "voice-better", label: partLabel("chatterbox-turbo-fp16"), note: partDef("chatterbox-turbo-fp16")!.description, need: "recommended", engines: ["engine:voice-better", "engine:python"] }, better));
   // voxcpm2 (VOICE-VOXCPM2-01 step 2): two optional rows, off by default, never in the first-run set; the voice is chosen by name in the voice engine setting afterwards.
   // Each size brings its own files and the clip speech-to-text (a shared companion, counted once per row because the rows are alternatives).
-  if (rowAllowed(tier, "voice-voxcpm2")) rows.push(modelRow({ id: "voice-voxcpm2", label: partLabel("voxcpm2-bf16"), note: `${partDef("voxcpm2-bf16")!.description} Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.`, need: "optional", engines: ["engine:voice-voxcpm2", "engine:python"] }, voxcpm2PackFor(VOXCPM2_ENGINE)));
+  if (rowAllowed(tier, "voice-voxcpm2") && !voiceIsVoxcpm2) rows.push(modelRow({ id: "voice-voxcpm2", label: partLabel("voxcpm2-bf16"), note: `${partDef("voxcpm2-bf16")!.description} Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.`, need: "optional", engines: ["engine:voice-voxcpm2", "engine:python"] }, voxcpm2PackFor(VOXCPM2_ENGINE)));
   if (rowAllowed(tier, "voice-voxcpm2-reduced")) rows.push(modelRow({ id: "voice-voxcpm2-reduced", label: partLabel("voxcpm2-4bit"), note: `${partDef("voxcpm2-4bit")!.description} Apache-2.0 licence; its listening helper is CC-BY-4.0. Install it, then choose it in Settings, Voice engine.`, need: "optional", engines: ["engine:voice-voxcpm2", "engine:python"] }, voxcpm2PackFor(VOXCPM2_REDUCED_ENGINE)));
   const tools = plannedWhere((pin) => imageTools.has(pin.id));
   if (tools.length) rows.push(modelRow({ id: "image-tools", label: partLabel("image-tools"), note: partDef("image-tools")!.description, need: "recommended", engines: ["engine:image-tools", "engine:python"] }, tools));
@@ -243,11 +248,16 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
       if (!family) throw new Error(`diskPlan: row "${entry.id}" names the picture family "${entry.family}", which the family table does not have.`);
       if (!(family.tiers as string[]).includes(tier.id)) continue;
     }
-    const pins = PIN_SETS[entry.pins];
+    let pins = PIN_SETS[entry.pins];
     if (!pins) throw new Error(`diskPlan: row "${entry.id}" names the pin set "${entry.pins}", which diskPlan.ts does not know.`);
+    let part = entry.part;
+    // The required pictures row follows the plan: where the plan brings the other everyday picture model instead (the 128 GB lineup), the row is that one.
+    const instead = entry.plannedInstead;
+    if (instead && planned.some((p) => p.pin.id === PIN_SETS[instead.pins]![0]!.id) && !planned.some((p) => p.pin.id === pins![0]!.id)) { pins = PIN_SETS[instead.pins]!; part = instead.part; }
+    else if (entry.need !== "required" && held([...pins])) continue;
     // A row with recommendedFrom is recommended once the template reaches that size; below it the row keeps its own need.
     const need: DiskNeed = entry.recommendedFrom !== undefined && TIER_ORDER.indexOf(tier.id) >= TIER_ORDER.indexOf(entry.recommendedFrom) ? "recommended" : entry.need;
-    rows.push(modelRow({ id: entry.id, label: partLabel(entry.part), note: partDef(entry.part)!.description + (entry.noteExtra ?? ""), need, engines: entry.engines }, [...pins]));
+    rows.push(modelRow({ id: entry.id, label: partLabel(part), note: partDef(part)!.description + (entry.noteExtra ?? ""), need, engines: entry.engines }, [...pins]));
   }
   rows.push({ id: "score-transcription", label: partLabel("score-gen"), note: partDef("score-gen")!.description, kind: "model", need: "optional", selectable: true, download_bytes: 0, installed_bytes: 0, peak_temp_bytes: 0, model_ids: [], engines: ["engine:score", "engine:python"], installed: false, basis: "measured" });
   rows.push(modelRow({ id: "stems", label: partLabel("htdemucs"), note: partDef("htdemucs")!.description, need: "recommended", engines: ["engine:stems", "engine:python"] }, [STACK_STEMS_MODELS[0]!]));

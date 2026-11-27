@@ -96,10 +96,19 @@ const SNAPSHOT: Record<string, SnapRow[]> = {
     ...eng("python", "voice", "voice-better", "voice-voxcpm2", "pictures", "pictures-h3", "image-tools", "liveportrait", "video", "video-ltx25", "video-ltx25-max", "video-mask", "music", "sound-effects", "score", "swap-composite", "stems", "align", "voice-convert", "recorded-speech")],
 };
 
+// The 128 GB recommended preset is the owner's lineup (2026-11-27): chat is the 35B Huihui with its draft, the voice is VoxCPM2, pictures are FLUX 3 Image Klein.
+// Those rows replace the 8B, Pocket TTS and FLUX.2 Klein rows, and the optional rows that would repeat a planned model (Splash 35B, Chatterbox, full VoxCPM2, FLUX 3 Klein) and their engine rows drop out.
+const P128_LINEUP: SnapRow[] = SNAPSHOT.p128!.filter((row) => !["chat-splash-qwen36-abliterated", "voice-better", "voice-voxcpm2", "pictures-klein3", "engine:voice", "engine:voice-better"].includes(row.id)).map((row) => {
+  if (row.id === "chat") return r("chat", "Chat AI (Qwen3.6 35B A3B (Huihui))", CHAT.note, "required", SPLASH_QWEN36.model_ids);
+  if (row.id === "voice") return r("voice", VOXCPM2.label, "An optional, very natural speaking voice that can copy a voice from a short recording. The full-size version, for larger computers.", "required", VOXCPM2.model_ids);
+  if (row.id === "pictures") return r("pictures", PICTURES_KLEIN3.label, PICTURES_KLEIN3.note, "required", PICTURES_KLEIN3.model_ids);
+  return row;
+});
+
 test("every template's rows match the snapshot taken before the model rows moved to data", () => {
   for (const tier of PROFILE_TIERS) {
     const rows = buildDiskPlan(tier).rows.map((row) => ({ id: row.id, label: row.label, note: row.note, need: row.need, model_ids: row.model_ids }));
-    const expected = SNAPSHOT[tier.id]! as unknown as typeof rows;
+    const expected = (tier.id === "p128" ? P128_LINEUP : SNAPSHOT[tier.id]!) as unknown as typeof rows;
     expect(rows).toEqual(expected);
   }
 });

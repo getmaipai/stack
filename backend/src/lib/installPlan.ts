@@ -7,6 +7,7 @@ import { knownAppleChip, type HardwareInfo, type MemorySource } from "@/lib/hard
 import { splashDraftWanted } from "@/lib/splash";
 import { SPLASH_LOCAL_CHAT_MODELS, STACK_SFX_MODELS, STACK_IMAGE_ERNIE_MODELS, STACK_IMAGE_H3_MODELS, STACK_IMAGE_KLEIN3_MODELS, STACK_IMAGE_KLEIN_MODELS, STACK_IMAGE_QWEN_MODELS, STACK_IMAGE_RESTORE_MODELS, STACK_IMAGE_TOOL_MODELS, STACK_IMAGE_ZIMAGE_MODELS, STACK_LIVEPORTRAIT_MODELS, STACK_MODELS, STACK_MUSIC_MODELS, STACK_MUSIC_WHISPER, STACK_MUSIC_MAX_MODELS, STACK_MUSIC_XL_MODELS, STACK_STEMS_MODELS, STACK_VIDEO_LTX25_MAX_MODELS, STACK_VIDEO_LTX25_MODELS, STACK_VIDEO_MASK_MODELS, STACK_VIDEO_MODELS, STACK_TTS_CHATTERBOX_MODEL, STACK_TTS_CHATTERBOX_PARTS, STACK_DEREVERB_MODEL } from "@/lib/modelCatalog";
 import { tierDefaultTtsEngine } from "@/speech/ttsEngines";
+import { STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, VOXCPM2_ENGINE, voxcpm2PackFor } from "@/lib/modelCatalog";
 import type { CatalogModelLike } from "@/lib/modelStore";
 import type { RoleId } from "@/roles";
 import { ROLES, HEAVY_ROLE, PICTURE_READER_ROLE, PRIMARY_ROLE } from "@/roles";
@@ -191,7 +192,25 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
   // The everyday picture model (FLUX.2 Klein) is a required disk-plan row on every tier that has
   // image (AIMODELS-DATA-01), so the first run installs it: the one generator that is in the plan.
   if (!tier.notAvailable.includes("image")) for (const pin of STACK_IMAGE_KLEIN_MODELS) add(pin);
-  return planned;
+  return tier.id === LINEUP_TIER ? lineupPlan(planned) : planned;
+}
+
+/** The 128 GB recommended preset is the owner's lineup (2026-11-27). Chat is Qwen3.6 35B A3B (Huihui) with its draft, the voice is
+ * VoxCPM2, pictures are FLUX 3 Image Klein. Qwen3 8B, Pocket TTS, Chatterbox Turbo (and its parts and de-reverb) and FLUX.2 Klein 4B
+ * are LEFT OUT of the preset only: they stay in the catalog, Custom still lists them, nothing installed is removed, and an admin can
+ * now remove them because they are no longer part of the plan. */
+const LINEUP_TIER = "p128";
+const LINEUP_LEFT_OUT = new Set<string>(["qwen3-8b-instruct-q4-k-m", ...[STACK_TTS_CHATTERBOX_MODEL, ...STACK_TTS_CHATTERBOX_PARTS, STACK_DEREVERB_MODEL, STACK_TTS_MODEL, STACK_TTS_TOKENIZER, STACK_TTS_VOICE, ...STACK_IMAGE_KLEIN_MODELS].map((pin) => pin.id)]);
+function lineupPlan(planned: Array<{ pin: CatalogModelLike; starter: boolean; removable?: boolean }>): Array<{ pin: CatalogModelLike; starter: boolean; removable?: boolean }> {
+  const kept = planned.filter((entry) => !LINEUP_LEFT_OUT.has(entry.pin.id));
+  const have = new Set(kept.map((entry) => entry.pin.id));
+  const added: Array<{ pin: CatalogModelLike; starter: boolean; removable?: boolean }> = [
+    { pin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_MODEL, starter: true },
+    { pin: STACK_CHAT_QWEN36_HUIHUI_35B_ABLITERATED_DRAFT, starter: false },
+    ...voxcpm2PackFor(VOXCPM2_ENGINE).map((pin) => ({ pin, starter: false })),
+    ...STACK_IMAGE_KLEIN3_MODELS.map((pin) => ({ pin, starter: false })),
+  ].filter((entry) => !have.has(entry.pin.id));
+  return [...added.filter((entry) => entry.starter), ...kept.map((entry) => ({ ...entry, starter: false })), ...added.filter((entry) => !entry.starter)];
 }
 
 export function buildInstallPlan(hw: HardwareInfo, options: { vramOverrideGb?: number | null; installedIds?: Iterable<string> } = {}): InstallPlan {
