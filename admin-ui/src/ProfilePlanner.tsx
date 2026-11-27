@@ -3,15 +3,34 @@ import { Badge } from "@maipai/ui/src/ui/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader } from "@maipai/ui/src/ui/card";
 import { StatusIndicator } from "@maipai/ui/src/ui/status";
 import { api } from "./api";
-import type { Applied, Mode, Plan, Recommendation, Role } from "./api";
+import type { Applied, Mode, Plan, PlanRole, Recommendation, Role } from "./api";
 import { bytes } from "./format";
 import { MODE_WORDS, fitWord, planStateWord } from "./manage";
+import { fitCell } from "./fitCell";
 import { ConfirmButton, Failure, Loading, plainError, useLoad } from "./shared";
 import type { Notify } from "./screens";
 
 // The admin-only part of the AI and models screen (an `extraSection` of the shared page): what this computer's memory can hold,
 // in the Stack's own plain words from `POST /profiles/recommend`, and the two ways to apply a ready-made setup. The model picks,
 // the recommended setup, priority and downloads are the shared page's; nothing here chooses a model.
+/** What the row needs and how much room it leaves, in words, with a bar of the AI memory: what is loaded, what this row adds, and a line at the limit that the bar runs past when the row does not fit. Numbers are the plan's own measured peaks. */
+function FitCell({ role, budget }: { role: PlanRole; budget: Plan["budget"] }) {
+  const cell = fitCell(role, budget);
+  if (!cell) return null;
+  const scale = Math.max(cell.endPct, 100);
+  const w = (pct: number) => `${(pct / scale) * 100}%`;
+  return (
+    <span className="flex w-full flex-col gap-1">
+      <span className={cell.over ? "text-sm font-medium text-destructive" : "text-sm text-foreground"}>{cell.headline}<span className="ms-2 text-xs font-normal text-muted-foreground">({cell.basis})</span></span>
+      <span role="img" aria-label={`${cell.headline}. The line marks the memory limit.`} className="relative block h-2 w-full overflow-hidden rounded-full bg-muted">
+        <span className="absolute inset-y-0 start-0 bg-muted-foreground/40" style={{ width: w(Math.min(cell.usedPct, cell.endPct)) }} />
+        <span className={`absolute inset-y-0 ${cell.over ? "bg-destructive" : "bg-primary"}`} style={{ insetInlineStart: w(Math.min(cell.usedPct, cell.endPct)), width: w(Math.max(0, cell.endPct - cell.usedPct)) }} />
+        <span className="absolute inset-y-0 w-px bg-foreground" style={{ insetInlineStart: w(cell.limitPct) }} />
+      </span>
+    </span>
+  );
+}
+
 function PlanTable({ plan, labels }: { plan: Plan; labels: Record<string, string> }) {
   return (
     <div className="flex flex-col gap-3">
@@ -24,8 +43,9 @@ function PlanTable({ plan, labels }: { plan: Plan; labels: Record<string, string
           <li key={r.role} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-sm">
             <span className="min-w-28 font-medium">{labels[r.role] ?? r.role}</span>
             <Badge variant={r.fit === "refused" ? "destructive" : "secondary"}>{planStateWord(r.state)}</Badge>
-            <span className="text-muted-foreground">{fitWord(r.fit)}{r.peak_bytes ? `, about ${bytes(r.peak_bytes)}` : ""}</span>
-            {r.reason && <span className="w-full text-xs text-muted-foreground">{r.reason}</span>}
+            <span className="text-muted-foreground">{fitWord(r.fit)}</span>
+            <FitCell role={r} budget={plan.budget} />
+            {r.reason && (r.fit !== "fits" || !fitCell(r, plan.budget)) && <span className="w-full text-xs text-muted-foreground">{r.reason}</span>}
           </li>
         ))}
       </ul>

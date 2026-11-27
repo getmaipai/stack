@@ -26,6 +26,8 @@ const SCREENS = [
   { id: "resources", hash: "resources", wait: 2600 }, { id: "engines", hash: "engines", wait: 1400 },
   { id: "health", hash: "health", wait: 1200 }, { id: "settings", hash: "settings", wait: 1500 }, { id: "updates", hash: "updates", wait: 1200 },
   { id: "tools", hash: "tools", wait: 1400 }, { id: "helper", hash: "helper", wait: 1500 },
+  // The recommended-setup rows of AI and models: each plan row's need and room (STACK-FIT-UI-01).
+  { id: "models-fit", hash: "models", wait: 2600, open: `[...document.querySelectorAll('h2,h3,[data-slot="card-title"]')].find((h) => /What the recommended setup would do/.test(h.textContent))?.scrollIntoView({ block: "start" })` },
   // The Helper slide-over, opened from the top bar on the Overview.
   { id: "helper-panel", hash: "overview", wait: 1200, open: `document.querySelector('[aria-keyshortcuts="Control+/ Meta+/"]').click()` },
   // The command palette, opened with its top-bar search box.

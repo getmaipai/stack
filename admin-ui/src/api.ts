@@ -51,7 +51,7 @@ export type Tier = "p16" | "p32" | "p64" | "p128";
 export type Mode = "matched" | "custom_recommended" | "custom";
 export interface PlanRole {
   role: string; enabled: boolean; priority: number; state: "resident" | "on_demand" | "installed" | "shared" | "off" | "unavailable";
-  model?: string; peak_bytes?: number; fit: "fits" | "queues" | "refused" | "n/a"; reason: string;
+  model?: string; peak_bytes?: number; basis?: "measured" | "estimated" | null; fit: "fits" | "queues" | "refused" | "n/a"; reason: string;
 }
 export interface Plan { tier: Tier; chat_model: string; budget: { total_bytes: number; resident_cap_bytes: number; resident_bytes: number; room_bytes: number; tight: boolean }; roles: PlanRole[]; notes: string[] }
 export interface Recommendation {
