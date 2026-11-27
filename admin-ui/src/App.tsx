@@ -28,36 +28,22 @@ import { IconChip, Pill } from "./kit";
 import { roleIcon } from "./roleIcons";
 import { setFeatureRows, useFeatureRows } from "./featureRows";
 import { Overview } from "./Overview";
+import { MENU, NOT_YET } from "./menu";
+import type { MenuScreen } from "./menu";
 
-type Screen = "overview" | "models" | "engines" | "resources" | "health" | "updates" | "settings" | "tools" | "helper" | "modes" | "styles";
-type Group = "monitor" | "setup" | "maintain" | "assist";
-interface NavItem { id: Screen; label: string; question: string; Icon: typeof LayoutDashboard; group: Group; more?: boolean }
-const NAV: NavItem[] = [
-  { id: "overview", label: "Overview", question: "Is everything working?", Icon: LayoutDashboard, group: "monitor" },
-  { id: "models", label: "AI and models", question: "Which features are on, and which model does each one use?", Icon: Boxes, group: "setup" },
-  { id: "styles", label: "Styles", question: "Looks you add to pictures and video, and where their files live.", Icon: PaletteIcon, group: "setup", more: true },
-  { id: "modes", label: "Modes", question: "Normal or Max coding, and which features are on.", Icon: ToggleRight, group: "setup", more: true },
-  { id: "health", label: "Health", question: "Does anything need fixing?", Icon: HeartPulse, group: "monitor" },
-  { id: "helper", label: "Helper", question: "Ask in plain words. Nothing changes until you approve.", Icon: Sparkles, group: "assist" },
-  { id: "resources", label: "Resources", question: "Is there enough memory?", Icon: Gauge, group: "monitor", more: true },
-  { id: "engines", label: "Engines", question: "What is doing the work behind the scenes?", Icon: Cpu, group: "setup", more: true },
-  { id: "updates", label: "Updates", question: "Is anything out of date?", Icon: CircleArrowUp, group: "maintain", more: true },
-  { id: "settings", label: "Settings", question: "Fine tuning. The defaults are fine for most people.", Icon: SlidersHorizontal, group: "maintain", more: true },
-  { id: "tools", label: "Tools", question: "Restart, check, and repair.", Icon: Wrench, group: "maintain", more: true },
-];
-/** The sidebar's categories, in the order a person works through them: look, set up, keep tidy, ask. */
-const GROUPS: { id: Group; label: string; order: Screen[] }[] = [
-  { id: "monitor", label: "Monitor", order: ["overview", "health", "resources"] },
-  { id: "setup", label: "Set up", order: ["models", "styles", "modes", "engines"] },
-  { id: "maintain", label: "Maintain", order: ["updates", "settings", "tools"] },
-  { id: "assist", label: "Assist", order: ["helper"] },
-];
-const groupLabel = (g: Group) => GROUPS.find((x) => x.id === g)!.label;
-const PRIMARY = NAV.filter((n) => !n.more);
+type Screen = string;
+interface NavItem extends MenuScreen { Icon: typeof LayoutDashboard; group: string; more: boolean }
+/** Icons and the phone bar's four main places are presentation only; labels, questions and grouping come from the shared spec (`./menu`). */
+const ICONS: Record<string, typeof LayoutDashboard> = { overview: LayoutDashboard, models: Boxes, styles: PaletteIcon, modes: ToggleRight, health: HeartPulse, helper: Sparkles, resources: Gauge, engines: Cpu, updates: CircleArrowUp, settings: SlidersHorizontal, tools: Wrench };
+const PRIMARY_IDS = ["overview", "models", "health", "helper"];
+const GROUPS = MENU.map((g) => ({ ...g, order: g.screens.map((s) => s.id) }));
+const NAV: NavItem[] = MENU.flatMap((g) => g.screens.map((s) => ({ ...s, Icon: ICONS[s.id] ?? LayoutDashboard, group: g.id, more: !PRIMARY_IDS.includes(s.id) })));
+const groupLabel = (g: string) => GROUPS.find((x) => x.id === g)?.label ?? g;
+const PRIMARY = PRIMARY_IDS.map((id) => NAV.find((n) => n.id === id)).filter((n): n is NavItem => !!n);
 const MORE = NAV.filter((n) => n.more);
 
 /** The Features and Models screens became one (AI and models); their old addresses still open it. */
-const RENAMED: Record<string, Screen> = { features: "models" };
+const RENAMED: Record<string, Screen> = { features: "models", ...Object.fromEntries(Object.entries(NOT_YET).filter((e): e is [string, string] => !!e[1])) };
 
 function screenFromHash(): Screen {
   const id = window.location.hash.replace(/^#\/?/, "");
@@ -113,7 +99,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
     catch (e) { notify(e instanceof ApiError ? e.message : "The Stack could not be restarted."); }
   }, [notify]);
 
-  const screens: PaletteItem[] = useMemo(() => GROUPS.flatMap((g) => g.order.map((id) => NAV.find((n) => n.id === id)!)).map((n) => ({ id: n.id, label: n.label, hint: n.question, Icon: n.Icon, keywords: [groupLabel(n.group)], run: () => go(n.id) })), [go]);
+  const screens: PaletteItem[] = useMemo(() => NAV.map((n) => ({ id: n.id, label: n.label, hint: n.question, Icon: n.Icon, keywords: [groupLabel(n.group)], run: () => go(n.id) })), [go]);
   const features: PaletteItem[] = useMemo(() => (snap.roles ?? []).map((r) => ({ id: `role-${r.id}`, label: r.label, hint: roleWord(r), Icon: roleIcon(r.id), tone: r.enabled === false ? "muted" as const : "primary" as const, keywords: ["feature", "role"], run: () => go("models") })), [snap.roles, go]);
   const actions: PaletteItem[] = useMemo(() => [
     { id: "helper", label: "Ask the Helper", hint: "Plain words. Nothing changes until you approve.", Icon: Sparkles, run: () => setHelperOpen(true) },
@@ -144,7 +130,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
         {GROUPS.map((g) => (
           <div key={g.id} role="group" aria-label={g.label} className="flex flex-col gap-0.5">
             <p className="nav-label" aria-hidden="true">{g.label}</p>
-            {g.order.map((id) => NAV.find((n) => n.id === id)!).map(navButton)}
+            {NAV.filter((n) => n.group === g.id).map(navButton)}
           </div>
         ))}
       </nav>
@@ -179,8 +165,8 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
             </div>
           )}
           <div key={screen} className="animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none">
-            {screen === "overview" && <Overview snap={snap} go={(id) => go(id as Screen)} />}
-            {screen === "resources" && <Resources changed={snap.status} go={(id) => go(id as Screen)} />}
+            {screen === "overview" && <Overview snap={snap} go={(id) => go(id)} />}
+            {screen === "resources" && <Resources changed={snap.status} go={(id) => go(id)} />}
             {screen === "health" && <Health snap={snap} refresh={refresh} notify={notify} />}
             {screen === "engines" && <Engines snap={snap} refresh={refresh} notify={notify} />}
             {screen === "models" && <ModelsScreen client={stackClient} snap={snap} refresh={refresh} notify={notify} go={go} />}

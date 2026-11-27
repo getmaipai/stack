@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@lingui/core": "6.6.0",
+    "@maipai/spec": "file:../../commons-tags/spec-spec-v0.1.487/spec",
     "@maipai/ui": "file:../../commons-tags/ui-ui-v0.5.755/ui",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
