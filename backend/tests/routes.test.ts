@@ -17,6 +17,9 @@ import { GOVERNOR_MEMORY_DEFAULT } from "./governorMemoryDefault";
 import { __resetSettingsForTests } from "@/settings";
 import { __resetChoicesForTests } from "@/lib/choicesStore";
 import { dataDir } from "@/lib/paths";
+import { mediaSegments } from "@/db/schema";
+import { db } from "@/db";
+import { setMediaDepsForTests, resetMediaDepsForTests } from "@/media/jobs";
 
 const GB = 1_073_741_824;
 
@@ -347,6 +350,45 @@ test("the generated document covers the contract table's surfaces", async () => 
     expect(Object.keys(document.paths), `missing ${path}`).toContain(path);
   }
   await getProcess("chat");
+});
+
+test("segments routes follow the neighbouring routes (no per-route auth today) and validate lowercase SHA-256", async () => {
+  const server = Bun.serve({ ...serveOptions(), port: 0 });
+  try {
+    const base = `http://127.0.0.1:${server.port}`;
+    // The Stack has no per-route auth today (loopback only), so the neighbour answers without credentials;
+    // segments must behave the same way: a well-formed unknown hash is a 404, never a 401 or a 500.
+    const neighbour = (await fetch(`${base}/stack/v1/roles`)).status;
+    expect(neighbour).toBe(200);
+    expect((await fetch(`${base}/stack/v1/segments/${"a".repeat(64)}`)).status).toBe(404);
+    expect((await fetch(`${base}/stack/v1/segments/${"A".repeat(64)}`)).status).toBe(400);
+    expect((await fetch(`${base}/stack/v1/segments/not-a-hash`)).status).toBe(400);
+  } finally { server.stop(true); }
+});
+
+test("segments render failures return plain guidance without stack traces or outside paths", async () => {
+  const hash="c".repeat(64), source=join(dataDir,"segments-render-failure-source.mp3");
+  await Bun.write(source,"audio");
+  const now=new Date().toISOString(), record={fileSha256:hash,durationSec:100,segments:[{id:"ad-1",kind:"ad",startSec:20,endSec:30,confidence:0.99,source:"llm",status:"auto"}],producedBy:{transcriptRevision:"r1",modelId:"m1",pipelineVersion:"1",createdAt:now}};
+  db.insert(mediaSegments).values({fileSha256:hash,pipelineVersion:"1",recordJson:JSON.stringify(record),sourcePath:source,createdAt:now,updatedAt:now}).run();
+  setMediaDepsForTests({toolbox:{path:async()=>"/tools/ffmpeg"} as never,run:async()=>({code:1,stdout:"",stderr:`Error opening ${source}: Permission denied\n    at render (/private/tmp/secret.ts:10:2)`,aborted:false})});
+  try {
+    const response=await app.request(`/stack/v1/segments/${hash}/render`,json({}));
+    expect(response.status).toBe(500);
+    const body=await response.json() as {error:string};
+    expect(body.error).toContain("could not be rendered");expect(body.error).toContain("try again");
+    expect(body.error.toLowerCase()).not.toContain("stack trace");expect(body.error).not.toContain(source);expect(body.error).not.toContain("/private/");expect(body.error).not.toContain("/Users/");
+  } finally { resetMediaDepsForTests(); db.delete(mediaSegments).where((await import("drizzle-orm")).eq(mediaSegments.fileSha256,hash)).run(); }
+});
+
+test("segments render child is killed and reaped when the request aborts", async () => {
+  const hash="d".repeat(64), source=join(dataDir,"segments-render-abort-source.mp3");await Bun.write(source,"audio");
+  const now=new Date().toISOString(),record={fileSha256:hash,durationSec:100,segments:[{id:"ad-1",kind:"ad",startSec:20,endSec:30,confidence:.99,source:"llm",status:"auto"}],producedBy:{transcriptRevision:"r1",modelId:"m1",pipelineVersion:"1",createdAt:now}};
+  db.insert(mediaSegments).values({fileSha256:hash,pipelineVersion:"1",recordJson:JSON.stringify(record),sourcePath:source,createdAt:now,updatedAt:now}).run();
+  let killed=0,reaped=0;
+  setMediaDepsForTests({toolbox:{path:async()=>"/tools/ffmpeg"} as never,run:async(_argv,options)=>new Promise(resolve=>{const stop=()=>{killed++;reaped++;resolve({code:null,stdout:"",stderr:"",aborted:true});};if(options?.signal?.aborted)stop();else options?.signal?.addEventListener("abort",stop,{once:true});})});
+  try { const controller=new AbortController(),request=app.request(`/stack/v1/segments/${hash}/render`,{...json({}),signal:controller.signal});await Bun.sleep(0);controller.abort();await request;expect(killed).toBe(1);expect(reaped).toBe(1); }
+  finally { resetMediaDepsForTests();db.delete(mediaSegments).where((await import("drizzle-orm")).eq(mediaSegments.fileSha256,hash)).run(); }
 });
 
 test("the tier candidates route answers per level with families and caps, and refuses an unknown category (TIER-HOME-04)", async () => {

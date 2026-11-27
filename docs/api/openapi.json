@@ -23197,7 +23197,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{64}$/i"
+              "pattern": "^[a-f0-9]{64}$"
             },
             "required": true,
             "name": "sha256",
@@ -23392,7 +23392,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{64}$/i"
+              "pattern": "^[a-f0-9]{64}$"
             },
             "required": true,
             "name": "sha256",
@@ -23431,7 +23431,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{64}$/i"
+              "pattern": "^[a-f0-9]{64}$"
             },
             "required": true,
             "name": "sha256",
@@ -23467,7 +23467,7 @@
                   "properties": {
                     "fileSha256": {
                       "type": "string",
-                      "pattern": "^[a-f0-9]{64}$/i"
+                      "pattern": "^[a-f0-9]{64}$"
                     },
                     "ranges": {
                       "type": "array",
@@ -23527,7 +23527,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{64}$/i"
+              "pattern": "^[a-f0-9]{64}$"
             },
             "required": true,
             "name": "sha256",
@@ -23754,7 +23754,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{64}$/i"
+              "pattern": "^[a-f0-9]{64}$"
             },
             "required": true,
             "name": "sha256",
@@ -23869,20 +23869,11 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{64}$/i"
+              "pattern": "^[a-f0-9]{64}$"
             },
             "required": true,
             "name": "sha256",
             "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1
-            },
-            "required": true,
-            "name": "file",
-            "in": "query"
           }
         ],
         "responses": {
