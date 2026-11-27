@@ -2604,11 +2604,10 @@ export async function speakRole(requested: RoleId, form: FormData, signal?: Abor
     const response = await processRecord.client.raw(SPEECH_PATH, { method: "POST", body: form }, signal);
     if (response.status >= 500 && !await processRecord.client.health()) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
     const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-    if (!response.body) { watch?.end(); finishStream(role, processRecord); return { status: response.status, body: null, headers: headers(), contentType }; }
+    if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: headers(), contentType }; }
     if (response.status >= 200 && response.status < 300) current.lastRealRequestAt = Date.now();
-    return { status: response.status, body: trackedStream(role, processRecord, response.body, watch), headers: headers(), contentType };
+    return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: headers(), contentType };
   } catch (error) {
-    watch?.end();
     finishStream(role, processRecord);
     if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) return { status: 499, body: null, headers: headers() };
     if (await processRecord.client.health()) return { status: error instanceof EngineUnavailableError ? 504 : 503, body: null, headers: headers() };
