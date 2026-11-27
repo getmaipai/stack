@@ -83,6 +83,17 @@ Open design questions (client keys for other apps, LAN exposure, model
 search beyond the pinned catalog) are decided in
 [docs/plans/admin-and-standalone-2026-11-21.md](docs/plans/admin-and-standalone-2026-11-21.md).
 
+## Media segments service (Owner-approved: 2026-11-27)
+
+Jesse ruled in chat that ad and intro skipping is a Stack service and Home only shows it.
+The Stack gets one more engine-layer service, `segments`: given a media file or an address it
+fetches the audio itself (probing for a clean copy), transcribes through the `stt` role, runs
+detection (alignment against a clean copy, fingerprints, rules, the `chat` role), keeps the
+result by file hash in its own database, and serves the segment list and, on request, a cut
+copy. It is anonymous like every Stack role: no feeds, no people, no per-person settings; Home
+holds subscriptions, who skips what, and every screen. Plan:
+[docs/plans/ad-skip-2026-11-27.md](docs/plans/ad-skip-2026-11-27.md).
+
 ## Limits (what the Stack is not, and never grows into)
 
 No user interface beyond the admin page above (Home's admin renders the Stack's state
