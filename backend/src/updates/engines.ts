@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, symlinkSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { PRIMARY_ROLE } from "@/roles";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { join } from "node:path";
 import { CHAT_ENGINES, ENGINE_BINARIES, ENGINE_READY_MARKER, type ChatEngine } from "@/lib/engineCatalog";
 import { engineCurrentPath, engineTagRoot } from "@/lib/store/layout";
-import { raise } from "@/lib/health";
+import { raise, resolve as resolveHealth } from "@/lib/health";
 import { bumpStackGeneration } from "@/lib/stackGeneration";
 import { emit } from "@/lib/events";
 import { currentEngineTag, ensureEngine } from "@/lib/engineInstall";
@@ -17,6 +17,12 @@ import { chatEngine, getProcess, restartRole, stopRole } from "@/lib/supervisor"
 import { holdSelfHeal } from "@/lib/selfHeal";
 import { pendingEngineUpdate } from "@/updates/catalog";
 
+/** A swap in flight, in meta from before the link moves until it settles: the tag `current` named and the tag it moves to. A crash leaves it; the next boot reads it (sweepEngineSwaps). */
+const swapJournalKey = (name: string): string => `engines.${name}.swap`;
+class SimulatedCrash extends Error {}
+let crashMidSwap = false;
+/** Stops the next swap dead after the old link is removed and before the new one exists, with no cleanup, as a killed process would. */
+export function __crashNextEngineSwapForTests(on: boolean): void { crashMidSwap = on; }
 export function resolveEnginePin(tag: string): string { return tag.match(/b\d+/)?.[0] ?? tag; }
 export interface EngineSwapOptions {
   drain?: () => Promise<void>;
@@ -50,16 +56,22 @@ export async function swapEngine(name: string, tag: string, options: EngineSwapO
   try {
     await options.drain?.();
     mkdirSync(resolve(current, ".."), { recursive: true, mode: 0o700 });
+    const journal = JSON.stringify({ from: previous, to: tag });
+    db.insert(meta).values({ key: swapJournalKey(name), value: journal }).onConflictDoUpdate({ target: meta.key, set: { value: journal } }).run();
     try { unlinkSync(current); } catch { /* First swap. */ }
+    if (crashMidSwap) { crashMidSwap = false; throw new SimulatedCrash("crash mid-swap"); }
     symlinkSync(tag, current);
     if (options.postLoadCheck && !await options.postLoadCheck()) throw new Error("The replacement engine failed its post-load check.");
+    db.delete(meta).where(eq(meta.key, swapJournalKey(name))).run();
     bumpStackGeneration(`engine ${name} now ${tag}`);
     if (options.emitEvents !== false) emit({ id: "update.applied", data: { kind: "engine", name, tag } });
   } catch (error) {
+    if (error instanceof SimulatedCrash) throw error;
     if (previous) {
       try { unlinkSync(current); } catch { /* Restore is best effort. */ }
       try { symlinkSync(previous, current); } catch { /* Health item records the failed rollback. */ }
     }
+    db.delete(meta).where(eq(meta.key, swapJournalKey(name))).run();
     if (options.emitEvents !== false) failedSwap(error instanceof Error ? error.message : String(error), name);
     throw error;
   } finally { endHold(); }
@@ -131,4 +143,57 @@ export async function applyAvailableEngineUpdate(): Promise<{ tag: string; previ
   await engineUpdateRunner("llama-server", target.tag, { url: target.url, sha256: target.sha256, size: target.size, requires: target.requires, extra: target.extra });
   return { tag: target.tag, previous };
   } finally { endUpdate(); }
+}
+
+const isReady = (name: string, tag: string): boolean => existsSync(join(engineTagRoot(name, tag), ENGINE_READY_MARKER));
+function relink(name: string, tag: string): void {
+  const current = engineCurrentPath(name);
+  mkdirSync(resolve(current, ".."), { recursive: true, mode: 0o700 });
+  try { unlinkSync(current); } catch { /* No link to replace. */ }
+  symlinkSync(tag, current);
+}
+/** Boot: an engine swap that a crash cut off is finished or undone before anything launches, so the engine that runs is a complete build.
+ * - a swap journal: the link goes back to the build it came from (or, for a first install, to the build it was moving to when that one finished installing);
+ * - a `current` link that names a build that never finished installing goes to the remembered previous build;
+ * - a staged build that never finished (no ready marker, not linked) is removed with its partial files.
+ * Only the chat engines the Stack installs, and any engine a swap has touched, are swept; the runtimes other components keep under the same root are theirs. A failed-swap alert is cleared only when this sweep put a working build back. */
+export function sweepEngineSwaps(): Array<{ name: string; action: string }> {
+  const settled: Array<{ name: string; action: string }> = [];
+  const journals = new Map<string, { from: string | null; to: string }>();
+  for (const row of db.select().from(meta).all()) {
+    const found = row.key.match(/^engines\.(.+)\.swap$/);
+    if (!found) continue;
+    try { journals.set(found[1]!, JSON.parse(row.value) as { from: string | null; to: string }); } catch { /* Unreadable: nothing to settle. */ }
+    db.delete(meta).where(eq(meta.key, row.key)).run();
+  }
+  // An engine a swap has touched also has a remembered previous build; nothing else writes that key.
+  const swapped = db.select().from(meta).all().flatMap((row) => { const found = row.key.match(/^engines\.(.+)\.previous$/); return found ? [found[1]!] : []; });
+  const names = new Set([...ENGINE_BINARIES.map((pin) => pin.name), ...journals.keys(), ...swapped]);
+  for (const name of names) {
+    const journal = journals.get(name);
+    let current = currentEngineTag(name);
+    let action: string | null = null;
+    if (journal) {
+      const target = journal.from && isReady(name, journal.from) ? journal.from : !journal.from && isReady(name, journal.to) ? journal.to : null;
+      if (target && current !== target) { relink(name, target); current = target; action = journal.from ? `swap to ${journal.to} undone, back on ${target}` : `first install of ${target} finished`; }
+    }
+    if (!action && current && !isReady(name, current)) {
+      const back = previousEngine(name);
+      if (back && isReady(name, back)) { relink(name, back); current = back; action = `${current} never finished installing, back on ${back}`; }
+    }
+    const root = join(engineTagRoot(name, "x"), "..");
+    if (existsSync(root)) {
+      for (const entry of readdirSync(root, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name === current || isReady(name, entry.name)) continue;
+        rmSync(join(root, entry.name), { recursive: true, force: true });
+        settled.push({ name, action: `partial build ${entry.name} removed` });
+      }
+    }
+    if (action) {
+      settled.push({ name, action });
+      resolveHealth(failedSwapCode(name));
+      bumpStackGeneration(`engine ${name} swap settled at boot`);
+    }
+  }
+  return settled;
 }

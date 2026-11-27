@@ -21,6 +21,7 @@ import { migrateLegacyEngineTags } from "@/lib/engineInstall";
 import { reconcilePinDeclarations } from "@/lib/modelStore";
 import { resumeMoveJobs } from "@/lib/moveModels";
 import { recoverModelUpdates } from "@/updates/models";
+import { sweepEngineSwaps } from "@/updates/engines";
 import { pullMissingDeclaredParts } from "@/lib/installJobs";
 import { ensureChatEngineAssets } from "@/lib/chatEngineAssets";
 import { STACK_MODELS, STACK_STEMS_MODELS, STACK_VOICE_CONVERT_MODELS } from "@/lib/modelCatalog";
@@ -80,6 +81,8 @@ function onBattery(): boolean {
 async function serve(): Promise<void> {
   logger.installConsoleMirror();
   for (const moved of migrateLegacyEngineTags()) console.log(`Renamed engine ${moved.name} ${moved.from} to ${moved.to}.`);
+  // A half-finished engine swap (a link moved, a build staged and never finished) is finished or undone before anything launches.
+  for (const settled of sweepEngineSwaps()) console.log(`Engine swap sweep: ${settled.name}: ${settled.action}.`);
   applyPendingSettings();
   // Models the Stack no longer carries (Ornith 1.5 122B, retired 2026-11-21): records dropped, a saved choice that names one reset with a notice, Splash's layout of it removed. Their folders go through Tidy (the start-up sweep below).
   retireModels();

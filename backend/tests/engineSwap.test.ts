@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ENGINE_READY_MARKER } from "@/lib/engineCatalog";
 import { __resetHealthForTests, list, raise } from "@/lib/health";
@@ -59,4 +59,35 @@ test("a swap to a tag that is not installed, or whose download never finished, i
   staging("b2");
   await expect(swapEngine(name, "b2")).rejects.toThrow(/not installed/);
   expect(readlinkSync(engineCurrentPath(name))).toBe("b1");
+});
+
+test("a swap killed after the old link is removed boots back on the previous build, with the staged one kept", async () => {
+  const { __crashNextEngineSwapForTests, sweepEngineSwaps } = await import("@/updates/engines");
+  installed("b1");
+  installed("b2");
+  await swapEngine(name, "b1");
+  __crashNextEngineSwapForTests(true);
+  await expect(swapEngine(name, "b2")).rejects.toThrow(/crash mid-swap/);
+  // The process died here: no link, a journal in meta.
+  expect(() => readlinkSync(engineCurrentPath(name))).toThrow();
+  const settled = sweepEngineSwaps();
+  expect(settled.some((row) => row.name === name && /back on b1/.test(row.action))).toBe(true);
+  expect(readlinkSync(engineCurrentPath(name))).toBe("b1");
+  expect(sweepEngineSwaps()).toEqual([]);
+});
+
+test("the sweep removes a staged build that never finished and puts a link to an unfinished build back on the previous one", async () => {
+  const { sweepEngineSwaps } = await import("@/updates/engines");
+  installed("b1");
+  installed("b2");
+  await swapEngine(name, "b1");
+  await swapEngine(name, "b2");
+  staging("b3");
+  writeFileSync(join(engineTagRoot(name, "b3"), ".download.tmp"), "partial");
+  // A link that names a build whose marker is gone.
+  rmSync(join(engineTagRoot(name, "b2"), ENGINE_READY_MARKER));
+  sweepEngineSwaps();
+  expect(readlinkSync(engineCurrentPath(name))).toBe("b1");
+  expect(existsSync(engineTagRoot(name, "b3"))).toBe(false);
+  expect(existsSync(engineTagRoot(name, "b2"))).toBe(false);
 });
