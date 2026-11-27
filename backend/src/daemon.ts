@@ -6,6 +6,7 @@
 import { app, websocket } from "@/app";
 import { adminGuardedFetch } from "@/lib/adminGuard";
 import { pickTailscaleAddress } from "@/lib/adminListener";
+import { recordTailscaleListener } from "@/lib/adminAccess";
 import { createSetupCode, resetAdmin } from "@/lib/adminAuth";
 import { dataDir } from "@/lib/paths";
 import { homeViewToken } from "@/lib/adultView";
@@ -107,6 +108,7 @@ async function serve(): Promise<void> {
   const server = Bun.serve(options);
   const tailscaleOptions = tailscaleServeOptions(options);
   const tailscaleServer = tailscaleOptions ? Bun.serve(tailscaleOptions) : null;
+  recordTailscaleListener(tailscaleOptions && tailscaleServer ? { address: tailscaleOptions.hostname, port: tailscaleServer.port ?? 0 } : null);
   if (tailscaleOptions && tailscaleServer) logger.appendLine(JSON.stringify({ event: "admin.tailscale.bound", address: tailscaleOptions.hostname, port: tailscaleServer.port }));
   else if (settingValues()["stack.admin.tailscale"]) logger.appendLine(JSON.stringify({ event: "admin.tailscale.unavailable", reason: "no Tailscale address (100.64.0.0/10) on this computer; only loopback is bound" }));
   // First run: no admin yet means a one-time setup code, printed once here and kept in a 0600 file.

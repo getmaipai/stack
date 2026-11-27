@@ -9,7 +9,7 @@ Two callers, checked in front of the routes (`backend/src/lib/adminGuard.ts`):
 - **Home** sends its token. Its path is unchanged: loopback Host and Origin checks, then the token on every write.
 - **An admin** sends the `stack_admin` session cookie. The cookie is accepted in place of Home's token on `/stack/v1/*`. A write with a cookie must also carry `x-stack-admin: 1` and an `Origin` equal to the `Host`, so a page on another site cannot ride the cookie.
 
-The listener is loopback only. When the setting `stack.admin.tailscale` is on (default off, needs a restart), a second listener binds the computer's Tailscale address (`100.64.0.0/10`, never `0.0.0.0` or a home-network address). On that listener every `/stack/v1/*` request needs an admin session, except `/healthz`, the sign-in routes and the session probe, and Home's token is not accepted at all.
+The listener is loopback only. When the setting `stack.admin.tailscale` is on (default off, needs a restart), a second listener binds the computer's Tailscale address (`100.64.0.0/10`, never `0.0.0.0` or a home-network address). On that listener every `/stack/v1/*` request needs an admin session, except `/healthz`, the sign-in routes and the session probe, and Home's token is not accepted at all. `GET /stack/v1/admin-access` reports the listener's real state for Home's "Open Stack admin" link: `tailscale.state` is `listening` (with `url`, the sign-in page on the tailnet address), `restart_pending` (the setting is on, the Stack has not restarted since), `no_address` (on, but this computer has no Tailscale address) or `off`, plus one plain `message`.
 
 ## Sign-in
 

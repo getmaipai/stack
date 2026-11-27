@@ -1,7 +1,8 @@
 // The Resources screen's pure helpers (admin-ui/src/resourceData.ts): the budget bar,
 // the chart rows and the plain-words pressure badge. No React, no network.
 import { expect, test } from "bun:test";
-import { budgetSegments, chartRoles, hasRoleHistory, historyRoles, lineRows, loadRows, memoryRows, nowSegments, pressureWord, roleColor, roleHistoryRows, seriesColor, shortWhy, sortEngines, stateWord, visibleMarkers, whyLine } from "../../admin-ui/src/resourceData";
+import { budgetSegments, chartRoles, hasRoleHistory, historyRoles, lineRows, loadRows, memoryRows, roleColor, roleHistoryRows, seriesColor, shortWhy, sortEngines, stateWord, visibleMarkers, whyLine } from "../../admin-ui/src/resourceData";
+import { stackMemorySegments as nowSegments, stackPressureWord as pressureWord } from "../../admin-ui/node_modules/@maipai/ui/src/stack/stackMemory";
 import type { EngineRow, History, Point, Summary } from "../../admin-ui/src/resourceData";
 
 const GB = 1024 ** 3;

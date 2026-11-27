@@ -19,6 +19,7 @@ import { jobsCatalogRoutes } from "@/routes/jobsCatalog";
 import { jobsMakeRoutes } from "@/routes/jobsMake";
 import { healthRoutes } from "@/routes/health";
 import { statusRoutes } from "@/routes/status";
+import { adminAccessRoutes } from "@/routes/adminAccess";
 import { checkRoutes } from "@/routes/check";
 import { updatesRoutes } from "@/routes/updates";
 import { eventsRoutes } from "@/routes/events";
@@ -184,6 +185,7 @@ app.route("/stack/v1/jobs/make", jobsMakeRoutes);
 app.route("/stack/v1/jobs", jobsRoutes);
 app.route("/stack/v1/health", healthRoutes);
 app.route("/stack/v1/status", statusRoutes);
+app.route("/stack/v1/admin-access", adminAccessRoutes);
 app.route("/stack/v1/check", checkRoutes);
 app.route("/stack/v1/updates", updatesRoutes);
 // STACK-LORAS-01: before the root-mounted components routes, whose `/{id}/install` would otherwise catch /loras/install.

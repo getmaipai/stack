@@ -1,3 +1,4 @@
+import { stackRoleColor } from "@maipai/ui/src/stack/stackMemory";
 import { featureOrder } from "./featureRows";
 // Pure helpers for the Resources screen: no React, so the unit test can load them.
 // Data comes only from GET /stack/v1/resources/{history,summary} (ADMIN-02).
@@ -36,12 +37,6 @@ export function seriesColor(colorKey: string): string {
   return SLOTS[Number.isInteger(n) && n >= 1 ? (n - 1) % SLOTS.length : 0] ?? "var(--chart-1)";
 }
 
-export function pressureWord(level: number | undefined): { word: string; kind: "online" | "degraded" | "offline" } {
-  if (level === undefined) return { word: "Unknown", kind: "degraded" };
-  if (level >= 4) return { word: "Critical", kind: "offline" };
-  if (level >= 2) return { word: "Getting tight", kind: "degraded" };
-  return { word: "Comfortable", kind: "online" };
-}
 
 export interface Segment { id: string; label: string; bytes: number; color: string; percent: number }
 /** Memory budget bar: each engine process, other programs, then free. Percentages sum to at most 100. */
@@ -103,22 +98,8 @@ export function timeLabel(t: number, range: Range): string {
 
 const GBYTES = 1024 ** 3;
 
-/** Fixed order (busiest features first), so a feature keeps its color on every chart and bar. The kit's chart tokens include a near-black and a dark grey that vanish on a dark page, so the six base colors are the cyan, the blue and the mid and light greys, plus two shades mixed toward the text color; features past the sixth reuse them lightened. The legend names every slice too. */
-/** The Stack's own feature order first (from its rows), then the roles that are not features. */
-const NON_FEATURE_ROLES = ["helper", "judge", "router", "rerank"];
-const FALLBACK_ORDER = ["chat", "coding", "image", "tts", "stt", "embed", "video", "music", "vision", "wakeword"];
-function roleOrder(): string[] {
-  const fromRows = featureOrder();
-  return [...(fromRows.length ? fromRows : FALLBACK_ORDER), ...NON_FEATURE_ROLES];
-}
-const ROLE_SLOTS = ["var(--chart-1)", "var(--primary)", "color-mix(in oklab, var(--chart-1) 45%, var(--foreground))", "var(--chart-2)", "color-mix(in oklab, var(--primary) 45%, var(--foreground))", "var(--chart-3)"];
-export function roleColor(role: string): string {
-  const order = roleOrder();
-  const i = order.indexOf(role);
-  const n = i >= 0 ? i : order.length + [...role].reduce((sum, c) => sum + c.charCodeAt(0), 0) % 12;
-  const base = ROLE_SLOTS[n % ROLE_SLOTS.length]!;
-  return n < ROLE_SLOTS.length ? base : `color-mix(in oklab, ${base} ${n < 2 * ROLE_SLOTS.length ? 60 : 38}%, var(--card))`;
-}
+/** A feature keeps one color on every chart and bar: the shared kit helper, given the Stack's own feature order. */
+export function roleColor(role: string): string { return stackRoleColor(role, featureOrder()); }
 
 const PURPOSE: Record<string, string> = {
   chat: "answers questions and holds conversations", coding: "helps write code, and is loaded only while someone is coding",
@@ -152,21 +133,6 @@ export function whyLine(row: EngineRow, modelName: string | null, size: (n: numb
   if (row.serves.length) parts.push(`The same process also answers for ${row.serves.join(" and ")}.`);
   if (row.priority !== 100) parts.push(`Its priority is ${row.priority} (100 is the default).`);
   return parts.join(" ");
-}
-
-export interface BarSegment { id: string; label: string; detail: string | null; bytes: number; color: string; percent: number; kind: "role" | "other" | "free" }
-/** The memory bar: each running feature, then everything else in use, then free; percentages are of the whole computer and sum to at most 100. */
-export function nowSegments(current: Point | null, engines: EngineRow[], modelName: (id: string | null) => string | null = () => null): BarSegment[] {
-  if (!current || current.total <= 0) return [];
-  const live = engines.filter((e) => e.memory_bytes > 0).sort((a, b) => b.memory_bytes - a.memory_bytes);
-  const named = live.reduce((n, e) => n + e.memory_bytes, 0);
-  const raw: Omit<BarSegment, "percent">[] = [
-    ...live.map((e) => ({ id: e.role, label: e.label, detail: modelName(e.model_id), bytes: e.memory_bytes, color: roleColor(e.role), kind: "role" as const })),
-    { id: "other", label: "Other apps and the system", detail: null, bytes: Math.max(0, current.used - named), color: "var(--muted-foreground)", kind: "other" },
-    { id: "free", label: "Free", detail: null, bytes: Math.max(0, current.avail), color: "var(--muted)", kind: "free" },
-  ];
-  let left = 100;
-  return raw.map((s) => { const percent = Math.min(left, (s.bytes / current.total) * 100); left -= percent; return { ...s, percent }; });
 }
 
 /** The roles worth a band in the stacked history: biggest by peak, at most six, at least 1 percent of the computer. */

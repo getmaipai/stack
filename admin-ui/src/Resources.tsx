@@ -3,23 +3,23 @@ import { ChevronDown, Cpu, Gauge, HardDrive, MemoryStick, Zap } from "lucide-rea
 import { Alert, AlertDescription, AlertTitle } from "@maipai/ui/src/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maipai/ui/src/ui/collapsible";
 import { Skeleton } from "@maipai/ui/src/ui/skeleton";
-import { StatusIndicator } from "@maipai/ui/src/ui/status";
+import { StackMemoryNow } from "@maipai/ui/src/stack/StackMemoryNow";
+import { stackPressureWord } from "@maipai/ui/src/stack/stackMemory";
 import { ToggleGroup, ToggleGroupItem } from "@maipai/ui/src/ui/toggle-group";
 import { ApiError, api } from "./api";
 import { bytes } from "./format";
-import { Live, Meter, Pill, SectionHeader, StatTile } from "./kit";
-import type { Tone } from "./kit";
+import { SectionHeader, StatTile } from "./kit";
 import { EngineDetail, EngineTable } from "./ResourceEngines";
 import { LineCard, MemoryStack, Empty, ChartCard } from "./ResourceCharts";
 import { resourceApi } from "./resourceApi";
-import { RANGES, hasRoleHistory, historyRoles, loadRows, memoryRows, chartRoles, nowSegments, pressureWord, roleHistoryRows, stateWord } from "./resourceData";
+import { featureOrder } from "./featureRows";
+import { RANGES, hasRoleHistory, historyRoles, loadRows, memoryRows, chartRoles, roleHistoryRows } from "./resourceData";
 import type { Engines, History, Marker, Range, Summary } from "./resourceData";
 import { StatDetails, type StatKind } from "./StatSheet";
 
 const REFRESH_MS = 5000; // the Stack samples every 5 s, so this is as live as the data gets
 const GB = 1024 ** 3;
 const pct = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
-const shareText = (n: number, total: number) => (total > 0 && n / total < 0.1 ? `${((n / total) * 100).toFixed(1)}%` : `${pct(n, total)}%`);
 const NOT_MEASURED = "Not measured";
 
 export function Resources({ changed, go = () => {} }: { changed: unknown; go?: (screen: string) => void }) {
@@ -78,11 +78,9 @@ export function Resources({ changed, go = () => {} }: { changed: unknown; go?: (
   }
 
   const cur = summary.current;
-  const pressure = pressureWord(cur?.pressure);
-  const segments = nowSegments(cur, rows, modelName);
+  const pressure = stackPressureWord(cur?.pressure);
   const total = cur?.total ?? 0;
   const used = cur?.used ?? 0;
-  const heldByStack = rows.reduce((n, r) => n + r.memory_bytes, 0);
   const cap = engines?.budget.cap_bytes ?? 0;
   const selected = rows.find((r) => r.role === open) ?? null;
 
@@ -92,45 +90,8 @@ export function Resources({ changed, go = () => {} }: { changed: unknown; go?: (
 
       <section aria-labelledby="now-h" className="flex flex-col gap-4">
         <h2 id="now-h" className="sr-only">Right now</h2>
-        <div className="glass flex flex-col gap-5 p-5 sm:p-6">
-          <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-            <div>
-              <p className="text-sm text-muted-foreground">Memory in use right now</p>
-              <p className="text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">{cur ? <Live>{`${bytes(used)} of ${bytes(total)}`}</Live> : "No reading yet"}</p>
-            </div>
-            <Pill tone={pressure.kind === "online" ? "ok" : pressure.kind === "degraded" ? "warn" : "bad" as Tone}><StatusIndicator status={pressure.kind} ping={false} />{pressure.word}</Pill>
-          </div>
-          {cur ? (
-            <>
-              <div className="flex h-5 w-full overflow-hidden rounded-full bg-[var(--fill-2)]" role="img" aria-label={`Memory split: ${segments.map((s) => `${s.label} ${bytes(s.bytes)}`).join(", ")}`}>
-                {segments.map((s) => (
-                  <button key={s.id} type="button" disabled={s.kind !== "role"} onClick={() => setOpen(s.id)} title={`${s.label}: ${bytes(s.bytes)}, ${shareText(s.bytes, total)}`} aria-label={`${s.label}, ${bytes(s.bytes)}`}
-                    className="h-full cursor-default border-e border-card outline-none transition-[width] duration-500 last:border-e-0 enabled:cursor-pointer focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none" style={{ width: `${s.percent}%`, background: s.color }} />
-                ))}
-              </div>
-              <ul className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm lg:grid-cols-2" aria-label="Where memory is going">
-                {segments.filter((s) => s.bytes > 0).map((s) => {
-                  const row = rows.find((r) => r.role === s.id);
-                  const inner = (
-                    <>
-                      <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: s.color }} />
-                      <span className="min-w-0 flex-1 truncate">{s.label}{s.detail && <span className="text-muted-foreground"> · {s.detail}</span>}{row && <span className="text-muted-foreground"> · {stateWord(row.state).toLowerCase()}</span>}</span>
-                      <span className="tabular-nums">{bytes(s.bytes)}</span>
-                      <span className="w-12 text-end text-muted-foreground tabular-nums">{shareText(s.bytes, total)}</span>
-                    </>
-                  );
-                  return <li key={s.id}>{row ? <button type="button" onClick={() => setOpen(s.id)} className="flex min-h-9 w-full items-center gap-2 rounded-md text-start outline-none hover:bg-[var(--fill-1)] focus-visible:ring-2 focus-visible:ring-ring">{inner}</button> : <div className="flex min-h-9 items-center gap-2">{inner}</div>}</li>;
-                })}
-              </ul>
-              {cap > 0 && (
-                <div className="flex flex-col gap-2">
-                  <Meter value={heldByStack / cap} tone={heldByStack / cap > 0.9 ? "warn" : "primary"} label="Share of the AI budget in use" />
-                  <p className="text-xs text-muted-foreground">The Stack's engines hold {bytes(heldByStack)} of their {bytes(cap)} budget. The budget is the most memory the Stack lets itself use, so there is always room left for everything else.</p>
-                </div>
-              )}
-              {rows.length === 0 && engines && <p className="text-sm text-muted-foreground">No engine is loaded right now, so the Stack itself holds almost nothing. A feature loads its engine the first time it is used.</p>}
-            </>
-          ) : <p className="text-sm text-muted-foreground">The Stack has not taken its first memory reading yet. It samples every 5 seconds, so this fills in on its own.</p>}
+        <div className="glass p-5 sm:p-6">
+          <StackMemoryNow current={cur} engines={engines ? rows : null} budgetBytes={cap} modelName={modelName} featureOrder={featureOrder()} onOpenRole={setOpen} framed={false} />
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
