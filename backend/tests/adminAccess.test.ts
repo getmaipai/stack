@@ -44,6 +44,16 @@ test("on at start but nothing bound: says the computer has no Tailscale address"
   expect(tailscale.message).toContain("Tailscale");
 });
 
+test("on at start with nothing bound but a Tailscale address now: restart pending, not no address", () => {
+  updateSettings({ "stack.admin.tailscale": true });
+  applyPendingSettings();
+  recordTailscaleListener(null);
+  const { tailscale } = adminAccess("100.101.102.103");
+  expect(tailscale.state).toBe("restart_pending");
+  expect(tailscale.address).toBe("100.101.102.103");
+  expect(tailscale.message).toContain("Restart the Stack");
+});
+
 test("the route answers Home with the same report", async () => {
   const response = await app.fetch(new Request("http://127.0.0.1:8770/stack/v1/admin-access", { headers: { host: "127.0.0.1:8770", authorization: `Bearer ${TOKEN}` } }));
   expect(response.status).toBe(200);

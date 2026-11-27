@@ -44,6 +44,10 @@ export function adminAccess(address: string | null = pickTailscaleAddress()): Ad
   if (wanted && !inEffect) {
     return { tailscale: { state: "restart_pending", url: null, address, port, message: "The setting is on and takes effect when the Stack restarts. Restart the Stack, then this link works from any computer on your tailnet." } };
   }
+  if (inEffect && address) {
+    // The setting took effect but nothing is bound: this computer had no Tailscale address when the Stack started, and has one now.
+    return { tailscale: { state: "restart_pending", url: null, address, port, message: "The setting is on, but the Stack is not listening on your tailnet yet. Restart the Stack so it binds this computer's Tailscale address." } };
+  }
   if (inEffect) {
     return { tailscale: { state: "no_address", url: null, address: null, port, message: "The setting is on, but this computer has no Tailscale address. Sign in to Tailscale on this computer, then restart the Stack." } };
   }
