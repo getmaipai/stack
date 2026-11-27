@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { app } from "@/app";
 import { __resetHealthForTests, list as listHealth } from "@/lib/health";
-import { __resetReadinessForTests, latestCheck, runCheck } from "@/lib/readiness";
+import { raise } from "@/lib/health";
+import { comfyuiInstalled } from "@/generators/comfyui";
+import { __resetReadinessForTests, latestCheck, runCheck, settleUnprobedRoleChecks } from "@/lib/readiness";
 import { scriptedMemoryReader } from "@/lib/memory/scripted";
 import { getProcess, resetSupervisorForTests, scriptedProcess, setSupervisorFactoryForTests } from "@/lib/supervisor";
 
@@ -53,4 +55,18 @@ test("music and video run as jobs on their own worker: the check skips them and 
   const run = await runCheck({ roleIds: ["music", "video"] });
   expect(run.results.map((r) => [r.role, r.skipped])).toEqual([["music", true], ["video", true]]);
   expect(listHealth().filter((item) => item.code.startsWith("check-role."))).toEqual([]);
+});
+
+test("an old open check-role problem of a role the check no longer probes is closed at startup and by the next check; a picture role with no ComfyUI engine is skipped", async () => {
+  for (const role of ["music", "video", "image"]) raise({ code: `check-role.${role}`, severity: "warning", title: "x", text: "No engine can be started", cause: "old", fix: { label: "Restart engine", action: "restart_engine" } });
+  setSupervisorFactoryForTests(null);
+  settleUnprobedRoleChecks();
+  const open = () => listHealth().filter((item) => item.code.startsWith("check-role.")).map((item) => item.code).sort();
+  // Music and video never run an engine; image is closed only where ComfyUI is not installed.
+  expect(open()).toEqual(comfyuiInstalled() ? ["check-role.image"] : []);
+  if (!comfyuiInstalled()) {
+    const run = await runCheck({ roleIds: ["image"] });
+    expect(run.results[0]).toMatchObject({ role: "image", skipped: true });
+    expect(open()).toEqual([]);
+  }
 });

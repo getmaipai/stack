@@ -9,7 +9,7 @@ import { meta } from "@/db/schema";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { getMemoryReader } from "@/lib/memory";
 import type { MemoryReader } from "@/lib/memory/types";
-import { expectedCheckpoint, probeReplyOk, probeRequest, processRoleFor, PROBE_SENTENCE, requestRole, getRoleStatus, roleIsBound, runOnRole, SPAWNABLE_ROLES, speakRole, speechForm } from "@/lib/supervisor";
+import { expectedCheckpoint, probeReplyOk, probeRequest, processRoleFor, PROBE_SENTENCE, requestRole, getRoleStatus, roleIsBound, runOnRole, engineInstalledFor, SPAWNABLE_ROLES, speakRole, speechForm } from "@/lib/supervisor";
 import { probeGenerator } from "@/generators/comfyui";
 import { resolveRoleState } from "@/lib/router";
 import { ROLE_IDS, ROLES, type RoleId, HEAVY_ROLE, PRIMARY_ROLE } from "@/roles";
@@ -42,6 +42,19 @@ function fixFor(role: RoleId, reason: string): HealthFix {
 /** Roles the check never probes: a probe would load them (a fresh start) or keep them loaded (a request restarts the idle clock). The coding engine loads for the person who codes; its own post-load check proves it each time, and its state is on the role list (CODE-STACK-01 S2). */
 const NEVER_PROBED_ROLES: RoleId[] = [HEAVY_ROLE];
 
+/** Why a generator role has no engine probe, or null when it has one. Music and video run as jobs on the governor's own workers and the picture role is probed only when a ComfyUI engine is its installed one: where none is, a probe could only fail with "No engine can be started" or "The ComfyUI environment is not built", a problem no one can fix because the pictures are answered by the Stack's own jobs. */
+function generatorNotProbed(role: RoleId): string | null {
+  if (ROLES[role].wire !== "job") return null;
+  if (!(ROLES[role] as { spawnable?: boolean }).spawnable) return `Skipped: ${role} runs as a job on its own worker, so the check does not start an engine for it.`;
+  if (!engineInstalledFor(role)) return `Skipped: no separate ${role} engine is installed here; ${role} jobs run on the Stack's own workers.`;
+  return null;
+}
+
+/** Closes any open `check-role.*` problem of a role the check no longer probes (an entry raised by an older build stays open until something resolves it). Runs at daemon start and at the top of every check. */
+export function settleUnprobedRoleChecks(): void {
+  for (const role of ROLE_IDS) if (generatorNotProbed(role)) resolveHealth(`check-role.${role}`);
+}
+
 async function checkRole(role: RoleId, options: CheckOptions): Promise<CheckRoleResult> {
   const started = performance.now();
   if (NEVER_PROBED_ROLES.includes(role) && !options.requestRole) {
@@ -66,10 +79,10 @@ async function checkRole(role: RoleId, options: CheckOptions): Promise<CheckRole
       resolveHealth(`check-role.${role}`);
       return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason: `Skipped: no ${wire} engine is ready for ${role}.`, loadMs: null };
     }
-    // A generator with no engine process of its own (music and video run in the governor's warm workers, one job at a time) has nothing to start or list: a probe would fail with "No engine can be started" while the worker is fine. Its own media check covers it.
-    if (wire === "job" && !(ROLES[role] as { spawnable?: boolean }).spawnable) {
+    const unprobed = generatorNotProbed(role);
+    if (unprobed) {
       resolveHealth(`check-role.${role}`);
-      return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason: `Skipped: ${role} runs as a job on its own worker, so the check does not start an engine for it.`, loadMs: null };
+      return { role, ok: false, skipped: true, ms: Math.round(performance.now() - started), reason: unprobed, loadMs: null };
     }
     if (wire === "job") {
       // A generator's probe is its checkpoint list, never a render.
@@ -120,6 +133,7 @@ function installedRoles(): RoleId[] {
     if (NEVER_PROBED_ROLES.includes(role)) return false;
     const state = resolveRoleState(role).state;
     if (getRoleStatus(role).state === "stopped") return false;
+    if (generatorNotProbed(role)) return false;
     if (state === "offline") return processRoleFor(role) === role && roleIsBound(role);
     return ["installed", "loaded", "ready"].includes(state);
   });
@@ -132,6 +146,7 @@ export async function runCheck(options: CheckOptions = {}): Promise<CheckRun> {
   // must make this run stale, not be absorbed by it.
   const generation = stackGeneration();
   try {
+    settleUnprobedRoleChecks();
     const roleIds = options.roleIds ?? installedRoles();
     const results: CheckRoleResult[] = [];
     // Owners first, whatever order the caller gave, so a sharer always

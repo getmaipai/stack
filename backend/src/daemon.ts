@@ -124,6 +124,7 @@ async function serve(): Promise<void> {
   void pullMissingDeclaredParts().catch(() => {});
   // The chat engine this tier runs by default (oMLX) is built and its model pulled in the background; chat moves onto it once both are verified (ENGINE-MLX-01).
   void ensureChatEngineAssets().catch(() => {});
+  void import("@/lib/readiness").then((module) => module.settleUnprobedRoleChecks()).catch(() => {});
   void warmUp("daemon-start").catch(() => {});
   // The DuckDuckGo search service Home's web search uses: built, started and restarted here; it never fails the Stack.
   ddgsSupervisor.start();
