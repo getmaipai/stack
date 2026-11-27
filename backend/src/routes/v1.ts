@@ -17,6 +17,7 @@ import { POCKET_TTS_GATED_REPO } from "@/speech/pocketTts";
 import { prepareChatterboxVoice, voiceSettingsRefusal } from "@/speech/chatterboxClones";
 import { isVoxcpm2Engine } from "@/speech/ttsEngines";
 import { ensureCloningWeights, prepareVoice, voiceNeedsCloning, VoiceRefusedError } from "@/speech/voices";
+import { contextOverflowError } from "@/lib/contextOverflow";
 import { hasJobRunner, submitJob, waitForJob } from "@/lib/jobs";
 import { endWithStream, heavyGate } from "@/lib/heavyGate";
 import { editImages, generateImages, restoreImages, ImageGenerationBodySchema, type ImageGenerationBody } from "@/routes/imageGenerations";
@@ -149,11 +150,24 @@ async function reply<T extends Context>(c: T, wire: Wire, body: Record<string, u
       try { result = await streamRole(role, WIRE_PATHS.chat, body, c.req.raw.signal); } catch (error) { end(); throw error; }
       for (const [name, value] of Object.entries(result.headers)) c.header(name, value);
       if (!result.body) { end(); return new Response(JSON.stringify({ error: result.status === 499 ? "Request cancelled" : "Streaming is unavailable" }), { status: result.status, headers: { ...result.headers, "content-type": "application/json" } }); }
+      // STACK-CTX-400-01: an engine's error reply to a streamed request is a small JSON body; an overflow in it is the same plain 400 the non-streamed route gives.
+      if (result.status >= 400) {
+        const text = await new Response(result.body).text();
+        end();
+        let parsed: unknown = null;
+        try { parsed = JSON.parse(text); } catch { /* not JSON: passed through below */ }
+        const overflow = contextOverflowError(result.status, parsed);
+        if (overflow) return jsonReply(c, overflow, 400, result.headers);
+        return new Response(text, { status: result.status, headers: { ...result.headers, "content-type": "application/json" } });
+      }
       return new Response(endWithStream(result.body, end), { status: result.status, headers: { ...result.headers, "content-type": "text/event-stream", "cache-control": "no-cache" } });
     }
     const end = interactive ? heavyGate.begin(role) : () => {};
     try {
       const result = await requestRole(role, WIRE_PATHS[wire], body, c.req.raw.signal);
+      // STACK-CTX-400-01: a prompt longer than the context is a 400 that names the limit, whichever status the engine used.
+      const overflow = wire === PRIMARY_ROLE ? contextOverflowError(result.status, result.body) : null;
+      if (overflow) return jsonReply(c, overflow, 400, result.headers);
       return jsonReply(c, result.body, result.status, result.headers);
     } finally { end(); }
   } catch (error) {
