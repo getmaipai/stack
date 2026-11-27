@@ -157,6 +157,9 @@ export function llamaServerArgs(options: LlamaServerArgsOptions): string[] {
   if (options.embeddings) args.push("--embeddings");
   // A re-ranker is served with the engine's native ranking mode (it implies pooling rank).
   if (options.reranking) args.push("--reranking");
+  // STACK-SPEC-NGRAM-01: n-gram speculative decoding for chat, off unless chosen. Draft tokens come from the conversation's own text, so no second model is loaded; a pictures process (projector) and the embed and rerank roles never get it.
+  const ngram = config.speculativeNgram === "simple" ? "ngram-simple" : config.speculativeNgram === "mod" ? "ngram-mod" : null;
+  if (ngram && !options.embeddings && !options.reranking && !options.projectorPath && !options.onePictureSlot) args.push("--spec-type", ngram);
   return args;
 }
 

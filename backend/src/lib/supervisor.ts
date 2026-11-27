@@ -1536,7 +1536,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
     return { command: pocketTtsCommand(port, await materializePocketLauncher()), engine: "pocket-tts", build: POCKET_TTS_VERSION, stdin: "ignore", contextLength: 0, kind: "managed", env: pocketTtsEnv(), apiKey: newLaunchKey() };
   }
   const declared = engineSettingValues("engines.llama_server");
-  const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention } as Record<string, number | boolean | string | string[]>;
+  const config = { contextLength: declared.context_length, slots: declared.slots, threads: declared.threads, cacheRamMb: declared.cache_ram_mb, flashAttention: declared.flash_attention, speculativeNgram: declared.speculative_ngram } as Record<string, number | boolean | string | string[]>;
   // The coding role sizes its own window (codingContextFor) and never reaches the chat launch's context fit.
   const codingRole = role === HEAVY_ROLE;
   // A record with its own launch (vision) runs one slot, as its args say.
