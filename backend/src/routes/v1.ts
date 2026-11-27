@@ -29,6 +29,8 @@ import { RoleReplyHeaders } from "@maipai/spec/stack/ts/role-reply-headers.js";
 import { TokenCountRequest, TokenCountResponse } from "@maipai/spec/stack/ts/token-count.js";
 import { SttEndpointResponse } from "@maipai/spec/stack/ts/stt-endpoint-response.js";
 import { EndpointModelMissingError, scoreEndpoint } from "@/speech/endpoint";
+import { deliverSpeech } from "@/lib/ttsDelivery";
+import { ttsDelivery, ttsDeliveryConfig } from "@/lib/ttsDeliveryState";
 import { WaveFormatError } from "@/speech/audio";
 import { SPEAKER_EMBEDDING_PATH } from "@/speech/server";
 import { IMAGE_FAMILIES } from "@/images/models";
@@ -353,7 +355,8 @@ v1Routes.openapi(speechRoute, async (c) => {
     try { spoken = await speakRole(resolution.role, speechForm(form.text, voice, pocket || !voice ? {} : { temperature: form.temperature, pitch_semitones: form.pitch_semitones, ...(voxcpm2 && form.voice_text ? { voice_text: form.voice_text } : {}) }), controller.signal); } catch (error) { end(); throw error; }
     for (const [name, value] of Object.entries(spoken.headers)) c.header(name, value);
     if (!spoken.body) { end(); return new Response(JSON.stringify({ error: spoken.status === 499 ? "Request cancelled" : spoken.status === 504 ? "The engine timed out." : "The engine did not answer." }), { status: spoken.status, headers: { ...spoken.headers, "content-type": "application/json" } }); }
-    return new Response(endWithStream(spoken.body, end), { status: spoken.status, headers: { ...spoken.headers, "content-type": spoken.contentType ?? "audio/wav", "cache-control": "no-cache" } });
+    const delivered = deliverSpeech(spoken.body, ttsDelivery, ttsDeliveryConfig().prerollMs);
+    return new Response(endWithStream(delivered, end), { status: spoken.status, headers: { ...spoken.headers, "content-type": spoken.contentType ?? "audio/wav", "cache-control": "no-cache" } });
   } catch (error) {
     if (error instanceof EngineUnavailableError) { const result = noEngineResponse("tts", error.reason); return jsonReply(c, result.body, result.status, result.headers); }
     if (error instanceof UnverifiedModelError) return jsonReply(c, { error: error.message, model: error.modelId, reason: "unverified", missing: error.missing }, 409, identityHeaders(null));

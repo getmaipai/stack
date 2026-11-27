@@ -15670,6 +15670,14 @@
                           "tts": {
                             "type": "object",
                             "properties": {
+                              "delivery_mode": {
+                                "type": "string",
+                                "enum": [
+                                  "streaming",
+                                  "buffered"
+                                ],
+                                "description": "How speech is sent now: streaming (as it is made) or buffered (whole reply first, with a short pause in front, while the computer is busy)."
+                              },
                               "engine": {
                                 "type": "string"
                               },
