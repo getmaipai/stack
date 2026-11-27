@@ -427,7 +427,8 @@ function judgePick(state: State, input: PickInput, system: boolean): Judged {
   const entry = pool.find((item) => item.id === input.model) ?? null;
   if (!entry) return refuse(404, "unknown_model", `${input.model.slice(0, 60)} is not a model the Stack offers for ${def.label.toLowerCase()}. Pick one from the list.`);
   const profileTier = PROFILE_TIERS.find((item) => item.id === profile)!;
-  const candidateRow = entry.row;
+  // A model can have one row per profile group (the p128 lineup rows, 2026-11-25): judge by the row for this profile, else the first.
+  const candidateRow = (entry.row && TIER_CANDIDATES.find((row) => row.category === entry.row!.category && row.id === entry.id && row.profiles.includes(profile))) ?? entry.row;
   const offeredElsewhere = entry.kind === "added" || (candidateRow ? candidateRow.profiles.includes(profile) && (tier === "reduced" ? candidateRow.tiers.includes("reduced") : candidateRow.tiers.some((item) => item !== "reduced")) : def.role === null || !profileTier.notAvailable.includes(def.role));
   if (!offeredElsewhere) return refuse(409, "not_offered_here", `${labelOf(state, entry.id)} is not offered for ${levelName(tier)} on a ${profileTier.minUnifiedGb} GB computer.`);
   // Boost and Max chat run through the coding role (Max through coding mode, which starts Qwen3.8 27B or Flash Next): a model the Stack cannot start there is refused, never saved as a choice that changes nothing.

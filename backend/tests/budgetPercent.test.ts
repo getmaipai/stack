@@ -34,8 +34,11 @@ test("half of 128 GB resolves and plans like 64 GB", () => {
   const roomA = tierRoomBytes();
   setGovernorMemorySettings({ budgetPercent: 100 }); __setGovernorTuningForTestsOnly({ totalMemoryBytes: 64 * GB, tier: "p64" });
   const roomB = tierRoomBytes();
+  // Each computer is sized at its own budget: the 128 GB one at 50 percent, the 64 GB one at 100.
+  setBudgetPercent(50); const pa = proposeProfile(large)!;
+  setBudgetPercent(100); const pb = proposeProfile(small)!;
+  expect(pa.id).toBe("p64");
   for (const category of ["chat", "pictures", "video", "music"] as const) {
-    const pa = proposeProfile(large)!; const pb = proposeProfile(small)!;
   expect(candidateResults(category, pa.id, roomA, 0, "p64")).toEqual(candidateResults(category, pb.id, roomB, 0, "p64"));
   }
 });

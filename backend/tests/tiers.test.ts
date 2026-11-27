@@ -61,13 +61,15 @@ describe("tier resolver", () => {
     expect(roomy.map((row) => row.resolved?.model ?? null)).toEqual(["fastwan2-2-ti2v-5b-mlx-bf16", "ltx-2-5-q8-distilled-mlx", "ltx-2-5-bf16-distilled-mlx-max"]);
     expect(roomy[0]?.resolved?.verified).toBe(true);
     expect(resolveTier({ category: "video", tier: "max", profile: "p128", roomBytes: 40 * GB, reducedFreedBytes: 22 * GB, slot: { model: "ltx-2-5-bf16-distilled-mlx-max", options: { input: "picture" } } })).toMatchObject({ peakBytes: 61_500_000_000 });
-    expect(resolveLadder("voice", "p128", 72 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["chatterbox-turbo-fp16", null, null]);
+    expect(resolveLadder("voice", "p128", 72 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["voxcpm2-bf16", null, null]);
   });
 
-  test("evaluation slots: Nano Reduced voice on p64 and p128, Qwen-Image Max, htdemucs Standard stems, no draft model", () => {
-    for (const profile of ["p64", "p128"] as const) expect(resolveTier({ category: "voice", tier: "reduced", profile, roomBytes: 24 * GB })?.model).toBe("chatterbox-nano");
+  test("evaluation slots: Nano Reduced voice on p64, the 4-bit VoxCPM2 on p128 (owner lineup 2026-11-25), FLUX 3 Klein Max on p128 with Qwen-Image still a pick, htdemucs Standard stems, no draft model", () => {
+    expect(resolveTier({ category: "voice", tier: "reduced", profile: "p64", roomBytes: 24 * GB })?.model).toBe("chatterbox-nano");
+    expect(resolveTier({ category: "voice", tier: "reduced", profile: "p128", roomBytes: 24 * GB })?.model).toBe("voxcpm2-4bit");
     for (const profile of ["p16", "p32"] as const) expect(resolveTier({ category: "voice", tier: "reduced", profile, roomBytes: 12 * GB })?.model).toBe("pocket-tts-english");
-    expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 72 * GB })).toMatchObject({ model: "qwen-image-2512-q8", verified: true, peakBytes: 37_400_000_000 });
+    expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 72 * GB })).toMatchObject({ model: "flux3-image-klein", peakBytes: 37_400_000_000 });
+    expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 72 * GB, slot: { model: "qwen-image-2512-q8" } })).toMatchObject({ model: "qwen-image-2512-q8", verified: true, peakBytes: 37_400_000_000 });
     expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 36 * GB })).toBeNull();
     expect(resolveLadder("stems", "p16", 8 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["htdemucs", null, null]);
     expect(resolveTier({ category: "music", tier: "max", profile: "p128", roomBytes: 72 * GB })).toBeNull();
@@ -169,16 +171,17 @@ describe("tier candidate lists for the slot dialog", () => {
 });
 
 describe("voice candidates name their engine (VOICE-VOXCPM2-01)", () => {
-  test("every voice row that names an engine names one the Stack builds, and VoxCPM2 is never the recommended pick", async () => {
+  test("every voice row that names an engine names one the Stack builds, and VoxCPM2 is the recommended pick only on p128 (owner lineup 2026-11-25)", async () => {
     const { TTS_ENGINES } = await import("@/speech/ttsEngines");
     const voice = TIER_CANDIDATES.filter((item) => item.category === "voice");
     for (const row of voice) if (row.engine) expect(Object.keys(TTS_ENGINES)).toContain(row.engine);
     expect(voice.find((item) => item.id === "voxcpm2-bf16")?.engine).toBe("voxcpm2");
     expect(voice.find((item) => item.id === "voxcpm2-4bit")?.engine).toBe("voxcpm2-reduced");
-    for (const profile of ["p16", "p32", "p64", "p128"] as const) {
+    for (const profile of ["p16", "p32", "p64"] as const) {
       const standard = tierCandidateLists("voice", profile, 72 * GB, 0).find((level) => level.tier === "standard");
       expect(standard?.recommended ?? "").not.toContain("voxcpm2");
     }
+    expect(tierCandidateLists("voice", "p128", 72 * GB, 0).find((level) => level.tier === "standard")?.recommended).toBe("voxcpm2-bf16");
   });
 });
 
@@ -186,8 +189,8 @@ describe("voice candidates name their engine (VOICE-VOXCPM2-01)", () => {
 test("the Huihui 27B chat model is a Standard candidate on p64 and p128 and is never the recommended pick", async () => {
   const { TIER_CANDIDATES } = await import("@/lib/tiers");
   const { PLANNER_EXCLUDED_CHAT } = await import("@/lib/profilePlanner");
-  const row = TIER_CANDIDATES.find((item) => item.id === "qwen3-8-27b-huihui-abliterated-iq4-xs");
-  expect(row).toMatchObject({ category: "chat", profiles: ["p64", "p128"], tiers: ["standard"] });
+  const rows = TIER_CANDIDATES.filter((item) => item.id === "qwen3-8-27b-huihui-abliterated-iq4-xs");
+  expect(rows.map((row) => ({ category: row.category, profiles: row.profiles, tiers: row.tiers }))).toEqual([{ category: "chat", profiles: ["p64"], tiers: ["standard"] }, { category: "chat", profiles: ["p128"], tiers: ["standard"] }]);
   expect(PLANNER_EXCLUDED_CHAT).toContain("qwen3-8-27b-huihui-abliterated-iq4-xs");
   const standard = TIER_CANDIDATES.filter((item) => item.category === "chat" && item.tiers.includes("standard") && item.profiles.includes("p128"));
   expect(standard[0]!.id).not.toBe("qwen3-8-27b-huihui-abliterated-iq4-xs");

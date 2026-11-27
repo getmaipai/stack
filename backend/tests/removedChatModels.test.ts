@@ -33,10 +33,10 @@ test("the removed ids are in no part, pin, profile binding, tier slot or plan", 
   }
 });
 
-test("every profile still has a recommended Standard chat model, the Qwen3 8B, and the plans carry it", () => {
+test("every profile still has a recommended Standard chat model, the Qwen3 8B below 128 GB and the 35B at 128 GB (owner lineup 2026-11-25), and the plans carry it", () => {
   for (const tier of PROFILE_TIERS) {
     expect(PROFILE_MODEL_BINDINGS[tier.id]?.chat).toBe("qwen3-8b-instruct-q4-k-m");
-    expect(resolveLadder("chat", tier.id, 100 * 1024 ** 3)[0]?.resolved?.model).toBe("qwen3-8b-instruct-q4-k-m");
+    expect(resolveLadder("chat", tier.id, 100 * 1024 ** 3)[0]?.resolved?.model).toBe(tier.id === "p128" ? "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m" : "qwen3-8b-instruct-q4-k-m");
   }
 });
 

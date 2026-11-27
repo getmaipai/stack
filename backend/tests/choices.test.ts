@@ -60,7 +60,8 @@ test("the read answers every category with levels, candidates and recommended pi
   expect(view.categories.map((item) => item.id)).toEqual(["chat", "coding", "pictures", "video", "music", "voice", "stt", "embeddings", "vision", "wakeword", "stems"]);
   const chat = view.categories.find((item) => item.id === "chat")!;
   expect(chat.tiers.map((row) => row.tier)).toEqual(["reduced", "standard", "boost", "max"]);
-  expect(chat.tiers.find((row) => row.tier === "standard")).toMatchObject({ chosen: "qwen3-8b-instruct-q4-k-m", chosen_by: "recommended" });
+  // The owner's 128 GB lineup (2026-11-25): the 35B is the recommended Standard chat model there.
+  expect(chat.tiers.find((row) => row.tier === "standard")).toMatchObject({ chosen: "qwen3-6-35b-a3b-huihui-abliterated-q4-k-m", chosen_by: "recommended" });
   expect(chat.tiers.find((row) => row.tier === "standard")!.recommended.why).toContain("fits this computer");
   expect(view.categories.find((item) => item.id === "voice")!.tiers.map((row) => row.tier)).toEqual(["reduced", "standard"]);
   expect(view.categories.find((item) => item.id === "stt")!.tiers.map((row) => row.tier)).toEqual(["standard"]);

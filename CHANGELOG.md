@@ -18,6 +18,7 @@ is published yet. This file tracks what either picks up.
 ### Changed
 
 - The 128 GB recommended preset is a new lineup (2026-11-27): chat is Qwen3.6 35B Huihui with its draft, the voice is VoxCPM2 (the default engine on that tier), pictures are FLUX 3 Image Klein. Qwen3 8B, Pocket TTS, Chatterbox Turbo (with its parts and de-reverb) and FLUX.2 Klein 4B are left out of that preset only: they stay in the catalog and Custom, and nothing installed is removed. Other tiers are unchanged.
+- The recommended model per level on a 128 GB computer (`GET /stack/v1/choices`) now follows that lineup too: chat Standard is Qwen3.6 35B Huihui, pictures are FLUX 3 Image Klein at Standard, Boost and Max, the voice is VoxCPM2 at Standard and its 4-bit version at Reduced. Qwen3 8B, the uncensored 27B, Chatterbox Turbo and Nano, Pocket TTS, FLUX.2 Klein 4B, Qwen-Image, the H3 picture and video models stay picks in Custom. The 64, 32 and 16 GB recommendations are unchanged.
 
 - LTX-2.5 is off the vetting list (owner, 2026-11-22: it was vetted): it is the recommended Standard and Boost video model on a 128 GB computer, ahead of MiniMax H3, and LTX-2.5 Max stays the Max pick.
 - The recommended Standard picture model on a 64 GB computer or bigger is FLUX 3 (the 2026-11-17 owner decision); MiniMax H3-Image stays the Boost pick and is one choice away.

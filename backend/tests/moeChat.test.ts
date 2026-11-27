@@ -72,7 +72,9 @@ test("install order: the optional part list is the target then its draft, and no
   // Only the 128 GB lineup plans it (as its chat model, with the draft).
   expect(buildInstallPlan(hw(128)).models.map((model) => model.id)).toEqual(expect.arrayContaining([MOE.id, DRAFT.id]));
   expect(Object.values(PROFILE_MODEL_BINDINGS).flatMap((bound) => Object.values(bound ?? {}))).not.toContain(MOE.id);
-  for (const profile of ["p64", "p128"] as const) expect(resolveLadder("chat", profile, 100 * GB).map((row) => row.resolved?.model)).not.toContain(MOE.id);
+  expect(resolveLadder("chat", "p64", 100 * GB).map((row) => row.resolved?.model)).not.toContain(MOE.id);
+  // The owner's 128 GB lineup (2026-11-25): there it is the recommended Standard chat model.
+  expect(resolveLadder("chat", "p128", 100 * GB)[0]?.resolved?.model).toBe(MOE.id);
   // The disk plan offers it as an optional row on p64 and p128 only.
   const row = (id: string) => buildDiskPlan(PROFILE_TIERS.find((tier) => tier.id === id)!).rows.find((item) => item.id === "chat-splash-qwen36-abliterated");
   expect(row("p64")).toMatchObject({ need: "optional", model_ids: [MOE.id, DRAFT.id] });
@@ -81,12 +83,14 @@ test("install order: the optional part list is the target then its draft, and no
   expect(row("p128")).toBeUndefined();
 });
 
-test("pickable at Standard on p64 and p128, never the recommendation: the resolved recommendation is what it was before, for every profile, tier and room", () => {
+test("pickable at Standard on p64 and p128; the recommendation on p128 only (owner lineup 2026-11-25): elsewhere the resolved recommendation is what it was before, for every profile, tier and room", () => {
   const chat = TIER_CANDIDATES.filter((item) => item.category === "chat");
-  // It sits after every other Standard candidate, so the first fit is never it.
-  const standardOrder = chat.filter((item) => item.tiers.includes("standard")).map((item) => item.id);
-  expect(standardOrder.at(-1)).toBe(MOE.id);
+  // On p64 it sits after every other Standard candidate, so the first fit is never it; on p128 it is the first Standard candidate.
+  const standardOrder = (profile: ProfileId) => chat.filter((item) => item.tiers.includes("standard") && item.profiles.includes(profile)).map((item) => item.id);
+  expect(standardOrder("p64").at(-1)).toBe(MOE.id);
+  expect(standardOrder("p128")[0]).toBe(MOE.id);
   const profiles: ProfileId[] = ["p16", "p32", "p64", "p128"];
+  const MOE_PEAK = chat.find((item) => item.id === MOE.id)!.peaks[0]!.peakBytes;
   for (const profile of profiles) for (const tier of ["standard", "boost", "max"] as const) for (let gb = 1; gb <= 200; gb += 1) {
     const room = gb * GB;
     // The reference: the same first-fit rule over the candidate list with the 35B left out.
@@ -94,14 +98,16 @@ test("pickable at Standard on p64 and p128, never the recommendation: the resolv
     const expected = chat.filter((item) => item.id !== MOE.id && item.profiles.includes(profile) && item.tiers.includes(tier))
       .flatMap((item) => item.peaks.filter((peak) => peak.peakBytes <= cap && (tier !== "boost" || peak.options.thinking === true)).slice(0, 1).map(() => item.id))[0] ?? null;
     const got = resolveTier({ category: "chat", tier, profile, roomBytes: room });
-    expect(got?.model ?? null).toBe(expected);
-    expect(got?.model).not.toBe(MOE.id);
+    const moeFirst = profile === "p128" && tier === "standard" && MOE_PEAK <= cap;
+    expect(got?.model ?? null).toBe(moeFirst ? MOE.id : expected);
+    if (!moeFirst) expect(got?.model).not.toBe(MOE.id);
   }
   // Pickable in the chooser: Standard on p64 and p128 only, when the room holds its 23 GB.
   for (const profile of ["p64", "p128"] as const) {
     const standard = tierCandidateLists("chat", profile, 60 * GB).find((level) => level.tier === "standard")!;
     expect(standard.candidates.find((item) => item.id === MOE.id)).toMatchObject({ fits: true, refusal: null });
-    expect(standard.recommended).not.toBe(MOE.id);
+    if (profile === "p64") expect(standard.recommended).not.toBe(MOE.id);
+    else expect(standard.recommended).toBe(MOE.id);
     expect(customPickRefusal({ category: "chat", tier: "standard", profile, roomBytes: 60 * GB, model: MOE.id })).toBeNull();
   }
   expect(tierCandidateLists("chat", "p32", 60 * GB)[0]!.candidates.map((item) => item.id)).not.toContain(MOE.id);

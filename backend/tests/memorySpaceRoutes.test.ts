@@ -88,10 +88,11 @@ test("capabilities gives one row per category and level from the catalog and the
   expect(body.total_bytes).toBe(128 * GB);
   expect(body.rows).toHaveLength(15);
   const row = (category: string, tier: string) => body.rows.find((item) => item.category === category && item.tier === tier)!;
-  expect(row("image", "max")).toMatchObject({ model: "qwen-image-2512-q8", needs_bytes: 37_400_000_000 });
+  // The owner's 128 GB lineup (2026-11-25): FLUX 3 Klein at every picture level, VoxCPM2 the Standard voice.
+  expect(row("image", "max")).toMatchObject({ model: "flux3-image-klein", needs_bytes: 37_400_000_000 });
   expect(row("video", "max")).toMatchObject({ model: "ltx-2-5-bf16-distilled-mlx-max", needs_bytes: 61_500_000_000, fits_ever: true });
   expect(row("music", "max")).toMatchObject({ model: null, fits_ever: false });
-  expect(row("voice", "standard")).toMatchObject({ model: "chatterbox-turbo-fp16" });
+  expect(row("voice", "standard")).toMatchObject({ model: "voxcpm2-bf16" });
   for (const item of body.rows) { expect(item.cap_bytes).toBeGreaterThan(0); if (item.model) expect(item.fits_ever).toBe(true); }
 });
 

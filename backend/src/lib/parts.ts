@@ -19,6 +19,8 @@ const stackVersion = packageJson.version;
 // A runner is required when it is a part of its own: an engine row, or a tool part that doubles as the runner (image-tools, liveportrait, score-gen).
 const ENGINE_PART_IDS = new Set(PART_DEFS.filter((def) => def.kind !== "model").map((def) => def.id));
 
+const uniqueEntries = <T,>(items: T[]): T[] => { const seen = new Set<string>(); return items.filter((item) => { const key = JSON.stringify(item); if (seen.has(key)) return false; seen.add(key); return true; }); };
+
 export function stackParts(): StackPart[] {
   const units = componentUnits();
   return PART_DEFS.filter((def) => def.kind !== "engine").flatMap((def) => {
@@ -36,8 +38,9 @@ export function stackParts(): StackPart[] {
       }
       return [{ url: download.url, sha256: download.sha256, bytes: download.approx_bytes, ...(download.hub_file ? { path: download.hub_file } : {}) }];
     });
-    const builds = candidates.flatMap((candidate) => candidate.tiers.filter((tier) => tier !== "reduced").flatMap((tier) => candidate.peaks.map((peak) => ({ tier: tier as "standard" | "boost" | "max", options: peak.options }))));
-    const peaks = candidates.flatMap((candidate) => candidate.peaks.map((peak) => ({ options: peak.options, bytes: peak.peakBytes, status: peak.status })));
+    // A model can have one row per profile group (a p128 row placed after its rivals, 2026-11-25); the same build or peak is listed once.
+    const builds = uniqueEntries(candidates.flatMap((candidate) => candidate.tiers.filter((tier) => tier !== "reduced").flatMap((tier) => candidate.peaks.map((peak) => ({ tier: tier as "standard" | "boost" | "max", options: peak.options })))));
+    const peaks = uniqueEntries(candidates.flatMap((candidate) => candidate.peaks.map((peak) => ({ options: peak.options, bytes: peak.peakBytes, status: peak.status }))));
     const noticeId = unit.licenceNotice?.id ?? null;
     const projector = primary.imageInput ? STACK_MODELS.find((pin) => pin.id === primary.imageInput!.projector) : undefined;
     const chat = primary.role === PRIMARY_ROLE && (primary.sampling || projector) ? {
