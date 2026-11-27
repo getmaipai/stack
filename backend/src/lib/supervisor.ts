@@ -1,3 +1,4 @@
+import { beginStallWatch, failStalled, findStalled, stallLimitMs, type StallWatchHandle } from "@/lib/stallWatch";
 import { AsyncLocalStorage } from "node:async_hooks";
 // The per-role supervisor: one process per role binding, three kinds
 // (spawned by the Stack, a managed sidecar, a read-only url the person
@@ -2265,6 +2266,39 @@ export function roleCanBeStartedByStack(requested: RoleId): boolean {
   return !runtime(role).process && !urlBindingFor(role) && SPAWNABLE_ROLES.includes(role);
 }
 
+// ---- the stall watch (STACK-STALL-WATCHDOG-01) -------------------------------
+
+const stalledOf = new WeakMap<RoleProcess, string>();
+let stallTuning: { limitMs: number; intervalMs: number } | null = null;
+let stallTimer: ReturnType<typeof setInterval> | null = null;
+const STALL_CHECK_MS = 5_000;
+
+/** A test's own limit and check interval; null puts the declared per-role limits back. */
+export function __setStallTuningForTests(tuning: { limitMs: number; intervalMs: number } | null): void {
+  stallTuning = tuning;
+  if (stallTimer) { clearInterval(stallTimer); stallTimer = null; }
+}
+
+function ensureStallTimer(): void {
+  if (stallTimer) return;
+  stallTimer = setInterval(() => { void stallTick(); }, stallTuning?.intervalMs ?? STALL_CHECK_MS);
+  stallTimer.unref?.();
+}
+
+async function stallTick(): Promise<void> {
+  const stalled = findStalled(Date.now(), (key) => stallTuning?.limitMs ?? stallLimitMs((key as RoleProcess).role));
+  for (const key of stalled) {
+    const processRecord = key as RoleProcess;
+    if (processRecord.retired || stalledOf.has(processRecord)) continue;
+    const seconds = Math.round((stallTuning?.limitMs ?? stallLimitMs(processRecord.role) ?? 0) / 1000);
+    const message = `The ${ROLES[processRecord.role].label} engine stopped answering${seconds > 0 ? ` for ${seconds} seconds` : ""} and was restarted. Try the request again.`;
+    stalledOf.set(processRecord, message);
+    logger.appendLine(JSON.stringify({ event: "engine.stalled", role: processRecord.role, message }));
+    failStalled(processRecord, new EngineUnavailableError(message));
+    void restartRole(processRecord.role, "engine-stalled").catch((error: unknown) => logger.appendLine(JSON.stringify({ event: "engine.stall-restart-failed", role: processRecord.role, message: error instanceof Error ? error.message : String(error) })));
+  }
+}
+
 /** Every stop of an engine process is logged with its reason, so a gap in
  * an engine's uptime always has a line saying why (issue 253). */
 const spawnedAtOf = new WeakMap<RoleProcess, number>();
@@ -2273,6 +2307,7 @@ const exitOf = new WeakMap<RoleProcess, { exitCode: number | null; signal: strin
 export type RetireCause =
   // Restarts
   | "governor-runaway"
+  | "engine-stalled"
   | "video-window-shrink"
   | "video-window-restore"
   | "memory-watchdog"
@@ -2569,10 +2604,11 @@ export async function speakRole(requested: RoleId, form: FormData, signal?: Abor
     const response = await processRecord.client.raw(SPEECH_PATH, { method: "POST", body: form }, signal);
     if (response.status >= 500 && !await processRecord.client.health()) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
     const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-    if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: headers(), contentType }; }
+    if (!response.body) { watch?.end(); finishStream(role, processRecord); return { status: response.status, body: null, headers: headers(), contentType }; }
     if (response.status >= 200 && response.status < 300) current.lastRealRequestAt = Date.now();
-    return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: headers(), contentType };
+    return { status: response.status, body: trackedStream(role, processRecord, response.body, watch), headers: headers(), contentType };
   } catch (error) {
+    watch?.end();
     finishStream(role, processRecord);
     if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) return { status: 499, body: null, headers: headers() };
     if (await processRecord.client.health()) return { status: error instanceof EngineUnavailableError ? 504 : 503, body: null, headers: headers() };
@@ -2632,11 +2668,14 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
   const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
   const processRecord = await acquireRequestProcess(requested, requestedModel);
   const current = runtime(role);
+  // STACK-STALL-WATCHDOG-01: a reply that arrives whole (an embedding, a re-rank) has no progress but its answer, so silence past the role's limit is a stall.
+  const watch = (path === "/v1/embeddings" || path === "/v1/rerank") && stallLimitMs(role) !== null ? beginStallWatch(processRecord) : undefined;
+  if (watch) ensureStallTimer();
   try {
     const completionMs = typeof body.timeout_ms === "number" && body.timeout_ms > 0 ? body.timeout_ms : (timeoutOverrides.completionMs ?? DEFAULT_COMPLETION_TIMEOUT_MS);
   const dispatchBody = splashChatRequestBody(role, processRecord, samplingFor(role, requested, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...applyHomeModeCodingDefaults(requested, body), model: role } : applyHomeModeCodingDefaults(requested, body), false));
     const timedOut = () => new EngineUnavailableError(`Engine request timed out after ${Math.ceil(completionMs / 1000)}s.`);
-    const answered = processRecord.client.request(path, dispatchBody, signal);
+    const answered = watch ? Promise.race([processRecord.client.request(path, dispatchBody, signal), watch.stalled]) : processRecord.client.request(path, dispatchBody, signal);
     const result = await (role === HEAVY_ROLE ? withActiveTimeout(answered, completionMs, () => codingPausedMs(processRecord), timedOut) : withTimeout(answered, completionMs, timedOut));
     if (result.status >= 500 && (continueForHealth(processRecord), !await processRecord.client.health())) {
       throw new EngineUnavailableError(`Engine returned HTTP ${result.status} and is no longer healthy.`);
@@ -2644,6 +2683,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
     if (result.status >= 200 && result.status < 300) current.lastRealRequestAt = Date.now();
     return { ...result, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
   } catch (error) {
+    if (stalledOf.has(processRecord)) throw new EngineUnavailableError(stalledOf.get(processRecord)!);
     if (error instanceof DOMException && error.name === "AbortError") {
       return { status: 499, body: { error: "Request cancelled" }, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
     }
@@ -2659,6 +2699,7 @@ export async function requestRole(requested: RoleId, path: string, body: Record<
     void retire(processRecord, unavailable.reason, "request-failed");
     throw unavailable;
   } finally {
+    watch?.end();
     processRecord.activeRequests--;
     if (role === HEAVY_ROLE) { codingYieldEnd(processRecord); touchGovernor(role); }
     if (current.process === processRecord && processRecord.activeRequests === 0) current.status = { ...current.status, state: "ready" };
@@ -2676,16 +2717,17 @@ function finishStream(role: RoleId, processRecord: RoleProcess): void {
   }
 }
 
-function trackedStream(role: RoleId, processRecord: RoleProcess, upstream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+function trackedStream(role: RoleId, processRecord: RoleProcess, upstream: ReadableStream<Uint8Array>, watch?: StallWatchHandle): ReadableStream<Uint8Array> {
   const reader = upstream.getReader();
   let finished = false;
-  const finish = () => { if (finished) return; finished = true; finishStream(role, processRecord); };
+  const finish = () => { if (finished) return; finished = true; watch?.end(); finishStream(role, processRecord); };
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
-        const next = await reader.read();
-        if (next.done) { finish(); controller.close(); } else controller.enqueue(next.value);
-      } catch (error) { finish(); controller.error(error); }
+        // STACK-STALL-WATCHDOG-01: every chunk is progress; a stall rejects the wait with the plain message.
+        const next = await (watch ? Promise.race([reader.read(), watch.stalled]) : reader.read());
+        if (next.done) { finish(); controller.close(); } else { watch?.touch(); controller.enqueue(next.value); }
+      } catch (error) { finish(); void reader.cancel(error).catch(() => {}); controller.error(error); }
     },
     async cancel(reason) {
       try { await reader.cancel(reason); } finally { finish(); }
@@ -2699,15 +2741,20 @@ export async function streamRole(requested: RoleId, path: string, body: Record<s
   const requestedModel = typeof body.model === "string" && body.model !== requested ? body.model : undefined;
   const processRecord = await acquireRequestProcess(requested, requestedModel);
   const current = runtime(role);
+  let watch: StallWatchHandle | undefined;
   try {
     if (!processRecord.client.stream) throw new EngineUnavailableError("The engine does not support streaming.");
     const dispatchBody = splashChatRequestBody(role, processRecord, samplingFor(role, requested, path, processRecord.modelId, requestedModel && processRecord.kind !== "url" ? { ...applyHomeModeCodingDefaults(requested, body), model: role } : applyHomeModeCodingDefaults(requested, body), true));
-    const response = await processRecord.client.stream(path, { ...dispatchBody, stream: true }, signal);
+    watch = stallLimitMs(role) === null ? undefined : beginStallWatch(processRecord);
+    ensureStallTimer();
+    const opening = processRecord.client.stream(path, { ...dispatchBody, stream: true }, signal);
+    const response = await (watch ? Promise.race([opening, watch.stalled]) : opening);
     if (response.status >= 500 && (continueForHealth(processRecord), !await processRecord.client.health())) throw new EngineUnavailableError(`Engine returned HTTP ${response.status} and is no longer healthy.`);
     const contentType = response.headers.get("content-type") ?? undefined;
-    if (!response.body) { finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision), contentType }; }
-    return { status: response.status, body: trackedStream(role, processRecord, response.body), headers: identityHeaders(processRecord.identity, processRecord.modelRevision), contentType };
+    if (!response.body) { watch?.end(); finishStream(role, processRecord); return { status: response.status, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision), contentType }; }
+    return { status: response.status, body: trackedStream(role, processRecord, response.body, watch), headers: identityHeaders(processRecord.identity, processRecord.modelRevision), contentType };
   } catch (error) {
+    watch?.end();
     finishStream(role, processRecord);
     if ((error instanceof DOMException && error.name === "AbortError") || signal?.aborted) return { status: 499, body: null, headers: identityHeaders(processRecord.identity, processRecord.modelRevision) };
     continueForHealth(processRecord);
@@ -2733,6 +2780,7 @@ function stopSpawnedForTests(processRecord: RoleProcess | null): void {
 }
 
 export function resetSupervisorForTests(): void {
+  if (stallTimer) { clearInterval(stallTimer); stallTimer = null; }
   for (const current of runtimes.values()) {
     stopSpawnedForTests(current.process);
     void current.starting?.then(stopSpawnedForTests, () => {});

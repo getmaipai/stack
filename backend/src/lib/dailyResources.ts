@@ -18,7 +18,7 @@ export type DailyResources = {
 const restartCauses = new Set([
   "governor-runaway", "video-window-shrink", "video-window-restore", "memory-watchdog", "canary-request",
   "new-projector", "new-chat-engine", "repairs-restart-engine", "health-action", "model-load",
-  "engine-swap-postload", "engine-update-postload", "rollback-restart", "tts-gated-weights",
+  "engine-swap-postload", "engine-update-postload", "rollback-restart", "tts-gated-weights", "engine-stalled",
 ]);
 
 function dayKey(date: Date): string {
