@@ -222,7 +222,7 @@ export function buildDiskPlan(tier: ProfileTier, installedIds: Iterable<string> 
     if (pins.length) rows.push(modelRow({ id: entry.id, label: partLabel(entry.part), note: entry.note ?? partDef(entry.part)!.description, need: entry.need, engines: entry.engines }, pins));
   }
   const voice = plannedWhere((pin) => pin.role === "tts" && !chatterbox.has(pin.id));
-  // The voice row is Pocket TTS, or VoxCPM2 where the template's plan brings that voice instead (the 128 GB lineup).
+  // The voice row is the small voice, or the natural voice where the template's plan brings that voice instead (the 128 GB lineup).
   const voiceIsVoxcpm2 = voice.some((pin) => pin.id === "voxcpm2-bf16");
   const voicePart = voiceIsVoxcpm2 ? "voxcpm2-bf16" : "pocket-tts-english";
   if (voice.length) rows.push(modelRow({ id: "voice", label: partLabel(voicePart), note: partDef(voicePart)!.description, need: "required", engines: voiceIsVoxcpm2 ? ["engine:voice-voxcpm2", "engine:python"] : ["engine:voice", "engine:python"] }, voice));

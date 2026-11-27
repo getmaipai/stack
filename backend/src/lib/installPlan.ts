@@ -196,7 +196,7 @@ export function plannedPinsFor(tier: ProfileTier, target: { platform: string; ar
 }
 
 /** The 128 GB recommended preset is the owner's lineup (2026-11-27). Chat is the 35B Huihui model with its draft, the voice is
- * VoxCPM2, pictures are FLUX 3 Image Klein. The 8B chat model, Pocket, Chatterbox (with its parts and de-reverb) and the 4B picture model
+ * the natural voice, pictures are the version 3 Klein. The 8B chat model, the small voice, Chatterbox (with its parts and de-reverb) and the 4B picture model
  * are LEFT OUT of the preset only: they stay in the catalog, Custom still lists them, nothing installed is removed, and an admin can
  * now remove them because they are no longer part of the plan. */
 const LINEUP_TIER = "p128";
