@@ -23187,6 +23187,714 @@
         }
       }
     },
+    "/stack/v1/segments/{sha256}": {
+      "get": {
+        "tags": [
+          "Media segments"
+        ],
+        "summary": "Get the segment record for a media file",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$/i"
+            },
+            "required": true,
+            "name": "sha256",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The cached segment record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "record": {
+                      "type": "object",
+                      "properties": {
+                        "fileSha256": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$/i"
+                        },
+                        "durationSec": {
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMinimum": true
+                        },
+                        "segments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "ad",
+                                  "sponsor",
+                                  "selfpromo",
+                                  "intro",
+                                  "outro",
+                                  "recap",
+                                  "filler"
+                                ]
+                              },
+                              "startSec": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "endSec": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "fingerprint",
+                                  "text-pattern",
+                                  "llm",
+                                  "alignment",
+                                  "person",
+                                  "chapter"
+                                ]
+                              },
+                              "sources": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "fingerprint",
+                                    "text-pattern",
+                                    "llm",
+                                    "alignment",
+                                    "person",
+                                    "chapter"
+                                  ]
+                                }
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "auto",
+                                  "held",
+                                  "confirmed",
+                                  "rejected"
+                                ]
+                              },
+                              "label": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "startSec",
+                              "endSec",
+                              "confidence",
+                              "source",
+                              "status"
+                            ]
+                          }
+                        },
+                        "producedBy": {
+                          "type": "object",
+                          "properties": {
+                            "transcriptRevision": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "modelId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pipelineVersion": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "transcriptRevision",
+                            "modelId",
+                            "pipelineVersion",
+                            "createdAt"
+                          ]
+                        },
+                        "cleanCopy": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "unknown"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "fileSha256",
+                        "durationSec",
+                        "segments",
+                        "producedBy"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "record"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Media segments"
+        ],
+        "summary": "Delete a segment record",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$/i"
+            },
+            "required": true,
+            "name": "sha256",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "deleted"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/segments/{sha256}/skip": {
+      "get": {
+        "tags": [
+          "Media segments"
+        ],
+        "summary": "Get skip ranges",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$/i"
+            },
+            "required": true,
+            "name": "sha256",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "kinds",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 1
+            },
+            "required": false,
+            "name": "minConfidence",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ranges the player can skip.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "fileSha256": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$/i"
+                    },
+                    "ranges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "startSec": {
+                            "type": "number"
+                          },
+                          "endSec": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "startSec",
+                          "endSec"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "fileSha256",
+                    "ranges"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/segments/{sha256}/segments/{id}": {
+      "put": {
+        "tags": [
+          "Media segments"
+        ],
+        "summary": "Record a segment correction",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$/i"
+            },
+            "required": true,
+            "name": "sha256",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "confirmed",
+                      "rejected"
+                    ]
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "record": {
+                      "type": "object",
+                      "properties": {
+                        "fileSha256": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$/i"
+                        },
+                        "durationSec": {
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMinimum": true
+                        },
+                        "segments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "ad",
+                                  "sponsor",
+                                  "selfpromo",
+                                  "intro",
+                                  "outro",
+                                  "recap",
+                                  "filler"
+                                ]
+                              },
+                              "startSec": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "endSec": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "fingerprint",
+                                  "text-pattern",
+                                  "llm",
+                                  "alignment",
+                                  "person",
+                                  "chapter"
+                                ]
+                              },
+                              "sources": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "fingerprint",
+                                    "text-pattern",
+                                    "llm",
+                                    "alignment",
+                                    "person",
+                                    "chapter"
+                                  ]
+                                }
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "auto",
+                                  "held",
+                                  "confirmed",
+                                  "rejected"
+                                ]
+                              },
+                              "label": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "startSec",
+                              "endSec",
+                              "confidence",
+                              "source",
+                              "status"
+                            ]
+                          }
+                        },
+                        "producedBy": {
+                          "type": "object",
+                          "properties": {
+                            "transcriptRevision": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "modelId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "pipelineVersion": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "transcriptRevision",
+                            "modelId",
+                            "pipelineVersion",
+                            "createdAt"
+                          ]
+                        },
+                        "cleanCopy": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "unknown"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "fileSha256",
+                        "durationSec",
+                        "segments",
+                        "producedBy"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "record"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Record or segment not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/segments/{sha256}/render": {
+      "post": {
+        "tags": [
+          "Media segments"
+        ],
+        "summary": "Render a copy with selected segments removed",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$/i"
+            },
+            "required": true,
+            "name": "sha256",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kinds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "ad",
+                        "sponsor",
+                        "selfpromo",
+                        "intro",
+                        "outro",
+                        "recap",
+                        "filler"
+                      ]
+                    },
+                    "default": [
+                      "ad",
+                      "sponsor"
+                    ]
+                  },
+                  "minConfidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "default": 0.8
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rendered cut copy. Download it from the returned route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "downloadPath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "downloadPath"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No record or source file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Rendering failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stack/v1/segments/{sha256}/download": {
+      "get": {
+        "tags": [
+          "Media segments"
+        ],
+        "summary": "Download a rendered media copy",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$/i"
+            },
+            "required": true,
+            "name": "sha256",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "file",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rendered media bytes."
+          },
+          "404": {
+            "description": "Rendered file not found."
+          }
+        }
+      }
+    },
     "/stack/v1/health": {
       "get": {
         "tags": [

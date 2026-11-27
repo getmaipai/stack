@@ -160,6 +160,15 @@ export const PRIVACY_ROWS: PrivacyRow[] = [
     hosts: [],
   },
   {
+    id: "media-segments-fetch",
+    what: "Fetching an audio file for media segment detection",
+    when: "Only when Home submits a media.segments job with a URL",
+    carries: "The URL and User-Agent: MaiPai-Stack/1 by default (or the caller's explicit per-job override); audio stays on this computer",
+    receiver: "The host named by the URL, straight from this computer",
+    setting: null,
+    hosts: [],
+  },
+  {
     id: "media-tools",
     what: "Downloading the pinned ffmpeg and ffprobe builds the media jobs run (probe, transcode, preview)",
     when: "Only the first time a media job needs them, or when the Stack's release pins a new build; the web fetch tool itself arrives through the Python environment row above",

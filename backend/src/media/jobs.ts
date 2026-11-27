@@ -29,6 +29,7 @@ import { roughCutPrecheck, runRoughCut } from "./roughCut";
 import { COMPANION_MAKER_DEADLINES_MS, COMPANION_MAKER_KINDS, companionMakerPrecheck, companionMakerRunner, type CompanionMakerKind } from "./companionMaker";
 import { RECORDED_SPEECH_PEAK_BYTES } from "@/recordedSpeech/recordedSpeech";
 import { seriesFromFrames } from "./clipCheck";
+import { registerSegmentsJob } from "@/segments/service/service";
 
 export const MEDIA_KINDS = ["media.probe", "media.check", "media.fetch", "media.transcode", "media.preview", "media.companion_clip", "media.edit", "media.tts", "media.mix", "media.verify", "media.rough_cut", "media.setup", ...COMPANION_MAKER_KINDS] as const;
 export type MediaKind = typeof MEDIA_KINDS[number];
@@ -988,6 +989,7 @@ async function runSetup(_job: Job, signal: AbortSignal, progress: JobProgress): 
 }
 
 export function registerMediaJobs(): void {
+  registerSegmentsJob();
   registerJobRunner("media.probe", runProbe, { lane: laneFor("media.probe") });
   registerJobRunner("media.check", runCheck, { lane: laneFor("media.check") });
   registerJobRunner("media.fetch", runFetch, { lane: laneFor("media.fetch") });

@@ -963,3 +963,13 @@ Plan: Home's [localai-port-plan-2026-11-27.md](https://github.com/getmaipai/home
 - [ ] **STACK-METRICS-01 (S, optional): a `/metrics` endpoint.** Objective: expose the resource history, tokens per second and queue depth in Prometheus format on the admin listener only. Complements `ADMIN-02` (GPU and tokens per second are still null). Reuse check: the existing history ring. Exit: a named test. Status: built, not wired to any scraper.
 
 - [ ] **STACK-VERIFY-01 (S): confirm four unknowns from the LocalAI review.** Objective: check and write down (a) whether a Home ship kills an in-flight turn, (b) what boot repair exists after a crashed swap (feeds `STACK-SWAP-SWEEP-01`), (c) the status code for a context overflow (feeds `STACK-CTX-400-01`), and (d) whether outbound fetches check every resolved address at connect time (the DNS rebinding case). Acceptance: one line each in this row, with the file and line. Exit: the notes. Findings 2026-11-27 (partial; the row stays open for a re-read of each cite): (a) a turn in flight is probably lost on a Home ship: the reply buffer is in memory (home `backend/src/routes/turn.ts` RESUME_TTL_MS). (b) no boot-time swap recovery exists: `daemon.ts:80` only renames legacy tag dirs and `updates/engines.ts:84-88` raises an alert (feeds `STACK-SWAP-SWEEP-01`). (c) context overflow: llama-server answered 400 already, other engines may not; fixed by `STACK-CTX-400-01`. (d) closed: commons `ssrfGuard.ts:230-234` pins the connection to the validated address, so DNS rebinding is covered. Status: not started.
+# STACK-SEGMENTS-01: media segment detection (slice 4: wiring)
+
+Built: `media.segments` job admission on the media lane, bounded URL fetch and local
+path input, SHA-256 media storage and pipeline-version cache, ffprobe duration probe,
+existing STT long-file job, detector adapter, SQLite record, record/skip/correction/
+delete/render routes, privacy declaration, and API integration notes.
+
+Not built/known gaps: test and gate validation still pending; clean-reference decoding
+and ffmpeg render need integration fixtures; fingerprint matching, correction learning,
+and transcription/model provenance beyond current-role identifiers are not implemented.

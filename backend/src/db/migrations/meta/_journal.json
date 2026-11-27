@@ -36,6 +36,13 @@
       "when": 1795630900161,
       "tag": "0004_empty_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1795795200000,
+      "tag": "0005_media_segments",
+      "breakpoints": true
     }
   ]
 }

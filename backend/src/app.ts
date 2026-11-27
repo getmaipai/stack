@@ -98,6 +98,7 @@ import { fullViewAllowed, fullViewAsked } from "@/lib/adultView";
 import { speechRoutes, websocket } from "@/routes/speech";
 import { registerGenerators } from "@/generators";
 import { SESSION_PATH } from "@/speech/server";
+import { segmentsRoutes } from "@/routes/segments";
 
 /** The websocket handler Bun.serve needs beside `app.fetch` for the
  * speech session; index.ts passes it through. */
@@ -185,6 +186,7 @@ app.route("/stack/v1/models", modelsRoutes);
 app.route("/stack/v1/jobs/catalog", jobsCatalogRoutes);
 app.route("/stack/v1/jobs/make", jobsMakeRoutes);
 app.route("/stack/v1/jobs", jobsRoutes);
+app.route("/stack/v1/segments", segmentsRoutes);
 app.route("/stack/v1/health", healthRoutes);
 app.route("/stack/v1/status", statusRoutes);
 app.route("/stack/v1/admin-access", adminAccessRoutes);

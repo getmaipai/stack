@@ -81,3 +81,9 @@ export const health = sqliteTable("health", {
   resolvedAt: text("resolved_at"),
   ignoredAt: text("ignored_at"),
 });
+
+export const mediaSegments = sqliteTable("media_segments", {
+  fileSha256: text("file_sha256").primaryKey(), pipelineVersion: text("pipeline_version").notNull(),
+  recordJson: text("record_json").notNull(), sourcePath: text("source_path").notNull(),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+});
