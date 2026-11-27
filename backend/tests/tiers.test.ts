@@ -68,9 +68,10 @@ describe("tier resolver", () => {
     expect(resolveTier({ category: "voice", tier: "reduced", profile: "p64", roomBytes: 24 * GB })?.model).toBe("chatterbox-nano");
     expect(resolveTier({ category: "voice", tier: "reduced", profile: "p128", roomBytes: 24 * GB })?.model).toBe("voxcpm2-4bit");
     for (const profile of ["p16", "p32"] as const) expect(resolveTier({ category: "voice", tier: "reduced", profile, roomBytes: 12 * GB })?.model).toBe("pocket-tts-english");
-    expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 72 * GB })).toMatchObject({ model: "flux3-image-klein", peakBytes: 37_400_000_000 });
+    expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 72 * GB })).toMatchObject({ model: "flux3-image-klein", peakBytes: 33_900_000_000, verified: true });
     expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 72 * GB, slot: { model: "qwen-image-2512-q8" } })).toMatchObject({ model: "qwen-image-2512-q8", verified: true, peakBytes: 37_400_000_000 });
-    expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 36 * GB })).toBeNull();
+    // Neither FLUX 3 Klein (33.9 GB measured) nor Qwen-Image (37.4 GB) fits a 33 GB Max room.
+    expect(resolveTier({ category: "pictures", tier: "max", profile: "p128", roomBytes: 33 * GB })).toBeNull();
     expect(resolveLadder("stems", "p16", 8 * GB).map((row) => row.resolved?.model ?? null)).toEqual(["htdemucs", null, null]);
     expect(resolveTier({ category: "music", tier: "max", profile: "p128", roomBytes: 72 * GB })).toBeNull();
     expect(TIER_CANDIDATES.some((candidate) => /draft|dflash|mtp/i.test(candidate.id))).toBe(false);

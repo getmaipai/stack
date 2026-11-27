@@ -82,20 +82,20 @@ test("the full 128 GB table is the owner's lineup at every category and level, w
   expect(chosenTable(read.categories)).toEqual(LINEUP);
 });
 
-test("with the hub's resident set loaded (the 35B's Splash budget, judge, embeddings, speech in and out), video Standard is LTX-2.5 at its Standard size", async () => {
+test("with the hub's resident set loaded (the 35B's Splash budget, judge, embeddings, speech in and out), every level is still the lineup", async () => {
   // The ledger a 128 GB hub showed on 2026-11-27 (GET /stack/v1/hardware/budget): chat 39.7 GB, judge 5.9, voice 7.5, speech-to-text 2.0, embeddings 0.2.
   await hub([["chat", "chat", 39_728_447_488], ["judge", "judge", 5_882_101_760], ["tts", "tts", 7_530_321_248], ["stt", "stt", 1_958_936_576], ["embed", "embed", 204_112_880]]);
   const room = tierRoomBytes();
   const read = await view(128);
-  const video = read.categories.find((item) => item.id === "video")!.tiers.find((level) => level.tier === "standard")!;
-  expect(video.options.find((option) => option.model === "ltx-2-5-q8-distilled-mlx")?.fits).toBe(true);
-  // FLUX 3 Klein's catalogued peak (37.4 GB, not yet measured with mflux) needs a 62.3 GB room for Standard (0.6 of the room).
-  // Below that the H3 picture model is the Standard fallback; everything else is the lineup either way.
-  const flux = TIER_CANDIDATES.find((row) => row.id === "flux3-image-klein" && row.profiles.includes("p128"))!.peaks[0]!.peakBytes;
-  const pictureStandard = flux <= 0.6 * room ? "flux3-image-klein" : "minimax-h3-image";
-  const expected = { ...LINEUP, pictures: { ...LINEUP.pictures, standard: pictureStandard } };
-  expect(table(read.categories, LINEUP_CATEGORIES)).toEqual(expected);
-  expect(chosenTable(read.categories)).toEqual(expected);
+  const standard = (category: string) => read.categories.find((item) => item.id === category)!.tiers.find((level) => level.tier === "standard")!;
+  expect(standard("video").options.find((option) => option.model === "ltx-2-5-q8-distilled-mlx")?.fits).toBe(true);
+  // FLUX 3 Klein's measured peak (FLUX3-PEAK-01, 33.9 GB) fits Standard's 0.6 share of this room (about 60.7 GB).
+  const flux = TIER_CANDIDATES.find((row) => row.id === "flux3-image-klein" && row.profiles.includes("p128"))!.peaks[0]!;
+  expect(flux.status).toBe("measured");
+  expect(flux.peakBytes).toBeLessThanOrEqual(0.6 * room);
+  expect(standard("pictures").options.find((option) => option.model === "flux3-image-klein")?.fits).toBe(true);
+  expect(table(read.categories, LINEUP_CATEGORIES)).toEqual(LINEUP);
+  expect(chosenTable(read.categories)).toEqual(LINEUP);
 });
 
 test("the 128 GB planner counts the 35B as the resident chat model; smaller computers keep the 8B", () => {

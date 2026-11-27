@@ -39,8 +39,8 @@
         {
           "shape": "square",
           "level": "standard",
-          "bytes": 37400000000,
-          "status": "unverified"
+          "bytes": 33900000000,
+          "status": "measured"
         }
       ]
     },

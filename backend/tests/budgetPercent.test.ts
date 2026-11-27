@@ -38,8 +38,14 @@ test("half of 128 GB resolves and plans like 64 GB", () => {
   setBudgetPercent(50); const pa = proposeProfile(large)!;
   setBudgetPercent(100); const pb = proposeProfile(small)!;
   expect(pa.id).toBe("p64");
+  // The same candidates at every level; with the same room they fit the same way. The 50 percent room of the larger computer is
+  // about 4 GB larger (60.1 against 55.8 GB here), so a model right at the edge can fit there and not on the 64 GB one: FLUX 3
+  // Klein's measured 33.9 GB (FLUX3-PEAK-01) is under 0.6 of 60.1 GB and over 0.6 of 55.8 GB.
+  expect(roomA).toBeGreaterThan(roomB);
+  const ids = (results: ReturnType<typeof candidateResults>) => results.map((list) => ({ tier: list.tier, ids: list.candidates.map(({ id }) => id) }));
   for (const category of ["chat", "pictures", "video", "music"] as const) {
-  expect(candidateResults(category, pa.id, roomA, 0, "p64")).toEqual(candidateResults(category, pb.id, roomB, 0, "p64"));
+    expect(ids(candidateResults(category, pa.id, roomA, 0, "p64"))).toEqual(ids(candidateResults(category, pb.id, roomB, 0, "p64")));
+    expect(candidateResults(category, pa.id, roomB, 0, "p64")).toEqual(candidateResults(category, pb.id, roomB, 0, "p64"));
   }
 });
 
