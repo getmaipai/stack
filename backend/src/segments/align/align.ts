@@ -7,6 +7,7 @@
 
 import { BANDS, HOP_SEC, type Features } from "./features";
 import { fft, splitPair } from "./fft";
+import { mergeInsertions } from "./merge";
 
 export interface AlignOptions {
   blockFrames?: number;      // default 120 (6 s)
@@ -23,7 +24,7 @@ export interface AlignOptions {
 }
 export interface Inserted { startSec: number; endSec: number; confidence: number }
 export interface Level { deltaSec: number; fromSec: number; toSec: number }
-export interface AlignResult { inserted: Inserted[]; levels: Level[]; candidateDeltasSec: number[] }
+export interface AlignResult { inserted: Inserted[]; fragments?: Inserted[]; levels: Level[]; candidateDeltasSec: number[] }
 
 interface BlockMatch { start: number; offset: number; score: number }
 
@@ -194,5 +195,7 @@ export function alignClean(ref: Features, st: Features, opts: AlignOptions = {})
     }
     s = i;
   }
-  return { inserted, levels, candidateDeltasSec: deltas.map((d) => d * HOP_SEC) };
+  // Whole breaks from the delta jumps between solid runs; the raw NO MATCH runs stay as `fragments`.
+  const merged = mergeInsertions(levels, ref.n * HOP_SEC, st.n * HOP_SEC);
+  return { inserted: merged.length > 0 ? merged : inserted, fragments: inserted, levels, candidateDeltasSec: deltas.map((d) => d * HOP_SEC) };
 }
