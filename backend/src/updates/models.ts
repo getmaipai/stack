@@ -9,12 +9,44 @@ import { modelsRootFor, isManagedModelPath } from "@/lib/disks";
 import { emit } from "@/lib/events";
 import { raise, resolve as resolveHealth } from "@/lib/health";
 import { beginUpdate } from "@/updates/engines";
+import { getProcess, loadedModelId, restartRole } from "@/lib/supervisor";
+import type { RoleId } from "@/roles";
 import { catalogModelForId } from "@/updates/catalog";
 import { existsSync, rmSync } from "node:fs";
 
 export const MODEL_UPDATE_JOB_KIND = "part.update";
 export const modelUpdateCode = (id: string) => `update-failed.${id}`;
 const previousKey = (id: string) => `parts.${id}.previous`;
+const journalKey = (id: string) => `updates.model.${id}.journal`;
+/** One line per update in flight, written before the first byte moves: what the model was (the whole record), where the new files go, and how far the update got. A crash leaves it; the next boot reads it (recoverModelUpdates). */
+interface UpdateJournal { phase: "staging" | "loading" | "committed"; revision: string; destination: string; snapshot: ModelRecord }
+const writeJournal = (id: string, journal: UpdateJournal): void => { const value = JSON.stringify(journal); db.insert(meta).values({ key: journalKey(id), value }).onConflictDoUpdate({ target: meta.key, set: { value } }).run(); };
+const clearJournal = (id: string): void => { db.delete(meta).where(eq(meta.key, journalKey(id))).run(); };
+export type ModelLoadCheck = (record: ModelRecord) => Promise<void>;
+let loadCheckOverride: ModelLoadCheck | undefined;
+let crashAt: UpdateJournal["phase"] | null = null;
+class SimulatedCrash extends Error {}
+export function __setModelLoadCheckForTests(check: ModelLoadCheck | null): void { loadCheckOverride = check ?? undefined; }
+/** Stops the update dead after the named phase is journaled, with no cleanup, as a killed process would. */
+export function __crashModelUpdateAfterForTests(phase: UpdateJournal["phase"] | null): void { crashAt = phase; }
+const crashPoint = (phase: UpdateJournal["phase"]): void => { if (crashAt === phase) { crashAt = null; throw new SimulatedCrash(`crash after ${phase}`); } };
+/** The roles that run this model right now, reloaded on the new file. A model no role has loaded is checked by its file alone (the install already verified the digest). */
+async function defaultLoadCheck(record: ModelRecord): Promise<void> {
+  if (!record.modelPath || !existsSync(record.modelPath)) throw new Error("The new model file is missing.");
+  for (const role of record.roles as RoleId[]) {
+    if (loadedModelId(role) !== record.id) continue;
+    await restartRole(role, "engine-update-postload");
+    const proc = await getProcess(role, record.id);
+    if (proc.modelId !== record.id) throw new Error("The new model did not load.");
+  }
+}
+/** Puts the previous model back on the roles that were running it. Best effort: the record is already restored. */
+async function reloadOld(record: ModelRecord): Promise<void> {
+  for (const role of record.roles as RoleId[]) {
+    if (loadedModelId(role) === null) continue;
+    try { await restartRole(role, "rollback-restart"); await getProcess(role, record.id); } catch { /* The role's own self-heal and health item cover a failed reload. */ }
+  }
+}
 let downloadOverride: DownloadModelOptions["download"] | undefined;
 const inFlight = new Map<string, string>();
 const settled = new Set<Promise<void>>();
@@ -45,15 +77,24 @@ async function apply(id: string, download?: DownloadModelOptions["download"], jo
   // beginUpdate also holds the crash restarter, as an engine swap does.
   const endUpdate = beginUpdate();
   try {
-    await installCatalogModel(model, { destination, download: download ?? downloadOverride, onProgress: (progress) => { if (jobId) updateJob(jobId, { completedBytes: progress.itemCompletedBytes ?? progress.completedBytes }); } });
+    writeJournal(id, { phase: "staging", revision, destination, snapshot }); crashPoint("staging");
+    const installed = await installCatalogModel(model, { destination, download: download ?? downloadOverride, onProgress: (progress) => { if (jobId) updateJob(jobId, { completedBytes: progress.itemCompletedBytes ?? progress.completedBytes }); } });
+    // The old files stay until the new model has loaded: unload the old, load the new, and any failure puts the old back.
+    writeJournal(id, { phase: "loading", revision, destination, snapshot }); crashPoint("loading");
+    await (loadCheckOverride ?? defaultLoadCheck)(installed);
+    writeJournal(id, { phase: "committed", revision, destination, snapshot }); crashPoint("committed");
     savePrevious(snapshot);
+    clearJournal(id);
     resolveHealth(modelUpdateCode(id));
     emit({ id: "update.applied", data: { kind: "model", name: id, tag: revision } });
     return { applied: true, revision, previous: snapshot.revision };
   } catch (error) {
+    if (error instanceof SimulatedCrash) throw error;
     const reason = error instanceof Error ? error.message : String(error);
     upsertModel(snapshot);
     rmSync(destination, { recursive: true, force: true });
+    clearJournal(id);
+    await reloadOld(snapshot);
     raise({ code: modelUpdateCode(id), severity: "warning", title: `${def.label} could not be updated`, text: `${def.label} stays on its current version. ${reason}`, cause: reason, fix: { label: "Try again", action: "retry_download" } });
     return { applied: false, reason };
   } finally { endUpdate(); }
@@ -100,4 +141,24 @@ export async function rollbackModel(id: string): Promise<{ ok: true; revision: s
     emit({ id: "update.applied", data: { kind: "model", name: id, tag: previous.revision } });
     return { ok: true, revision: previous.revision };
   } finally { endUpdate(); }
+}
+
+/** Boot: an update that a crash cut off is finished or undone before anything launches. Before the load check passed it is undone (the old record restored, the new files removed); after, it is finished (the old files become the remembered previous). Returns what it settled. */
+export function recoverModelUpdates(): Array<{ id: string; action: "undone" | "finished" }> {
+  const settledRows: Array<{ id: string; action: "undone" | "finished" }> = [];
+  const rows = db.select().from(meta).all().filter((row) => row.key.startsWith("updates.model.") && row.key.endsWith(".journal"));
+  for (const row of rows) {
+    const id = row.key.slice("updates.model.".length, -".journal".length);
+    try {
+      const journal = JSON.parse(row.value) as UpdateJournal;
+      if (journal.phase === "committed") { savePrevious(journal.snapshot); settledRows.push({ id, action: "finished" }); }
+      else {
+        upsertModel(journal.snapshot);
+        if (isManagedModelPath(journal.destination)) rmSync(journal.destination, { recursive: true, force: true });
+        settledRows.push({ id, action: "undone" });
+      }
+    } catch { /* A journal that cannot be read names nothing to settle. */ }
+    clearJournal(id);
+  }
+  return settledRows;
 }
