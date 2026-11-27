@@ -30554,6 +30554,36 @@
         }
       }
     },
+    "/stack/v1/metrics": {
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Current resource gauges in Prometheus text format",
+        "responses": {
+          "200": {
+            "description": "Prometheus text exposition format 0.0.4. Read only; current sampled values only.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Home token or admin session required.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/stack/v1/admin/setup": {
       "post": {
         "tags": [
