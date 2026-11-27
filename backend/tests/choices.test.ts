@@ -120,7 +120,8 @@ test("a pick is validated, stored and read back; it starts the download first an
   // Repeating changes nothing.
   expect(await (await call("PUT", "/chat/boost", { model: "qwen3.8-27b-ud-q4-k-m", install: false })).json()).toMatchObject({ changed: false });
   const cleared = await call("PUT", "/chat/boost", { model: "recommended" });
-  expect(await cleared.json()).toMatchObject({ model: null, changed: true });
+  expect(await cleared.json()).toMatchObject({ model: (await level("chat", "boost")).chosen, changed: true });
+  expect((await (await call("PUT", "/chat/standard", { model: "recommended" })).json() as { model: string | null }).model).toBe((await level("chat", "standard")).chosen);
   expect((await level("chat", "boost")).chosen_by).toBe("recommended");
   // Off switches a level off; Standard cannot be off.
   expect(await (await call("PUT", "/chat/max", { model: "off" })).json()).toMatchObject({ model: "off" });

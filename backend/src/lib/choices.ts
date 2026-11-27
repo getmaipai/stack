@@ -529,7 +529,9 @@ export async function setPick(input: PickInput, source: ActionSource, remote: st
   notifyChoicesChanged();
   const effect: Effect = next && next.model !== "off" && own && entry ? await applyPick(def, tier, entry, installed) : { applied: false, pending_restart: false, note: null };
   if (changed) auditAction("choices.pick", source, remote, { category: def.id, level: tier, profile, model: next?.model ?? "recommended" });
-  return { ok: true, category: def.id, tier, profile, model: next?.model ?? null, changed, applied: effect.applied, pending_restart: effect.pending_restart, install_job: job, note: effect.note };
+  // The model that will answer: the stored pick, or for "recommended" the level's resolved choice (never null unless nothing can answer).
+  const resolved = next ? next.model : profile === state.profile?.id ? decide(resolverEnv(await loadState()), def.id, tier).model : null;
+  return { ok: true, category: def.id, tier, profile, model: resolved, changed, applied: effect.applied, pending_restart: effect.pending_restart, install_job: job, note: effect.note };
 }
 
 export interface OrderDone { ok: true; category: CategoryId; order: string[]; disabled: string[] }

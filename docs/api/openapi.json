@@ -2022,7 +2022,8 @@
           },
           "model": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "The model that answers at this level now: the stored pick, or the resolved recommended model after a pick of recommended; null when the level has none."
           },
           "changed": {
             "type": "boolean"

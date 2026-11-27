@@ -106,7 +106,7 @@ export const PickBody = z.object({
   install: z.boolean().default(true).describe("Start the download when the model is not installed (this computer's profile only). False stores the pick without downloading."),
 });
 export const PickResult = z.object({
-  ok: z.literal(true), category: z.enum(CATEGORY_IDS), tier: TierName, profile: ProfileName, model: z.string().nullable(), changed: z.boolean(),
+  ok: z.literal(true), category: z.enum(CATEGORY_IDS), tier: TierName, profile: ProfileName, model: z.string().nullable().describe("The model that answers at this level now: the stored pick, or the resolved recommended model after a pick of recommended; null when the level has none."), changed: z.boolean(),
   applied: z.boolean().describe("True when the Stack changed a setting so the pick takes effect (voice engine, chat model)."), pending_restart: z.boolean(),
   install_job: z.string().nullable(), note: z.string().nullable(),
 }).openapi("ChoicePickResult");
