@@ -21,10 +21,11 @@ export default async function Page() {
         <div className="wk">
           <div className="card">
             <b>Apps that speak the OpenAI format</b>
-            <p>Stack answers on one local address, 127.0.0.1 port 8770 by default, in the shape existing client libraries use. Chat completions, embeddings, transcription, speech, pictures, video and music each have a standard path.</p>
+            <p>Stack answers on one local address, 127.0.0.1 port 8770 by default, in the shape existing client libraries use. Chat completions, embeddings, transcription, speech, pictures, video and music each have a standard path. Apps that are not Home can use chat, vision, speech and the model list.</p>
             <ul>
               <li>Reads such as the model list work as is on this computer.</li>
-              <li>Every write needs the header token Home uses. Optional keys for other apps are planned, not built.</li>
+              <li>Make an app key on the admin page and send it as a standard bearer key. Each key is limited to the scopes you tick, can be revoked at once, and waits behind Home's own requests.</li>
+              <li>Keys work on this computer only, and do not reach settings, jobs, embeddings or picture routes.</li>
               <li>No third-party app is tested yet, so none is named.</li>
             </ul>
             <em><a href={docUrl('integrations.md')}>Integration contract &rarr;</a></em>

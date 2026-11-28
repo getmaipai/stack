@@ -40,6 +40,38 @@ checks run in front of every route (`backend/src/lib/requestGuard.ts`):
    (the bodies a page can send without a preflight). Reads (`GET`, health)
    stay open on loopback after checks 1 and 2.
 
+**App keys (APP-KEYS-01).** A program that is not Home can use the OpenAI-shaped routes with a key an admin makes on the admin page
+(Connections, App keys) or through `POST /stack/v1/app-keys`. The key looks like `mpk_` plus 43 characters and goes in the standard header,
+`Authorization: Bearer <key>`. Home's token path is unchanged: a request that carries `x-maipai-home-token` never goes through the key path.
+
+- **Shown once, stored hashed.** The create call returns `key` once. The Stack stores an HMAC-SHA256 of it under a pepper in
+  `data/keys/app-key-pepper` (mode 600), a name, the first 8 characters, the scopes, the last-used time and a use count. A lost key is
+  revoked and replaced, never shown again. The key is never logged, listed or put in a health item.
+- **Scopes.** `chat` (`POST /v1/chat/completions`, `/v1/responses`; the chat and coding roles), `vision` (the same two routes for the vision role,
+  and any request with a picture in it), `speech` (`POST /v1/audio/transcriptions`, `/v1/audio/speech`) and `models` (`GET /v1/models`).
+  A key reaches no other route: every `/stack/v1/*` route, jobs, embeddings, pictures, video, music, the Anthropic wire and key management answer
+  403 `app_key_route_not_allowed`. A chat request that names another role (for example `image` or `router`) is 403 `app_key_role_not_allowed`.
+  A missing scope is 403 `app_key_scope_missing`, and the text names the scope.
+- **Refusals.** An unknown or misshapen key is 401 `app_key_unknown`; a revoked one is 401 `app_key_revoked` (both with `www-authenticate: Bearer`).
+  A write with no key and no Home token to a `/v1/` route is 401 `home_token_required`, and its text now says to make an app key.
+  Host, Origin and form-body checks (421, 403, 415) run first, as for Home. Keys work on the loopback listener only, never on the Tailscale one.
+- **No Home privileges.** A key cannot claim `x-stack-caller: live`, so its jobs queue as ordinary callers, and it can never ask for the full view of
+  an adult job (that needs Home's token).
+- **Rate and room.** Per key, 60 requests a minute and 2 at once; all keys together, 4 at once, so Home's interactive work always has room
+  (`STACK_APP_KEY_RATE_PER_MINUTE`, `STACK_APP_KEY_MAX_CONCURRENT`, `STACK_APP_KEY_MAX_CONCURRENT_ALL`). Over a limit is 429 with `retry-after`
+  and the code `app_key_rate_limited`, `app_key_busy` or `app_keys_busy`. A streamed answer holds its slot until the stream ends. Chat and
+  transcription requests from a key pause heavy jobs the same way Home's do (ISOLATION-01). Home's requests never count against these limits.
+- **Audit and health.** Each use is one log line `app_key.use` (key id and name, method, path; no prompt, no key). Refusals are `app_key.refused`
+  (at most one a minute per key and code). Making and revoking a key are `admin.action.app_key.created` and `.revoked`, with the source (`admin` or `home`).
+  A key that goes over its limit raises the warning `app-key-throttled.<id>`, and a revoked key still in use raises `app-key-revoked-in-use.<id>`.
+
+| Route | Needs |
+|---|---|
+| `GET /stack/v1/app-keys` | Home's token or an admin session. Lists keys with scopes, state, last use. Never the key. |
+| `POST /stack/v1/app-keys` | Same. Body `{ name, scopes }`. Returns `{ key, app_key }` once. |
+| `POST /stack/v1/app-keys/{id}/revoke` | Same. Works at once. |
+| `DELETE /stack/v1/app-keys/{id}` | Same. Removes a revoked key's entry. |
+
 The token file `data/keys/home-view-token` is made when the Stack starts, so
 an install from before this change gets one on its first start with no data
 touched. Home reads it from that file (or `STACK_HOME_VIEW_TOKEN`, or the

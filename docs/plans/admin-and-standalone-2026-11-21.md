@@ -286,7 +286,7 @@ to Home's own worktree and lane.
 
 1. Other apps (Open WebUI, scripts) calling the Stack's `/v1`: **optional
    API keys made on the admin page, loopback by default, LAN off unless
-   chosen.**
+   chosen.** Built 2026-11-28 (APP-KEYS-01): keys work on the loopback listener only; LAN stays off.
 2. Model choice beyond the pinned catalog: **catalog only in v1; "add by
    Hugging Face repo" later, still pinned and checksummed on install.**
 3. Windows: **out of v1** (the pins exist for Windows CUDA, the service

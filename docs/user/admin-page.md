@@ -1,6 +1,6 @@
 # A tour of the admin page
 
-The admin page has nine screens. Pick one from the list on the left, or on a phone from the bar at the bottom. Press `Command` and `K` to jump to any screen by name.
+The admin page has ten screens. Pick one from the list on the left, or on a phone from the bar at the bottom. Press `Command` and `K` to jump to any screen by name.
 
 The bar at the top shows the Stack's state in a few words ("Everything is running" or "Needs attention") and whether the page is getting live updates. The moon and sun button switches light and dark.
 
@@ -84,6 +84,10 @@ Every setting the Stack declares, grouped, with a plain sentence under each. Cha
 </picture>
 
 A chat box for questions about this computer, also open from the sparkle button at the top right of any screen. See [Ask the Helper a question](helper.md).
+
+## Connections
+
+Make, see and revoke the keys other programs use to call the Stack. Each row shows what the key may do and when it was last used. See [Let another program use the Stack](app-keys.md).
 
 ## Tools
 

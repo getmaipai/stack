@@ -86,7 +86,7 @@ export default async function Page() {
               <div className="eyebrow">Bring your own front end</div>
               <h2>Speaks the OpenAI format.</h2>
               <p className="sub">
-                Stack answers on one local address in the shape existing client libraries already use, so an app built for that format can point at it. Today every write also carries one header token; optional keys for other apps are planned. The routes are listed in the <a href={docUrl('integrations.md')} style={{ textDecoration: 'underline' }}>integration contract</a>.
+                Stack answers on one local address in the shape existing client libraries already use, so an app built for that format can point at it. An app key made on the admin page works as a standard bearer key on the chat, vision, speech and model-list routes. The routes are listed in the <a href={docUrl('integrations.md')} style={{ textDecoration: 'underline' }}>integration contract</a>.
               </p>
               <Link className="btn" href="/features/connect">Read about Connect your apps &rarr;</Link>
             </div>

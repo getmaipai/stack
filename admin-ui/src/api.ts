@@ -106,6 +106,11 @@ export async function call<T>(method: string, path: string, body?: unknown): Pro
   return data as T;
 }
 
+export interface AppKeyRecord {
+  id: string; name: string; prefix: string; scopes: ("chat" | "vision" | "speech" | "models")[]; state: "active" | "revoked";
+  created_at: string; created_by: string; last_used_at: string | null; use_count: number; revoked_at: string | null;
+}
+
 export const api = {
   session: () => call<{ signed_in: true; expires_at: string }>("GET", "/stack/v1/admin/session"),
   setup: (code: string, password: string) => call<{ ok: true }>("POST", "/stack/v1/admin/setup", { code, password }),
@@ -145,6 +150,10 @@ export const api = {
   installHelperModel: (m: HelperStatus["model"]) => call<unknown>("POST", "/stack/v1/models", { id: m.id, role: m.role, repo: m.repo, url: m.url, sha256: m.sha256, approx_bytes: m.approx_bytes, licence: m.licence, revision: m.revision, engine: m.engine }),
   rebootHost: () => call<{ ok: true }>("POST", "/stack/v1/host/reboot", {}),
   restartStack: () => call<{ ok: true }>("POST", "/stack/v1/service/restart"),
+  appKeys: () => call<{ app_keys: AppKeyRecord[]; scopes: string[] }>("GET", "/stack/v1/app-keys"),
+  createAppKey: (name: string, scopes: string[]) => call<{ key: string; app_key: AppKeyRecord }>("POST", "/stack/v1/app-keys", { name, scopes }),
+  revokeAppKey: (id: string) => call<AppKeyRecord>("POST", `/stack/v1/app-keys/${encodeURIComponent(id)}/revoke`, {}),
+  forgetAppKey: (id: string) => call<{ ok: true }>("DELETE", `/stack/v1/app-keys/${encodeURIComponent(id)}`),
   caches: () => call<CachePlan>("GET", "/stack/v1/storage/caches"),
   clearCache: (path: string) => call<{ freed_bytes: number; kept: string[]; problems: string[] }>("POST", "/stack/v1/storage/caches/clear", { path }),
 };

@@ -12,6 +12,7 @@ The Stack runs the AI engines on your computer and gives you one web page to man
 
 - [A tour of the admin page](admin-page.md)
 - [Ask the Helper a question](helper.md)
+- [Let another program use the Stack](app-keys.md)
 - [Update, and go back](update-and-go-back.md)
 
 **Privacy**

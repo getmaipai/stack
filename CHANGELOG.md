@@ -11,6 +11,7 @@ is published yet. This file tracks what either picks up.
 
 ### Added
 
+- App keys (APP-KEYS-01): an admin makes a named, scoped key on the admin page (Connections) or through `/stack/v1/app-keys`, and any OpenAI-format client sends it as `Authorization: Bearer <key>` to `/v1/chat/completions`, `/v1/responses`, `/v1/audio/transcriptions`, `/v1/audio/speech` and `GET /v1/models`. The key is shown once and stored hashed, revocable, with a last-used time and count; each key has its own rate and at-once limits and all keys together leave room for Home. Home's token path is unchanged. Each use is an `app_key.use` log line, and a throttled or revoked-but-used key raises a health warning.
 - One global licence acceptance: `GET` and `POST /stack/v1/licences`. An admin accepts once and every part's licence (current and future) is covered until the terms version changes; the AI and models page shows the accept card (kit ui 0.5.754).
 
 - Preset audit (PRESET-AUDIT-01, 2026-11-22): the uncensored 27B chat model (a part the Stack already serves for chat) is now an offered Standard pick on 64 and 128 GB computers, never the recommended one. The coding model's description says its Max level uses the Max chat model.

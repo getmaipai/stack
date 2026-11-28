@@ -36,6 +36,9 @@ export function guardRequest(request: Request): Response | null {
   }
   const presented = request.headers.get(HOME_TOKEN_HEADER);
   if (presented === null || presented.trim() === "") {
+    if (new URL(request.url).pathname.startsWith("/v1/")) {
+      return refuse(401, "home_token_required", "This request carried no key, so the Stack did not run it. A program that is not Home needs an app key: make one on the Stack's admin page (Connections, App keys) and send it as Authorization: Bearer <key>. Home sends its own token.", { "www-authenticate": "Bearer" });
+    }
     return refuse(401, "home_token_required", "This request did not carry Home's token, so the Stack did not run it. Make the request through Home. If Home itself got this, restart Home so it reads the Stack's token again.");
   }
   let matches: boolean;

@@ -119,7 +119,7 @@
         "Each job is a role on a standard path, such as chat completions, embeddings, transcription, speech and images",
         "Every reply says which engine and model answered, in a header",
         "API changes are additive, and the OpenAPI description is generated from the code",
-        "Today every write needs Home's token header. Optional keys for other apps are planned, not built (status: Planned)"
+        "Make an app key on the admin page and send it as a standard bearer key to the chat, vision, speech and model-list routes. Keys are scoped, revocable and limited so they cannot slow Home"
       ],
       "related": [
         { "title": "Integration contract", "text": "Every route, header and error shape.", "doc": "integrations.md" },

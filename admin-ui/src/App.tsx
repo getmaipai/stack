@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { StackChoiceCategory } from "@maipai/ui/src/stack/StackClient";
-import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis, Layers, ToggleRight, Palette as PaletteIcon } from "lucide-react";
+import { Moon, Sun, LayoutDashboard, HeartPulse, Cpu, Gauge, Search, LogOut, RotateCw, Boxes, SlidersHorizontal, CircleArrowUp, Wrench, Sparkles, Ellipsis, Layers, ToggleRight, Palette as PaletteIcon, KeyRound } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@maipai/ui/src/ui/sheet";
 import { Button } from "@maipai/ui/src/ui/button";
 import { Status, StatusIndicator } from "@maipai/ui/src/ui/status";
@@ -18,6 +18,7 @@ import { StylesScreen } from "./StylesScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { Updates } from "./Updates";
 import { Tools } from "./Tools";
+import { AppKeys } from "./AppKeys";
 import { Modes } from "./Modes";
 import { Helper } from "./Helper";
 import { HelperProvider } from "./helperChat";
@@ -34,7 +35,7 @@ import type { MenuScreen } from "./menu";
 type Screen = string;
 interface NavItem extends MenuScreen { Icon: typeof LayoutDashboard; group: string; more: boolean }
 /** Icons and the phone bar's four main places are presentation only; labels, questions and grouping come from the shared spec (`./menu`). */
-const ICONS: Record<string, typeof LayoutDashboard> = { overview: LayoutDashboard, models: Boxes, styles: PaletteIcon, modes: ToggleRight, health: HeartPulse, helper: Sparkles, resources: Gauge, engines: Cpu, updates: CircleArrowUp, settings: SlidersHorizontal, tools: Wrench };
+const ICONS: Record<string, typeof LayoutDashboard> = { overview: LayoutDashboard, models: Boxes, styles: PaletteIcon, modes: ToggleRight, health: HeartPulse, helper: Sparkles, resources: Gauge, engines: Cpu, updates: CircleArrowUp, settings: SlidersHorizontal, tools: Wrench, connections: KeyRound };
 const PRIMARY_IDS = ["overview", "models", "health", "helper"];
 const GROUPS = MENU.map((g) => ({ ...g, order: g.screens.map((s) => s.id) }));
 const NAV: NavItem[] = MENU.flatMap((g) => g.screens.map((s) => ({ ...s, Icon: ICONS[s.id] ?? LayoutDashboard, group: g.id, more: !PRIMARY_IDS.includes(s.id) })));
@@ -175,6 +176,7 @@ function Signed({ onSignedOut }: { onSignedOut: () => void }) {
             {screen === "settings" && <SettingsScreen refresh={refresh} notify={notify} />}
             {screen === "helper" && <Helper />}
             {screen === "modes" && <Modes notify={notify} />}
+            {screen === "connections" && <AppKeys notify={notify} />}
             {screen === "tools" && <Tools roleLabels={roleLabels} notify={notify} />}
           </div>
         </main>

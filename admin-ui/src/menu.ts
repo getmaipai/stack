@@ -11,9 +11,9 @@ export interface MenuScreen { id: string; label: string; question: string; tab: 
 export interface MenuGroup { id: string; label: string; screens: MenuScreen[] }
 
 /** The screens this admin page draws itself. */
-export const IMPLEMENTED: readonly string[] = ["overview", "health", "resources", "models", "styles", "modes", "engines", "updates", "settings", "tools", "helper"];
+export const IMPLEMENTED: readonly string[] = ["overview", "health", "resources", "models", "styles", "modes", "engines", "updates", "settings", "tools", "helper", "connections"];
 /** Spec screens with no screen of their own here yet: where an old address goes (their content sits inside AI and models), or null for none. */
-export const NOT_YET: Readonly<Record<string, string | null>> = { drives: "models", licences: "models", connections: null };
+export const NOT_YET: Readonly<Record<string, string | null>> = { drives: "models", licences: "models" };
 
 interface SpecScreen { id: string; label: string; question: string; tab: string }
 interface SpecTab { id: string; label: string }

@@ -50,6 +50,13 @@
       "when": 1795812000000,
       "tag": "0006_learned_bumpers",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1795881047510,
+      "tag": "0007_app_keys",
+      "breakpoints": true
     }
   ]
 }

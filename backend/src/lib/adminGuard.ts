@@ -15,6 +15,7 @@ import { guardRequest } from "@/lib/requestGuard";
 import { checkLoopbackCaller, refuse } from "@/lib/loopbackGuard";
 import { validateSession } from "@/lib/adminAuth";
 import { isAdminUiPath } from "@/lib/adminUi";
+import { appKeyAdmit, runAdmitted } from "@/lib/appKeyGuard";
 
 export const ADMIN_COOKIE = "stack_admin";
 export const ADMIN_HEADER = "x-stack-admin";
@@ -108,5 +109,12 @@ export async function guardAdminAware(request: Request, mode: GuardMode = {}): P
 
 /** `fetch` behind the guard, with the admin session accepted beside Home's token. */
 export function adminGuardedFetch(inner: (request: Request, server: unknown) => Response | Promise<Response>, mode: GuardMode = {}): (request: Request, server: unknown) => Promise<Response> {
-  return async (request, server) => (await guardAdminAware(request, mode)) ?? inner(request, server);
+  return async (request, server) => {
+    // APP-KEYS-01: a request with a bearer app key and no Home token goes through the key's own door (loopback listener only).
+    if (mode.tailscaleAddress === undefined) {
+      const admit = await appKeyAdmit(request);
+      if (admit) return "response" in admit ? admit.response : runAdmitted(admit, () => inner(request, server));
+    }
+    return (await guardAdminAware(request, mode)) ?? inner(request, server);
+  };
 }

@@ -61,6 +61,15 @@ export const connections = sqliteTable("connections", {
   createdAt: text("created_at").notNull(), provenance: text("provenance").notNull(), hlc: text("hlc").notNull(),
 });
 
+// APP-KEYS-01 (Owner-approved 2026-11-28): keys a person makes on the admin page for other programs that speak the OpenAI format.
+// The key itself is never stored: `hash` is an HMAC-SHA256 of it under a pepper kept outside the database (keys/app-key-pepper), so a
+// copied database cannot be used to call the Stack. `prefix` is the first characters, for telling keys apart in a list.
+export const appKeys = sqliteTable("app_keys", {
+  id: text("id").primaryKey(), name: text("name").notNull(), prefix: text("prefix").notNull(), hash: text("hash").notNull().unique(),
+  scopesJson: text("scopes_json").notNull(), createdAt: text("created_at").notNull(), createdBy: text("created_by").notNull(),
+  lastUsedAt: text("last_used_at"), useCount: integer("use_count").notNull().default(0), revokedAt: text("revoked_at"),
+});
+
 export const moveJobs = sqliteTable("move_jobs", {
   id: text("id").primaryKey(), modelId: text("model_id").notNull(), fromDisk: text("from_disk").notNull(),
   toDisk: text("to_disk").notNull(), state: text("state").notNull(), oldPath: text("old_path").notNull(),
