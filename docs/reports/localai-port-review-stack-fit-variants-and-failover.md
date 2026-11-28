@@ -10,7 +10,7 @@
 
 ### MEDIUM
 
-**BS-1 — `f665c5f7d7d61a4da9b1757a5a02cecbde86b17` — `admin-ui/src/fitCell.ts:24`**
+**BS-1 - `f665c5f7d7d61a4da9b1757a5a02cecbde86b17` - `admin-ui/src/fitCell.ts:24`**
 
 When a planner row is `unavailable` but has a known peak and a reason, `fitCell` returns null. The planner creates such rows when no generator slot fits (`backend/src/lib/profilePlanner.ts:209`) or when a tier marks a role unavailable (`:213`). `PlanTable` then shows the refusal and reason but omits the row's need and headroom, despite the row having enough data to calculate them. Example: an image model peak exceeds the machine's cap; the UI says no image fits but never says the amount needed or how far over it is.
 
@@ -20,7 +20,7 @@ When a planner row is `unavailable` but has a known peak and a reason, `fitCell`
 
 ### LOW
 
-**BS-2 — `841a10ab09f9d9b8f6ceed1255efc4d851f460c4` — `backend/src/lib/variantSelect.ts:28-33`**
+**BS-2 - `841a10ab09f9d9b8f6ceed1255efc4d851f460c4` - `backend/src/lib/variantSelect.ts:28-33`**
 
 A matching `pin` returns before supported-engine and size checks. For example, a pinned variant on an unsupported engine, or one larger than `roomBytes`, is returned as the chosen variant with reason `pinned`. The comment explicitly makes this behavior intentional, but it conflicts with this selector's stated “filters by engine” and “known size fits” purpose. The production recommendation currently supplies no pin, so this is a defect in the exported selector contract, not an observed production route failure.
 
@@ -28,7 +28,7 @@ A matching `pin` returns before supported-engine and size checks. For example, a
 
 **Failing test:** pin an unsupported variant and an over-budget variant separately; assert neither is reported as a normal serving choice or `fits`.
 
-**BS-3 — `2074d173d7efa149d7b4f0a4846ff0c84e1f57fc` — `backend/src/lib/failoverChoice.ts:25-33`**
+**BS-3 - `2074d173d7efa149d7b4f0a4846ff0c84e1f57fc` - `backend/src/lib/failoverChoice.ts:25-33`**
 
 Missing or `unknown` health is treated as usable. If the primary has failed before a health probe completes, a fallback with absent health is selected and reported as serving. The existing test at `backend/tests/failoverChoice.test.ts:33-34` locks in this behavior. A failover mechanism should not claim a candidate is healthy when its state is unknown.
 
