@@ -5,28 +5,32 @@
   </picture>
 </p>
 
-### Run local AI engines on your own computer, from one web page.
+**The foundation for local AI, at any size.**
 
-[User docs](docs/user/index.md) · [Install](docs/user/install.md) · [Developer docs](docs/dev.md) · Releases (none published yet)
+# Local AI without the homework
 
-MaiPai Stack runs the engines behind private, local AI: chat, voice in, voice out, a wake word, and pictures, video and music when you want them. It installs the parts, checks them against pinned checksums, keeps them all inside your computer's memory, and tells you in plain words when one needs help. Everything runs on your computer. Nothing is sent anywhere unless you switch on an update check or download a model.
+[User docs](docs/user/index.md) · [Install](docs/user/install.md) · [Developer docs](docs/dev.md) · [Connect your apps](docs/integrations.md)
 
-You manage it from one admin page. MaiPai Home, the family AI hub, uses the same Stack, and you can also run the Stack alone, with no Home.
+MaiPai Stack is easy to set up, matched to your computer's memory and simple to keep running. One person or many, one model or many: the Stack picks the engine for each job, keeps everything inside your memory, and tells you in plain words when something needs help. Whatever you run on top just works.
+
+It stands on its own, with its own admin page, and it also powers [MaiPai Home](https://github.com/getmaipai/home), the family AI hub. Everything runs on your computer. Nothing is sent anywhere unless you switch on an update check or download a model.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/admin/overview-desktop-dark.webp">
   <img src="docs/images/admin/overview-desktop-light.webp" alt="The admin page Overview: status, version, memory, and one card per feature showing which model answers." width="720">
 </picture>
 
-## What it does
+## The questions every newcomer hits
 
-- **One address per job.** Ask for chat, speech, or a picture at one local address. The Stack picks the engine.
-- **Features you switch on or off.** Chat, voice in, voice out, wake word, vision, images, video, music, and more.
-- **Models you choose.** Pick from a pinned list, see the size, download or remove with one button.
-- **Memory that fits.** A setup for your computer (16, 32, 64 or 128 GB) and a priority order for when memory is tight.
-- **Honest health.** A short list of problems, each with one fix button.
-- **Updates you can undo.** Update an engine, go back if the new one misbehaves. The Stack itself rolls back too.
-- **A Helper.** A small built-in assistant that answers questions about the machine. It asks before it changes anything.
+- **Which models should I use?** Pick your computer's memory size (16, 32, 64 or 128 GB and up). The Stack suggests a setup that fits. Models are a setting you can change, with the size shown before you download.
+- **How do I install and run them?** One installer and one admin page. Engines and models are pinned and checked against checksums.
+- **How do I tune them?** The ready-made setup for your memory size applies sensible settings from the first minute. Keep your own choices if you prefer.
+- **How do I stop them crashing my computer?** A memory guard only loads what fits. You set a priority order, and the work you need most stays loaded.
+- **How do I run one job without slowing another?** Chat, voice and the wake word stay loaded. A picture, video or music job waits in a queue, or is refused with a reason, when memory is short.
+- **Where are the logs, and why did it break?** Health lists each problem in plain words with one fix button, and recent engine log lines sit on the Engines screen.
+- **Can I just ask?** A built-in Helper answers questions about your setup. It shows a card and asks before it changes anything.
+- **How do I connect my other apps?** The Stack speaks the OpenAI format on one local address, so a client built for that API works unchanged. See [docs/integrations.md](docs/integrations.md).
+- **How do I update safely?** Update an engine and go back if the new one misbehaves. The Stack itself rolls back too.
 
 ## Getting started
 
