@@ -11,3 +11,8 @@ Regenerate it with the two macOS built-ins, one command per line:
 say -o clover.aiff "Clover, the kitchen light is on."
 afconvert -f WAVE -d LEI16@16000 -c 1 clover.aiff clover-two-seconds.wav
 ```
+
+`compare-sentences.json` contains the 12 short, synthesized benchmark references used by
+`scripts/compare-stt.sh` (English, German and Spanish). The comparison skips a language
+when the Mac has no matching `say` voice. These clips are generated at run time and are
+not household recordings.

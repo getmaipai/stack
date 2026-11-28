@@ -52,6 +52,28 @@
       "smart-turn-v3.2"
     ]
   },
+  "STACK_STT_PARAKEET_V3_MODEL": {
+    "id": "parakeet-tdt-0.6b-v3-int8",
+    "role": "stt",
+    "repo": "k2-fsa/sherpa-onnx",
+    "license": "CC-BY-4.0",
+    "revision": "1495e91b59d7fc53ddca91f3431758ec99f8fa253fdb0e1e851be0f72b14b0f9",
+    "engine": "sherpa-onnx-node",
+    "sizing": {
+      "profile": "p64",
+      "quantization": "int8"
+    },
+    "download": {
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2",
+      "sha256": "1495e91b59d7fc53ddca91f3431758ec99f8fa253fdb0e1e851be0f72b14b0f9",
+      "approx_bytes": 487211443,
+      "note": "CC-BY-4.0; attribution to NVIDIA is required.",
+      "archive": true
+    },
+    "companions": [
+      "smart-turn-v3.2"
+    ]
+  },
   "STACK_VAD_MODEL": {
     "id": "silero-vad",
     "role": "stt",

@@ -1,0 +1,14 @@
+[
+  { "id": "en-01", "lang": "en", "text": "Clover, the kitchen light is on." },
+  { "id": "en-02", "lang": "en", "text": "Alfred found a quiet place to read." },
+  { "id": "en-03", "lang": "en", "text": "Astro watches the stars above the garden." },
+  { "id": "en-04", "lang": "en", "text": "Bramble left the blue cup by the window." },
+  { "id": "en-05", "lang": "en", "text": "Daisy wants to hear a story before bed." },
+  { "id": "en-06", "lang": "en", "text": "Ember says the weather will be sunny tomorrow." },
+  { "id": "en-07", "lang": "en", "text": "Juniper is carrying three books upstairs." },
+  { "id": "en-08", "lang": "en", "text": "Rover can see the red ball under the table." },
+  { "id": "de-01", "lang": "de", "text": "Grüße aus Köln, die Küche ist hell." },
+  { "id": "de-02", "lang": "de", "text": "Marlows kleiner Garten blüht im Frühling." },
+  { "id": "es-01", "lang": "es", "text": "Lucia guarda las llaves junto a la puerta." },
+  { "id": "es-02", "lang": "es", "text": "Nova quiere escuchar música esta tarde." }
+]

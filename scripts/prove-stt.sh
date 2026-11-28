@@ -10,6 +10,7 @@
 #
 #   bash scripts/prove-stt.sh            # port 8771
 #   PORT=8790 bash scripts/prove-stt.sh
+#   For side-by-side Parakeet v2/v3 WER and speed, see scripts/compare-stt.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . "$(dirname "$0")/lib/daemon.sh"

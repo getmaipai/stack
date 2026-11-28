@@ -18,7 +18,7 @@ import {
   upsertModel,
   ProvenanceIncompleteError,
 } from "@/lib/modelStore";
-import { STACK_CHAT_8B_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL } from "@/lib/modelCatalog";
+import { STACK_CHAT_8B_MODEL, STACK_EMBED_MODEL, STACK_JUDGE_MODEL, STACK_MODELS, STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_STT_PARAKEET_V3_MODEL } from "@/lib/modelCatalog";
 import { hfUrl } from "@/lib/hf";
 import { downloadUrl } from "@/lib/download";
 import { eq } from "drizzle-orm";
@@ -52,8 +52,10 @@ test("Parakeet is an optional second stt pin and Moonshine remains the fallback"
   expect(STACK_MODELS).toContain(STACK_STT_MODEL);
   expect(STACK_MODELS).toContain(STACK_STT_PARAKEET_V2_MODEL);
   expect(STACK_MODELS.indexOf(STACK_STT_MODEL)).toBeLessThan(STACK_MODELS.indexOf(STACK_STT_PARAKEET_V2_MODEL));
+  expect(STACK_MODELS).toContain(STACK_STT_PARAKEET_V3_MODEL);
+  expect(STACK_STT_PARAKEET_V3_MODEL).toMatchObject({ id: "parakeet-tdt-0.6b-v3-int8", role: "stt", license: "CC-BY-4.0", revision: "1495e91b59d7fc53ddca91f3431758ec99f8fa253fdb0e1e851be0f72b14b0f9", download: { url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2", sha256: "1495e91b59d7fc53ddca91f3431758ec99f8fa253fdb0e1e851be0f72b14b0f9", approx_bytes: 487211443, archive: true } });
   expect(STACK_STT_PARAKEET_V2_MODEL).toMatchObject({ id: "parakeet-tdt-0.6b-v2-int8", role: "stt", download: { url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2", sha256: "6fc4426b54aa549a0019b8a75b8dea59164e71790a37ac56a045ad57f915f714", archive: true } });
-  for (const pin of [STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL]) {
+  for (const pin of [STACK_STT_MODEL, STACK_STT_PARAKEET_V2_MODEL, STACK_STT_PARAKEET_V3_MODEL]) {
     upsertModel({ id: pin.id, roles: ["stt"], source: "catalog", provenance: { package: `model:${pin.id}`, catalogId: pin.id }, revision: pin.revision!, sha256: pin.download!.sha256, sizeBytes: pin.download!.approx_bytes, licence: pin.license!, engineRequirements: { engine: pin.engine, sizing: pin.sizing }, verifiedAt: "2026-10-01T00:00:00.000Z", modelPath: join(fixtureDir, pin.id) });
   }
   setMachineTier(null);
