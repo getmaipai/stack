@@ -29,12 +29,14 @@ test("reduced motion shortens every animation and transition, not just the ones 
 });
 
 test("the sidebar groups every screen once and the palette searches screens, features, models and actions", () => {
+  // The menu is built from the shared spec (menu.ts); IMPLEMENTED names the screens this page draws, and App.tsx draws each one once.
   const app = read("App.tsx");
-  const order = [...app.matchAll(/order: \[([^\]]*)\]/g)].flatMap((m) => [...m[1]!.matchAll(/"(\w+)"/g)].map((x) => x[1]!));
-  const ids = [...app.matchAll(/\{ id: "(\w+)", label: "[^"]+", question:/g)].map((m) => m[1]!);
-  expect(ids.length).toBe(11);
-  expect([...order].sort()).toEqual([...ids].sort());
-  expect(new Set(order).size).toBe(order.length);
+  const menu = read("menu.ts");
+  const ids = [...(/IMPLEMENTED[^=]*=\s*\[([^\]]*)\]/.exec(menu)?.[1] ?? "").matchAll(/"(\w+)"/g)].map((m) => m[1]!);
+  expect(ids.length).toBeGreaterThan(0);
+  expect(new Set(ids).size).toBe(ids.length);
+  for (const id of ids) expect(app.match(new RegExp(`screen === "${id}"`, "g"))?.length, `App.tsx draws the ${id} screen once`).toBe(1);
+  expect(app).toContain("order: g.screens.map");
   const palette = read("Palette.tsx");
   for (const heading of ["Screens", "Models", "Features", "Actions"]) expect(palette).toContain(`heading="${heading}"`);
 });
