@@ -130,7 +130,9 @@ if [ "$MODE" != docs ]; then
 
   if [ "$MODE" = full ]; then
     echo "== backend: tests"
-    (cd backend && bun test)
+    # 20 s a test, the same as the changed-files run in wt.sh: the gate shares the machine with other sessions, and file-walking tests
+    # (tests/sweeps.test.ts takes 1 to 2 s alone) went past bun's 5 s default there (6.2 s in the gate on 2026-11-28) and passed alone.
+    (cd backend && bun test --timeout 20000)
     # The compiled binary has a virtual filesystem a source-run test cannot see: a module-level
     # read of a file beside the source died at startup on the Studio (2026-10-28, 4eb2e08).
     # Compile into a scratch directory (not dist/, which would dirty the worktree) and serve it.
