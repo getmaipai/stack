@@ -10,6 +10,8 @@ let planCaches: typeof import("@/lib/cacheGuard").planCaches;
 let runCacheGuard: typeof import("@/lib/cacheGuard").runCacheGuard;
 let clearOutsideCache: typeof import("@/lib/cacheGuard").clearOutsideCache;
 let modelsDir: string;
+// The directory the code under test really uses. Another test file in the same run can change process.env.STACK_DATA_DIR after @/lib/paths has read it, so the env is not a safe place to build paths from.
+let dataDir: string;
 let __resetJobsForTests: typeof import("@/lib/jobs").__resetJobsForTests;
 let submitJob: typeof import("@/lib/jobs").submitJob;
 let updateJob: typeof import("@/lib/jobs").updateJob;
@@ -23,12 +25,12 @@ const set = (key: string, value: unknown) => { db.insert(meta).values({ key: `se
 
 describe("cache guard", () => {
   let previous: string | undefined;
-  beforeEach(async () => { await import("@/app"); ({ planCaches, runCacheGuard, clearOutsideCache } = await import("@/lib/cacheGuard")); ({ modelsDir } = await import("@/lib/paths")); ({ __resetJobsForTests, submitJob, updateJob } = await import("@/lib/jobs")); ({ db } = await import("@/db")); ({ models, meta } = await import("@/db/schema")); ({ runSweeps } = await import("@/lib/sweeps")); });
+  beforeEach(async () => { await import("@/app"); ({ planCaches, runCacheGuard, clearOutsideCache } = await import("@/lib/cacheGuard")); ({ modelsDir, dataDir } = await import("@/lib/paths")); ({ __resetJobsForTests, submitJob, updateJob } = await import("@/lib/jobs")); ({ db } = await import("@/db")); ({ models, meta } = await import("@/db/schema")); ({ runSweeps } = await import("@/lib/sweeps")); });
   afterEach(() => { for (const path of roots.splice(1)) rmSync(path, { recursive: true, force: true }); __resetJobsForTests(); });
 
   test("tmp age and active jobs control cleanup", async () => {
     set("stack.storage.cache_guard_enabled", true); set("stack.storage.tmp_hours", 6);
-    const fresh = join(process.env.STACK_DATA_DIR!, "tmp", `fresh-${crypto.randomUUID()}`), old = join(process.env.STACK_DATA_DIR!, "tmp", `old-${crypto.randomUUID()}`);
+    const fresh = join(dataDir, "tmp", `fresh-${crypto.randomUUID()}`), old = join(dataDir, "tmp", `old-${crypto.randomUUID()}`);
     mkdirSync(fresh, { recursive: true }); mkdirSync(old, { recursive: true }); writeFileSync(join(fresh, "x"), "fresh"); writeFileSync(join(old, "x"), "old");
     const then = Date.now() - 8 * 3600_000; utimesSync(old, then / 1000, then / 1000); utimesSync(join(old, "x"), then / 1000, then / 1000);
     const planned = await planCaches();
@@ -53,7 +55,7 @@ describe("cache guard", () => {
   });
 
   test("referenced model paths are protected", async () => {
-    const path = join(process.env.STACK_DATA_DIR!, "tmp", `reference-${crypto.randomUUID()}`); mkdirSync(path, { recursive: true }); writeFileSync(join(path, "f"), "keep");
+    const path = join(dataDir, "tmp", `reference-${crypto.randomUUID()}`); mkdirSync(path, { recursive: true }); writeFileSync(join(path, "f"), "keep");
     db.insert(models).values({ id: "cache-ref", modelPath: path, roles: "[]", source: "catalog", provenance: "{}", revision: "x", sha256: "x", licence: "x", engineRequirements: "{}", firstBootAt: new Date().toISOString() }).run();
     const result = await runCacheGuard(Date.now() + 48 * 3600_000); expect(existsSync(path)).toBe(true);
   });
@@ -68,14 +70,14 @@ describe("cache guard", () => {
   });
 
   test("unreadable cache entries and removal failures become problems", async () => {
-    const unreadable = join(process.env.STACK_DATA_DIR!, "tmp", `unreadable-${crypto.randomUUID()}`); mkdirSync(unreadable, { recursive: true }); writeFileSync(join(unreadable, "f"), "x"); chmodSync(unreadable, 0);
+    const unreadable = join(dataDir, "tmp", `unreadable-${crypto.randomUUID()}`); mkdirSync(unreadable, { recursive: true }); writeFileSync(join(unreadable, "f"), "x"); chmodSync(unreadable, 0);
     const planned = await planCaches(Date.now() + 48 * 3600_000); expect(planned.owned.some(item => item.path === unreadable)).toBe(true);
     chmodSync(unreadable, 0o700);
     const result = await runCacheGuard(Date.now() + 48 * 3600_000); expect(result.problems.length).toBeGreaterThan(0);
   });
 
   test("a live referenced tmp path is not removed", async () => {
-    const path = join(process.env.STACK_DATA_DIR!, "tmp", `model-ref-${crypto.randomUUID()}`); mkdirSync(path, { recursive: true }); writeFileSync(join(path, "f"), "x");
+    const path = join(dataDir, "tmp", `model-ref-${crypto.randomUUID()}`); mkdirSync(path, { recursive: true }); writeFileSync(join(path, "f"), "x");
     db.insert(models).values({ id: `cache-ref-${crypto.randomUUID()}`, modelPath: path, roles: "[]", source: "catalog", provenance: "{}", revision: "x", sha256: "x", licence: "x", engineRequirements: "{}", firstBootAt: new Date().toISOString() }).run();
     const plan = await planCaches(Date.now() + 48 * 3600_000); expect(plan.owned.some(item => item.path === path)).toBe(true);
     const result = await runCacheGuard(Date.now() + 48 * 3600_000); expect(existsSync(path)).toBe(true); expect(result.problems.some(text => text.includes("references"))).toBe(true);
@@ -87,7 +89,7 @@ describe("cache guard", () => {
   });
 
   test("setting off leaves paths untouched", async () => {
-    set("stack.storage.cache_guard_enabled", false); const path = join(process.env.STACK_DATA_DIR!, "tmp", `safe-${crypto.randomUUID()}`); mkdirSync(path, { recursive: true }); writeFileSync(join(path, "f"), "keep");
+    set("stack.storage.cache_guard_enabled", false); const path = join(dataDir, "tmp", `safe-${crypto.randomUUID()}`); mkdirSync(path, { recursive: true }); writeFileSync(join(path, "f"), "keep");
     await runCacheGuard(); expect(existsSync(path)).toBe(true);
   });
 });
