@@ -70,6 +70,7 @@ import { codingPauseBoundMs, heavyGate, isolationRules, PausableProcess, setProt
 import { readMlxKvBytesPerToken } from "@/lib/mlxMemory";
 import { currentHomeMode, homeHeavyModeActive, homeModeEnteringCoding, homeModeLeavingCoding, homeModeSwitching } from "@/lib/homeMode";
 import { installedDiarizationFiles } from "@/speech/diarization";
+import { soundTaggingFilesFor } from "@/speech/soundTagging";
 import { getReducedChatState, reducedChatForcesLight, reducedChatModels, resetReducedChatForTests, setReducedChatModels, setReducedChatState } from "@/lib/reducedChat";
 
 export type EngineKind = "spawned" | "managed" | "url";
@@ -1053,10 +1054,10 @@ async function startUrlProcess(role: RoleId, url: string): Promise<RoleProcess> 
  * frontend with) is required in that case; unset is a clear error, not
  * a silent fallback to the broken compiled path. */
 export function speechWorkerCommand(
-  args: { role: RoleId; port: number; modelPath: string; vadPath: string; threads: number; diarization?: { segmentation: string; embedding: string } },
+  args: { role: RoleId; port: number; modelPath: string; vadPath: string; threads: number; diarization?: { segmentation: string; embedding: string }; soundTagging?: { model: string; labels: string } },
   runtime: { execPath: string; main: string; isCompiled: boolean; bunBin?: string } = { execPath: process.execPath, main: Bun.main, isCompiled: isCompiledBinary, bunBin: process.env.STACK_BUN_BIN },
 ): string[] {
-  const workerArgs = ["speech-worker", "--role", args.role, "--port", String(args.port), "--model", args.modelPath, "--vad", args.vadPath, "--threads", String(args.threads), ...(args.diarization ? ["--diar-seg", args.diarization.segmentation, "--diar-emb", args.diarization.embedding] : [])];
+  const workerArgs = ["speech-worker", "--role", args.role, "--port", String(args.port), "--model", args.modelPath, "--vad", args.vadPath, "--threads", String(args.threads), ...(args.diarization ? ["--diar-seg", args.diarization.segmentation, "--diar-emb", args.diarization.embedding] : []), ...(args.soundTagging ? ["--sound-tag-model", args.soundTagging.model, "--sound-tag-labels", args.soundTagging.labels] : [])];
   if (runtime.isCompiled) {
     if (!runtime.bunBin) throw new EngineUnavailableError("STACK_BUN_BIN is not set; a compiled build runs the stt worker through a real bun, not a re-invocation of itself (getmaipai/stack#8).");
     return [runtime.bunBin, join(dirname(runtime.execPath), "backend-src", "src", "index.ts"), ...workerArgs];
@@ -1509,7 +1510,7 @@ export async function launchPlan(role: RoleId, model: ModelRecord, port: number,
     // shape (see its own comment, getmaipai/stack#8); no special env
     // needed here either way - a real `bun run` against the vendored
     // source resolves the native binding exactly as dev already does.
-    return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads, diarization: installedDiarizationFiles(listModels()) ?? undefined }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0, kind: "spawned", apiKey: newLaunchKey() };
+    return { command: speechWorkerCommand({ role, port, modelPath: model.modelPath!, vadPath: vad.modelPath, threads, diarization: installedDiarizationFiles(listModels()) ?? undefined, soundTagging: soundTaggingFilesFor(listModels()) ?? undefined }), engine: "sherpa-onnx-node", build: "bundled", stdin: "pipe", contextLength: 0, kind: "spawned", apiKey: newLaunchKey() };
   }
   if (role === "image") {
     if (!comfyuiInstalled()) throw new EngineUnavailableError("The ComfyUI environment is not built on this machine.");

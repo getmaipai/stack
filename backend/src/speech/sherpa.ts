@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { TARGET_SAMPLE_RATE } from "@/speech/audio";
 import type { Transcriber, VoiceDetector } from "@/speech/session";
 import { DIARIZATION_FILES, missingDiarizationFiles, type DiarizationFiles, type SpeakerTurn } from "@/speech/diarization";
+import { SOUND_TAGGING_FILES, type AudioTagger, type SoundTaggingFiles } from "@/speech/soundTagging";
 
 export const RUNTIME_NAME = "sherpa-onnx-node";
 
@@ -25,6 +26,7 @@ interface SherpaModule {
   OfflineRecognizer: new (config: unknown) => { createStream(hotwords?: string): SherpaStream; decodeAsync(stream: SherpaStream): Promise<void>; getResult(stream: SherpaStream): SherpaResult };
   OfflineSpeakerDiarization: new (config: unknown) => { sampleRate: number; process(samples: Float32Array): Array<{ start: number; end: number; speaker: number }> };
   SpeakerEmbeddingExtractor: new (config: unknown) => { dim: number; createStream(): SpeakerEmbeddingStream; compute(stream: SpeakerEmbeddingStream): Float32Array };
+  AudioTagging: new (config: unknown) => { createStream(): SherpaStream; compute(stream: SherpaStream, topK?: number): Array<{ name: string; prob: number }> };
   Vad: new (config: unknown, bufferSizeInSeconds: number) => { acceptWaveform(samples: Float32Array): void; isDetected(): boolean; reset(): void; clear(): void };
 }
 interface SherpaStream { acceptWaveform(input: { samples: Float32Array; sampleRate: number }): void; }
@@ -191,6 +193,16 @@ export function loadSpeakerEmbedder(embeddingPath: string, threads = 2): Speaker
       return Array.from(extractor.compute(stream));
     },
   };
+}
+export function loadAudioTagger(files: SoundTaggingFiles, threads = 2): AudioTagger {
+  if (!existsSync(files.model) || !existsSync(files.labels)) throw new Error("The sound tagging model files are not installed.");
+  const sherpa = loadModule();
+  const tagger = new sherpa.AudioTagging({ model: { zipformer: { model: files.model }, numThreads: threads, provider: "cpu", debug: 0 }, labels: files.labels });
+  return { sampleRate: TARGET_SAMPLE_RATE, compute(samples, sampleRate) {
+    const stream = tagger.createStream();
+    stream.acceptWaveform({ samples, sampleRate });
+    return tagger.compute(stream, 5).map((event) => ({ label: event.name, score: event.prob }));
+  } };
 }
 /** pyannote segmentation plus a speaker embedding and fast clustering, all
  * on the CPU. `numSpeakers` fixes the count; without it the clusterer

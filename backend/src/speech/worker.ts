@@ -8,8 +8,10 @@ import { diarizationDir, missingDiarizationFiles, speakerEmbeddingFile, type Dia
 import { loadDiarizer, loadDiarizerFiles, type Diarizer, loadMoonshine, loadParakeet, loadSilero, loadSpeakerEmbedder, recognizerKind, RUNTIME_NAME, runtimeVersion } from "@/speech/sherpa";
 import { startSpeechServer } from "@/speech/server";
 import { ENGINE_KEY_ENV } from "@/lib/loopbackGuard";
+import { soundTaggingFilesFor, type SoundTaggingFiles } from "@/speech/soundTagging";
+import { loadAudioTagger } from "@/speech/sherpa";
 
-export interface WorkerArgs { role: "stt"; port: number; model: string; vad: string; threads: number; diarization?: DiarizationFiles; }
+export interface WorkerArgs { role: "stt"; port: number; model: string; vad: string; threads: number; diarization?: DiarizationFiles; soundTagging?: SoundTaggingFiles; }
 
 export function parseWorkerArgs(argv: string[]): WorkerArgs {
   const value = (flag: string): string | undefined => { const index = argv.indexOf(flag); return index >= 0 ? argv[index + 1] : undefined; };
@@ -23,7 +25,8 @@ export function parseWorkerArgs(argv: string[]): WorkerArgs {
   if (!vad) throw new Error("speech-worker needs --vad <file>.");
   const threads = Number(value("--threads") ?? 2);
   const segmentation = value("--diar-seg"), embedding = value("--diar-emb");
-  return { role, port, model, vad, threads: Number.isInteger(threads) && threads > 0 ? threads : 2, ...(segmentation && embedding ? { diarization: { segmentation, embedding } } : {}) };
+  const tagModel = value("--sound-tag-model"), tagLabels = value("--sound-tag-labels");
+  return { role, port, model, vad, threads: Number.isInteger(threads) && threads > 0 ? threads : 2, ...(segmentation && embedding ? { diarization: { segmentation, embedding } } : {}), ...(tagModel && tagLabels ? { soundTagging: { model: tagModel, labels: tagLabels } } : {}) };
 }
 
 /** What `/props` reports: the runtime and its exact version as the
@@ -37,7 +40,9 @@ export async function runSpeechWorker(argv: string[]): Promise<void> {
   // Loaded on first use: the models are 0.1 GB and only some jobs ask for speakers.
   let diarizer: Diarizer | null = null;
   const diarizerFor = () => { if (!diarizer && args.diarization) diarizer = loadDiarizerFiles(args.diarization, args.threads); if (!diarizer) { const dir = diarizationDir(); if (missingDiarizationFiles(dir).length) return null; diarizer = loadDiarizer(dir, args.threads); } return diarizer; };
-  const server = startSpeechServer({ diarizer: diarizerFor, speakerEmbedder: () => { const file = speakerEmbeddingFile(); return file ? loadSpeakerEmbedder(file, args.threads) : null; }, port: args.port, key: process.env[ENGINE_KEY_ENV], build: workerBuild(), modelPath: args.model, transcriber, detector: () => loadSilero(args.vad) });
+  let soundTagger: ReturnType<typeof loadAudioTagger> | null = null;
+  const soundTaggerFor = () => { if (!args.soundTagging) return null; if (!soundTagger) soundTagger = loadAudioTagger(args.soundTagging, args.threads); return soundTagger; };
+  const server = startSpeechServer({ soundTagger: soundTaggerFor, diarizer: diarizerFor, speakerEmbedder: () => { const file = speakerEmbeddingFile(); return file ? loadSpeakerEmbedder(file, args.threads) : null; }, port: args.port, key: process.env[ENGINE_KEY_ENV], build: workerBuild(), modelPath: args.model, transcriber, detector: () => loadSilero(args.vad) });
   console.log(`speech-worker ${args.role} listening on http://127.0.0.1:${server.port} with ${basename(args.model)}`);
   const stop = () => { server.stop(true); process.exit(0); };
   process.once("SIGTERM", stop);

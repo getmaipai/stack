@@ -12,6 +12,7 @@ import { checkEngineCaller } from "@/lib/loopbackGuard";
 import { decodeWave, frameToSamples, toRecognizerRate, WaveFormatError } from "@/speech/audio";
 import { SttSession, type SttSessionConfig, type Transcriber, type VoiceDetector } from "@/speech/session";
 import type { SttWireEvent } from "@maipai/spec/stack/ts/stt-wire-event.js";
+import { tagSounds, type AudioTagger } from "@/speech/soundTagging";
 
 export const SESSION_PATH = "/v1/audio/transcriptions/stream";
 export const TRANSCRIBE_PATH = "/v1/audio/transcriptions";
@@ -20,6 +21,7 @@ export const TRANSCRIBE_SPANS_PATH = "/v1/audio/transcriptions/detect-spans";
 
 export const DIARIZE_PATH = "/v1/audio/transcriptions/diarize";
 export const SPEAKER_EMBEDDING_PATH = "/v1/audio/speaker-embedding";
+export const SOUND_TAGS_PATH = "/v1/audio/tags";
 
 export interface SpeechServerOptions {
   port: number;
@@ -32,6 +34,7 @@ export interface SpeechServerOptions {
   /** Speaker detection; null when its models are not installed. */
   diarizer?: () => { diarize(samples: Float32Array, numSpeakers?: number): Array<{ start: number; end: number; speaker: number }> } | null;
   speakerEmbedder?: () => { readonly dim: number; embed(samples: Float32Array): number[] } | null;
+  soundTagger?: () => AudioTagger | null;
   session?: Partial<SttSessionConfig>;
 }
 
@@ -147,6 +150,18 @@ export function startSpeechServer(options: SpeechServerOptions) {
           if (error instanceof WaveFormatError) return jsonResponse({ error: error.message }, 400);
           return jsonResponse({ error: "Speakers could not be detected in this audio." }, 500);
         }
+      }
+      if (request.method === "POST" && url.pathname === SOUND_TAGS_PATH) {
+        const tagger = options.soundTagger?.() ?? null;
+        if (!tagger) return jsonResponse({ error: "Sound tagging is not installed.", code: "component_not_ready" }, 404);
+        const sampleRate = Number(url.searchParams.get("sampleRate"));
+        const type = request.headers.get("content-type") ?? "";
+        if (!Number.isInteger(sampleRate) || sampleRate < 1 || !type.startsWith("audio/pcm") || !/format=s16le/.test(type) || !/channels=1/.test(type)) return jsonResponse({ error: "Send raw mono PCM16 audio and a sampleRate query." }, 400);
+        const bytes = new Uint8Array(await request.arrayBuffer());
+        if (bytes.length % 2) return jsonResponse({ error: "PCM16 audio must contain whole samples." }, 400);
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), samples = new Float32Array(bytes.length / 2);
+        for (let i = 0; i < samples.length; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
+        return jsonResponse({ tags: tagSounds(samples, sampleRate, tagger) });
       }
       if (request.method === "POST" && url.pathname === SPEAKER_EMBEDDING_PATH) {
         const started = performance.now();
