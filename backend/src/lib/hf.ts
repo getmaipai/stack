@@ -1,6 +1,7 @@
 import { settingValues } from "@/settings";
 import { PRIMARY_ROLE } from "@/roles";
 import { listFiles, modelInfo } from "@huggingface/hub";
+import { groupShards, parseGgufFilename } from "./ggufFilename";
 
 const DEFAULT_ENDPOINT = "https://huggingface.co";
 
@@ -23,7 +24,27 @@ export function hfUrl(path: string): string {
 }
 
 export interface HfFile { name: string; sizeBytes: number | null; sha256: string | null; url: string; }
-export interface HfResolution { repo: string; name: string; revision: string; licence: string | null; gated: boolean; files: HfFile[]; role: "chat" | "image" | "unknown"; }
+export interface HfVariant { id: string; engine: "llama.cpp"; sizeBytes: number | null; quant?: string; files: string[]; projector: string | null; complete: boolean; }
+export interface HfResolution { repo: string; name: string; revision: string; licence: string | null; gated: boolean; files: HfFile[]; variants: HfVariant[]; role: "chat" | "image" | "unknown"; }
+
+export function ggufVariants(files: HfFile[], _repoId: string): HfVariant[] {
+  const byName = new Map(files.map((file) => [file.name, file]));
+  return groupShards(files.map((file) => file.name)).map((group) => {
+    const groupFiles = group.files.map((name) => byName.get(name)!);
+    const sizeBytes = group.complete && groupFiles.every((file) => file.sizeBytes !== null)
+      ? groupFiles.reduce((total, file) => total + file.sizeBytes!, 0)
+      : null;
+    return {
+      id: `${group.quant ? parseGgufFilename(group.files[0]!).base.slice(0, -group.quant.length - 1) : group.base}${group.quant ? `@${group.quant}` : ""}`,
+      engine: "llama.cpp",
+      sizeBytes,
+      ...(group.quant ? { quant: group.quant } : {}),
+      files: group.files,
+      projector: group.projector,
+      complete: group.complete,
+    };
+  });
+}
 
 type HfFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 let fetchForTests: HfFetch | null = null;
@@ -53,7 +74,7 @@ export async function resolveHuggingFace(repo: string, options: { revision?: str
   for await (const file of listFiles({ repo: { type: "model", name: repo }, revision, recursive: true, hubUrl: currentEndpoint(), fetch: hubFetch() as typeof fetch })) {
     if (file.type === "file") files.push({ name: file.path, sizeBytes: file.lfs?.size ?? file.size ?? null, sha256: file.lfs?.oid ?? null, url: hfUrl(`${repo}/resolve/${revision}/${file.path}`) });
   }
-  return { repo, name: info.name, revision, licence: licenceFrom(info.cardData) ?? licenceFrom(info), gated: info.gated !== false, files, role: roleFrom(info, files) };
+  return { repo, name: info.name, revision, licence: licenceFrom(info.cardData) ?? licenceFrom(info), gated: info.gated !== false, files, variants: ggufVariants(files, repo), role: roleFrom(info, files) };
 }
 
 export function huggingFaceFetch(): HfFetch { return hubFetch(); }
