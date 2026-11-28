@@ -10,7 +10,7 @@ Parakeet v3 remains unselected by profiles; sound tagging is installed only on r
 
 ### MEDIUM
 
-- **CS-1** — Commit `471cfadf4317ba744575388d48bd9031b27ef1ed`; [server.ts](/Users/jessetorres/Developer/github.com/getmaipai/wt/stack-clever-tiger-lai-review-c/backend/src/speech/server.ts:160).
+- **CS-1** - Commit `471cfadf4317ba744575388d48bd9031b27ef1ed`; [server.ts](/Users/jessetorres/Developer/github.com/getmaipai/wt/stack-clever-tiger-lai-review-c/backend/src/speech/server.ts:160).
   - **Failure:** a request to `POST /v1/audio/tags` with an arbitrarily large even-length PCM body passes validation. `request.arrayBuffer()` materializes the full body and the handler then allocates a `Float32Array` at half the byte count, before resampling and inference. A large authorized internal request can exhaust worker memory and take down STT as well as tagging.
   - **Fix:** enforce a request byte cap before conversion and a maximum audio duration based on the supplied sample rate; reject oversize bodies with 413. Bound accepted sample rates to the model's supported range.
   - **Failing test:** exercise the real HTTP route with a body just over the byte/duration cap and assert 413 and that the injected tagger is never called. Include malformed and extreme sample rates.
