@@ -19,7 +19,7 @@ export const modelUpdateCode = (id: string) => `update-failed.${id}`;
 const previousKey = (id: string) => `parts.${id}.previous`;
 const journalKey = (id: string) => `updates.model.${id}.journal`;
 /** One line per update in flight, written before the first byte moves: what the model was (the whole record), where the new files go, and how far the update got. A crash leaves it; the next boot reads it (recoverModelUpdates). */
-interface UpdateJournal { phase: "staging" | "loading" | "committed"; revision: string; destination: string; snapshot: ModelRecord }
+export interface UpdateJournal { id: string; phase: "staging" | "loading" | "committed"; revision: string; destination: string; snapshot: ModelRecord }
 const writeJournal = (id: string, journal: UpdateJournal): void => { const value = JSON.stringify(journal); db.insert(meta).values({ key: journalKey(id), value }).onConflictDoUpdate({ target: meta.key, set: { value } }).run(); };
 const clearJournal = (id: string): void => { db.delete(meta).where(eq(meta.key, journalKey(id))).run(); };
 export type ModelLoadCheck = (record: ModelRecord) => Promise<void>;
@@ -77,12 +77,12 @@ async function apply(id: string, download?: DownloadModelOptions["download"], jo
   // beginUpdate also holds the crash restarter, as an engine swap does.
   const endUpdate = beginUpdate();
   try {
-    writeJournal(id, { phase: "staging", revision, destination, snapshot }); crashPoint("staging");
+    writeJournal(id, { id, phase: "staging", revision, destination, snapshot }); crashPoint("staging");
     const installed = await installCatalogModel(model, { destination, download: download ?? downloadOverride, onProgress: (progress) => { if (jobId) updateJob(jobId, { completedBytes: progress.itemCompletedBytes ?? progress.completedBytes }); } });
     // The old files stay until the new model has loaded: unload the old, load the new, and any failure puts the old back.
-    writeJournal(id, { phase: "loading", revision, destination, snapshot }); crashPoint("loading");
+    writeJournal(id, { id, phase: "loading", revision, destination, snapshot }); crashPoint("loading");
     await (loadCheckOverride ?? defaultLoadCheck)(installed);
-    writeJournal(id, { phase: "committed", revision, destination, snapshot }); crashPoint("committed");
+    writeJournal(id, { id, phase: "committed", revision, destination, snapshot }); crashPoint("committed");
     savePrevious(snapshot);
     clearJournal(id);
     resolveHealth(modelUpdateCode(id));
@@ -146,19 +146,25 @@ export async function rollbackModel(id: string): Promise<{ ok: true; revision: s
 /** Boot: an update that a crash cut off is finished or undone before anything launches. Before the load check passed it is undone (the old record restored, the new files removed); after, it is finished (the old files become the remembered previous). Returns what it settled. */
 export function recoverModelUpdates(): Array<{ id: string; action: "undone" | "finished" }> {
   const settledRows: Array<{ id: string; action: "undone" | "finished" }> = [];
+  let failures = 0;
   const rows = db.select().from(meta).all().filter((row) => row.key.startsWith("updates.model.") && row.key.endsWith(".journal"));
   for (const row of rows) {
-    const id = row.key.slice("updates.model.".length, -".journal".length);
     try {
-      const journal = JSON.parse(row.value) as UpdateJournal;
-      if (journal.phase === "committed") { savePrevious(journal.snapshot); settledRows.push({ id, action: "finished" }); }
+      const keyId = row.key.slice("updates.model.".length, -".journal".length);
+      const parsed = JSON.parse(row.value) as Partial<UpdateJournal>;
+      const journal = parsed as UpdateJournal;
+      const snapshot = journal.snapshot;
+      const validSnapshot = !!snapshot && typeof snapshot === "object" && snapshot.id === keyId && typeof snapshot.revision === "string" && !!snapshot.revision && typeof snapshot.roles?.length === "number" && !!snapshot.modelPath && isManagedModelPath(snapshot.modelPath);
+      if (journal.id !== keyId || !["staging", "loading", "committed"].includes(journal.phase) || !journal.revision || typeof journal.revision !== "string" || !journal.destination || typeof journal.destination !== "string" || !isManagedModelPath(journal.destination) || !validSnapshot) throw new Error("invalid model update journal");
+      if (journal.phase === "committed") { savePrevious(journal.snapshot); settledRows.push({ id: keyId, action: "finished" }); }
       else {
         upsertModel(journal.snapshot);
-        if (isManagedModelPath(journal.destination)) rmSync(journal.destination, { recursive: true, force: true });
-        settledRows.push({ id, action: "undone" });
+        rmSync(journal.destination, { recursive: true, force: true });
+        settledRows.push({ id: keyId, action: "undone" });
       }
-    } catch { /* A journal that cannot be read names nothing to settle. */ }
-    clearJournal(id);
+      clearJournal(keyId);
+    } catch { failures++; }
   }
+  if (failures) raise({ code: "model-update-recovery", severity: "error", title: "A model update needs repair", text: `${failures} model update journal${failures === 1 ? "" : "s"} could not be recovered. The recovery record was kept for repair.`, cause: "A model update journal was unreadable, invalid, or recovery failed.", fix: { label: "Review updates", action: "retry_download" } });
   return settledRows;
 }

@@ -1,11 +1,13 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
+import * as fs from "node:fs";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { db } from "@/db";
 import { meta } from "@/db/schema";
 import { __setComponentUnitsForTests, type UnitDef } from "@/lib/components";
 import { __resetHealthForTests } from "@/lib/health";
+import { list as listHealth } from "@/lib/health";
 import { __resetJobsForTests } from "@/lib/jobs";
 import { modelsDir } from "@/lib/paths";
 import { __setPartsHardwareForTests } from "@/lib/partsList";
@@ -27,6 +29,7 @@ const entry = { id, role: "image", profile: "p16", quality: 1, repo: "example/z-
 const respond = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const write = (bytes: string) => async (_url: string, dest: string) => { mkdirSync(join(dest, ".."), { recursive: true }); writeFileSync(dest, bytes); };
 const journals = () => db.select().from(meta).all().filter((row) => row.key.endsWith(".journal"));
+const writeJournal = (keyId: string, value: string) => db.insert(meta).values({ key: `updates.model.${keyId}.journal`, value }).run();
 
 beforeEach(async () => {
   __resetJobsForTests(); __resetHealthForTests(); __resetUpdatesForTests(); __resetSettingsForTests(); clearModelsForTests();
@@ -90,4 +93,36 @@ test("a crash after the load check passed finishes the update at the next boot",
   expect(getModel(id)?.revision).toBe("newer-revision");
   expect(previousModel(id)?.modelPath).toBe(oldPath);
   expect(journals()).toHaveLength(0);
+});
+
+test("recovery retains and reports malformed or incomplete journals", () => {
+  const incomplete = [
+    `updates.model.bad-json.journal`,
+    `updates.model.missing-id.journal`,
+    `updates.model.missing-phase.journal`,
+    `updates.model.missing-destination.journal`,
+    `updates.model.missing-snapshot.journal`,
+  ];
+  const snapshotFor = (keyId: string) => ({ ...getModel(id)!, id: keyId });
+  writeJournal("bad-json", "{");
+  writeJournal("missing-id", JSON.stringify({ phase: "staging", revision: "r", destination: newPath, snapshot: snapshotFor("missing-id") }));
+  writeJournal("missing-phase", JSON.stringify({ id: "missing-phase", revision: "r", destination: newPath, snapshot: snapshotFor("missing-phase") }));
+  writeJournal("missing-destination", JSON.stringify({ id: "missing-destination", phase: "staging", revision: "r", snapshot: snapshotFor("missing-destination") }));
+  writeJournal("missing-snapshot", JSON.stringify({ id: "missing-snapshot", phase: "staging", revision: "r", destination: newPath }));
+
+  const recovered = recoverModelUpdates();
+  expect(recovered).toHaveLength(0);
+  expect(journals().map((row) => row.key).sort()).toEqual(incomplete.sort());
+  expect(listHealth().find((item) => item.code === "model-update-recovery")?.text).toContain("5 model update journals");
+  expect(listHealth().find((item) => item.code === "model-update-recovery")?.text).not.toMatch(/bad-json|missing-id|missing-phase|missing-destination|missing-snapshot|\.gguf/);
+});
+
+test("a recovery step that throws retains and reports its journal", () => {
+  writeJournal(id, JSON.stringify({ id, phase: "staging", revision: "newer-revision", destination: newPath, snapshot: getModel(id) }));
+  const remove = spyOn(fs, "rmSync").mockImplementation(() => { throw new Error("fixture cleanup failure"); });
+  const result = recoverModelUpdates();
+  remove.mockRestore();
+  expect(result).toHaveLength(0);
+  expect(journals()).toHaveLength(1);
+  expect(listHealth().find((item) => item.code === "model-update-recovery")?.text).toContain("1 model update journal");
 });
