@@ -9,7 +9,7 @@ import { PRIVACY_ROWS } from "@/lib/privacy";
 import { SETTINGS } from "@/settings";
 
 function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => { const path = join(dir, entry); return statSync(path).isDirectory() ? sourceFiles(path) : path.endsWith(".ts") ? [path] : []; });
+  return readdirSync(dir).flatMap((entry) => { const path = join(dir, entry); return statSync(path).isDirectory() ? sourceFiles(path) : path.endsWith(".ts") && !path.endsWith(".test.ts") ? [path] : []; });
 }
 
 test("every outbound host literal in backend/src has a privacy row", () => {
@@ -18,6 +18,7 @@ test("every outbound host literal in backend/src has a privacy row", () => {
   for (const file of sourceFiles(join(import.meta.dir, "..", "src"))) {
     for (const match of readFileSync(file, "utf8").matchAll(/https?:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi)) hosts.add(match[1]!.toLowerCase());
   }
+  // Test files are not fetch targets (a fixture URL such as media.example in a unit test needs no row).
   // Not fetch targets: the plist DOCTYPE's DTD reference in service/launchd.ts.
   hosts.delete("www.apple.com");
   for (const host of hosts) expect(declared, `no privacy row names ${host}`).toContain(host);
