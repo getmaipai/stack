@@ -22,13 +22,13 @@ test("fit decisions are said in plain words", () => {
   expect(planStateWord("off")).toBe("Turned off");
 });
 
-test("settings screen hides role switches and secrets, and basic-only unless advanced", () => {
+test("settings screen hides role switches, shows secrets (as a box to paste a new value), and basic-only unless advanced", () => {
   const doc: SettingsDoc = {
     sections: [{ id: "a", label: "A" }, { id: "roles", label: "Roles" }, { id: "empty", label: "Empty" }],
     settings: [setting({ key: "stack.roles.chat.enabled", section: { id: "roles", order: 1 } }), setting({ key: "k1" }), setting({ key: "k2", level: "advanced" }), setting({ key: "k3", secret: true, level: "basic" })],
   };
-  expect(settingsForScreen(doc, false).map((g) => g.items.map((s) => s.key))).toEqual([["k1"]]);
-  expect(settingsForScreen(doc, true).map((g) => g.items.map((s) => s.key))).toEqual([["k1", "k2"]]);
+  expect(settingsForScreen(doc, false).map((g) => g.items.map((s) => s.key))).toEqual([["k1", "k3"]]);
+  expect(settingsForScreen(doc, true).map((g) => g.items.map((s) => s.key))).toEqual([["k1", "k2", "k3"]]);
 });
 
 test("typed numbers are checked against the declared range with a plain sentence", () => {
