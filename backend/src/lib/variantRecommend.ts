@@ -17,7 +17,8 @@ export function recommendText(variants: HfVariant[], roomBytes: number): string 
     enginePreference: ["llama.cpp"],
   });
   if (!selection.chosen) return null;
-  const file = selection.chosen.files[0];
+  const chosenId = selection.chosen.id;
+  const file = complete.find((variant) => variant.id === chosenId)?.files[0];
   if (!file) return null;
   if (selection.reason === "fits") return `Best fit for this machine right now: ${file}.`;
   if (selection.reason === "unknown-size") return `${file} may fit, its size is not published.`;
