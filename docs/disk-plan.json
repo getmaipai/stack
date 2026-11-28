@@ -4,30 +4,30 @@
   "headroom_warn_bytes": 5368709120,
   "gib_bytes": 1073741824,
   "installer": {
-    "p16.required_free_bytes": 48769586930,
-    "p16.minimum_required_free_bytes": 11775072352,
-    "p16.everything_required_free_bytes": 67589509173,
-    "p16.needed_bytes": 41417123232,
+    "p16.required_free_bytes": 49027787215,
+    "p16.minimum_required_free_bytes": 12033272637,
+    "p16.everything_required_free_bytes": 67847709458,
+    "p16.needed_bytes": 41650795815,
     "p16.home_required_free_bytes": 3176323277,
-    "p16.ai_required_free_bytes": 45593263653,
-    "p32.required_free_bytes": 51766323237,
-    "p32.minimum_required_free_bytes": 14771808659,
-    "p32.everything_required_free_bytes": 82286928388,
-    "p32.needed_bytes": 43914403488,
+    "p16.ai_required_free_bytes": 45851463938,
+    "p32.required_free_bytes": 52024523522,
+    "p32.minimum_required_free_bytes": 15030008945,
+    "p32.everything_required_free_bytes": 82545128673,
+    "p32.needed_bytes": 44148076071,
     "p32.home_required_free_bytes": 3176323277,
-    "p32.ai_required_free_bytes": 48589999960,
-    "p64.required_free_bytes": 194934140245,
-    "p64.minimum_required_free_bytes": 37187160053,
-    "p64.everything_required_free_bytes": 312095783574,
-    "p64.needed_bytes": 163570833604,
+    "p32.ai_required_free_bytes": 48848200245,
+    "p64.required_free_bytes": 195192340531,
+    "p64.minimum_required_free_bytes": 37445360338,
+    "p64.everything_required_free_bytes": 312353983859,
+    "p64.needed_bytes": 163804506187,
     "p64.home_required_free_bytes": 3176323277,
-    "p64.ai_required_free_bytes": 191757816969,
-    "p128.required_free_bytes": 227780692841,
-    "p128.minimum_required_free_bytes": 71002279038,
-    "p128.everything_required_free_bytes": 761705415310,
-    "p128.needed_bytes": 190855168239,
+    "p64.ai_required_free_bytes": 192016017254,
+    "p128.required_free_bytes": 228038893126,
+    "p128.minimum_required_free_bytes": 71260479323,
+    "p128.everything_required_free_bytes": 761963615595,
+    "p128.needed_bytes": 191088840822,
     "p128.home_required_free_bytes": 3176323277,
-    "p128.ai_required_free_bytes": 224604369564
+    "p128.ai_required_free_bytes": 224862569849
   },
   "tiers": {
     "p16": {
@@ -98,14 +98,15 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 164139301,
-          "installed_bytes": 289541115,
-          "peak_temp_bytes": 114558982,
+          "download_bytes": 275173373,
+          "installed_bytes": 412179626,
+          "peak_temp_bytes": 225593054,
           "model_ids": [
             "moonshine-tiny-en-int8",
             "silero-vad",
             "pyannote-segmentation-3.0-int8",
             "titanet-small-en",
+            "zipformer-small-audio-tagging-2024-04-15",
             "smart-turn-v3.2"
           ],
           "engines": [],
@@ -529,25 +530,25 @@
         }
       ],
       "default": {
-        "download_bytes": 33835984263,
-        "installed_bytes": 36762318486,
-        "peak_temp_bytes": 4654804746,
-        "needed_bytes": 41417123232,
-        "required_free_bytes": 48769586930
+        "download_bytes": 33947018335,
+        "installed_bytes": 36884956997,
+        "peak_temp_bytes": 4765838818,
+        "needed_bytes": 41650795815,
+        "required_free_bytes": 49027787215
       },
       "minimum": {
-        "download_bytes": 6660753544,
-        "installed_bytes": 8256518074,
-        "peak_temp_bytes": 1867250663,
-        "needed_bytes": 10123768737,
-        "required_free_bytes": 11775072352
+        "download_bytes": 6771787616,
+        "installed_bytes": 8379156585,
+        "peak_temp_bytes": 1978284735,
+        "needed_bytes": 10357441320,
+        "required_free_bytes": 12033272637
       },
       "everything": {
-        "download_bytes": 43425790122,
-        "installed_bytes": 48587253689,
-        "peak_temp_bytes": 9284804746,
-        "needed_bytes": 57872058435,
-        "required_free_bytes": 67589509173
+        "download_bytes": 43536824194,
+        "installed_bytes": 48709892200,
+        "peak_temp_bytes": 9395838818,
+        "needed_bytes": 58105731018,
+        "required_free_bytes": 67847709458
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -650,14 +651,15 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 164139301,
-          "installed_bytes": 289541115,
-          "peak_temp_bytes": 114558982,
+          "download_bytes": 275173373,
+          "installed_bytes": 412179626,
+          "peak_temp_bytes": 225593054,
           "model_ids": [
             "moonshine-tiny-en-int8",
             "silero-vad",
             "pyannote-segmentation-3.0-int8",
             "titanet-small-en",
+            "zipformer-small-audio-tagging-2024-04-15",
             "smart-turn-v3.2"
           ],
           "engines": [],
@@ -1167,25 +1169,25 @@
         }
       ],
       "default": {
-        "download_bytes": 36333264519,
-        "installed_bytes": 39259598742,
-        "peak_temp_bytes": 4654804746,
-        "needed_bytes": 43914403488,
-        "required_free_bytes": 51766323237
+        "download_bytes": 36444298591,
+        "installed_bytes": 39382237253,
+        "peak_temp_bytes": 4765838818,
+        "needed_bytes": 44148076071,
+        "required_free_bytes": 52024523522
       },
       "minimum": {
-        "download_bytes": 9158033800,
-        "installed_bytes": 10753798330,
-        "peak_temp_bytes": 1867250663,
-        "needed_bytes": 12621048993,
-        "required_free_bytes": 14771808659
+        "download_bytes": 9269067872,
+        "installed_bytes": 10876436841,
+        "peak_temp_bytes": 1978284735,
+        "needed_bytes": 12854721576,
+        "required_free_bytes": 15030008945
       },
       "everything": {
-        "download_bytes": 54683725544,
-        "installed_bytes": 60421932812,
-        "peak_temp_bytes": 9780609013,
-        "needed_bytes": 70202541825,
-        "required_free_bytes": 82286928388
+        "download_bytes": 54794759616,
+        "installed_bytes": 60544571323,
+        "peak_temp_bytes": 9891643085,
+        "needed_bytes": 70436214408,
+        "required_free_bytes": 82545128673
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -1348,14 +1350,15 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 538979224,
-          "installed_bytes": 718337644,
-          "peak_temp_bytes": 489398905,
+          "download_bytes": 650013296,
+          "installed_bytes": 840976155,
+          "peak_temp_bytes": 600432977,
           "model_ids": [
             "parakeet-tdt-0.6b-v2-int8",
             "silero-vad",
             "pyannote-segmentation-3.0-int8",
             "titanet-small-en",
+            "zipformer-small-audio-tagging-2024-04-15",
             "smart-turn-v3.2"
           ],
           "engines": [],
@@ -2240,25 +2243,25 @@
         }
       ],
       "default": {
-        "download_bytes": 153146488506,
-        "installed_bytes": 156816533205,
-        "peak_temp_bytes": 6754300399,
-        "needed_bytes": 163570833604,
-        "required_free_bytes": 194934140245
+        "download_bytes": 153257522578,
+        "installed_bytes": 156939171716,
+        "peak_temp_bytes": 6865334471,
+        "needed_bytes": 163804506187,
+        "required_free_bytes": 195192340531
       },
       "minimum": {
-        "download_bytes": 26431347205,
-        "installed_bytes": 28447816188,
-        "peak_temp_bytes": 3049780627,
-        "needed_bytes": 31497596815,
-        "required_free_bytes": 37187160053
+        "download_bytes": 26542381277,
+        "installed_bytes": 28570454699,
+        "peak_temp_bytes": 3160814699,
+        "needed_bytes": 31731269398,
+        "required_free_bytes": 37445360338
       },
       "everything": {
-        "download_bytes": 242631148012,
-        "installed_bytes": 249513065756,
-        "peak_temp_bytes": 12680104666,
-        "needed_bytes": 262193170422,
-        "required_free_bytes": 312095783574
+        "download_bytes": 242742182084,
+        "installed_bytes": 249635704267,
+        "peak_temp_bytes": 12791138738,
+        "needed_bytes": 262426843005,
+        "required_free_bytes": 312353983859
       },
       "measured_on": "2026-10-17",
       "default_selected": [
@@ -2449,14 +2452,15 @@
           "kind": "model",
           "need": "required",
           "selectable": false,
-          "download_bytes": 538979224,
-          "installed_bytes": 718337644,
-          "peak_temp_bytes": 489398905,
+          "download_bytes": 650013296,
+          "installed_bytes": 840976155,
+          "peak_temp_bytes": 600432977,
           "model_ids": [
             "parakeet-tdt-0.6b-v2-int8",
             "silero-vad",
             "pyannote-segmentation-3.0-int8",
             "titanet-small-en",
+            "zipformer-small-audio-tagging-2024-04-15",
             "smart-turn-v3.2"
           ],
           "engines": [],
@@ -3543,25 +3547,25 @@
         }
       ],
       "default": {
-        "download_bytes": 181210605157,
-        "installed_bytes": 184627623006,
-        "peak_temp_bytes": 6227545233,
-        "needed_bytes": 190855168239,
-        "required_free_bytes": 227780692841
+        "download_bytes": 181321639229,
+        "installed_bytes": 184750261517,
+        "peak_temp_bytes": 6338579305,
+        "needed_bytes": 191088840822,
+        "required_free_bytes": 228038893126
       },
       "minimum": {
-        "download_bytes": 54868791750,
-        "installed_bytes": 56785239906,
-        "peak_temp_bytes": 2859991150,
-        "needed_bytes": 59645231056,
-        "required_free_bytes": 71002279038
+        "download_bytes": 54979825822,
+        "installed_bytes": 56907878417,
+        "peak_temp_bytes": 2971025222,
+        "needed_bytes": 59878903639,
+        "required_free_bytes": 71260479323
       },
       "everything": {
-        "download_bytes": 615360412146,
-        "installed_bytes": 623702198168,
-        "peak_temp_bytes": 13262777508,
-        "needed_bytes": 636964975676,
-        "required_free_bytes": 761705415310
+        "download_bytes": 615471446218,
+        "installed_bytes": 623824836679,
+        "peak_temp_bytes": 13373811580,
+        "needed_bytes": 637198648259,
+        "required_free_bytes": 761963615595
       },
       "measured_on": "2026-10-17",
       "default_selected": [
