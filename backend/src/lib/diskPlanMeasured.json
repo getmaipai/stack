@@ -213,6 +213,10 @@
       "download_bytes": 482440461,
       "installed_bytes": 661190513
     },
+    "parakeet-tdt-0.6b-v3-int8": {
+      "download_bytes": 487211443,
+      "installed_bytes": 671341917
+    },
     "zipformer-small-audio-tagging-2024-04-15": {
       "download_bytes": 111034072,
       "installed_bytes": 122638511
