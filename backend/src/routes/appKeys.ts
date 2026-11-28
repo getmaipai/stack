@@ -45,7 +45,7 @@ appKeysRoutes.openapi(createRouteDef, (c) => {
 appKeysRoutes.openapi(revokeRoute, (c) => {
   try {
     const by = sourceOf(c);
-    const record = revokeAppKey(c.req.valid("param").id, by);
+    const record = revokeAppKey(c.req.valid("param").id);
     auditAction("app_key.revoked", by, remoteOf(c), { key_id: record.id, key_name: record.name });
     return c.json(record, 200);
   } catch (e) { return c.json({ error: e instanceof AppKeyError ? e.message : "The key could not be revoked. Try again.", code: e instanceof AppKeyError ? e.code : "app_key_failed" }, 404); }

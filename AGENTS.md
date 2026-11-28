@@ -83,6 +83,14 @@ Open design questions (client keys for other apps, LAN exposure, model
 search beyond the pinned catalog) are decided in
 [docs/plans/admin-and-standalone-2026-11-21.md](docs/plans/admin-and-standalone-2026-11-21.md).
 
+## App keys (Owner-approved: 2026-11-28)
+
+Jesse decided that programs that are not Home may call the Stack's OpenAI-shaped routes with a key an admin makes on the admin
+page (open question 1 of the admin plan). A key is named, scoped to chat, vision, speech or the model list, shown once, stored
+only as an HMAC under a pepper, revocable, and limited in rate and at-once requests so it cannot starve Home. It works on the
+loopback listener only, never on Tailscale or the LAN, and carries none of Home's privileges (no live priority, no full view).
+Home's token path is unchanged. It is not a user: the Stack still knows no people. Detail: `docs/integrations.md`, "App keys".
+
 ## Media segments service (Owner-approved: 2026-11-27)
 
 Jesse ruled in chat that ad and intro skipping is a Stack service and Home only shows it.
@@ -97,7 +105,7 @@ holds subscriptions, who skips what, and every screen. Plan:
 ## Limits (what the Stack is not, and never grows into)
 
 No user interface beyond the admin page above (Home's admin renders the Stack's state
-from its declarations too). No people beyond the one admin, no end-user clients, no key material. Where the Stack listens (this computer, home network or the owner's tailnet) is a household setting, and every request must be authenticated; Tailscale membership or a network address alone never grants access. Details: Home's `docs/plans/stack-hosted-ui-2026-11-25.md`. Today the code still binds loopback only, and the sentences below describe that default. Its first caller is the household's paired Home, on the same machine or on another computer in the same home that reaches this machine's loopback through the SSH link Home's installer sets up, with a key that can open this one port and nothing else. That other computer is on the household's home network or, only when an admin turns it on, on the owner's own Tailscale network; on that path the SSH key and the pinned host key are the authentication, never Tailscale access rules. Those keys belong to the operating system's SSH service and to Home, never to the Stack. The Stack keeps one record per connection, a paired Home or a custom MCP server (name, kind, how it reaches the Stack, state, last used; for a Home the key fingerprint), and can add, test, pause or remove one; it never stores a private key, and an MCP token goes only through its secrets mechanism, never into the record. (Owner-approved 2026-11-25.)
+from its declarations too). No people beyond the one admin, no end-user clients, no key material except the app keys below (and never a private key). Where the Stack listens (this computer, home network or the owner's tailnet) is a household setting, and every request must be authenticated; Tailscale membership or a network address alone never grants access. Details: Home's `docs/plans/stack-hosted-ui-2026-11-25.md`. Today the code still binds loopback only, and the sentences below describe that default. Its first caller is the household's paired Home, on the same machine or on another computer in the same home that reaches this machine's loopback through the SSH link Home's installer sets up, with a key that can open this one port and nothing else. That other computer is on the household's home network or, only when an admin turns it on, on the owner's own Tailscale network; on that path the SSH key and the pinned host key are the authentication, never Tailscale access rules. Those keys belong to the operating system's SSH service and to Home, never to the Stack. The Stack keeps one record per connection, a paired Home or a custom MCP server (name, kind, how it reaches the Stack, state, last used; for a Home the key fingerprint), and can add, test, pause or remove one; it never stores a private key, and an MCP token goes only through its secrets mechanism, never into the record. (Owner-approved 2026-11-25.)
 No second copy of any Home fundamental. No apps, packages or extension
 system. No general model search as an install promise. No brand pitch
 (the public release, standalone installer and docs site are allowed by the exception above). No control of
@@ -125,7 +133,7 @@ one, the Stack owns the engines. This table is that rule applied.
 | Backups | Declaring which state is precious | Taking, encrypting and restoring the backup |
 | Privacy page | The list of its outbound endpoints, as data | The page |
 | Install and service | Its own launchd/systemd unit, exit codes that mean what they say | Installing the Stack as part of installing Home; the watchdog above it |
-| Auth | Loopback only | Everything |
+| Auth | Loopback only; Home's token; the admin session; app keys for other programs (below) | Everything about people |
 | Logs and tracing | Structured logs to its own file, trace ids passed through | Log viewing, retention |
 
 ## Layout

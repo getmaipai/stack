@@ -83,12 +83,11 @@ export function createAppKey(input: { name: string; scopes: readonly string[]; b
 }
 
 /** Revokes a key at once. A key already revoked stays as it was. */
-export function revokeAppKey(id: string, by: "admin" | "home"): AppKeyView {
+export function revokeAppKey(id: string): AppKeyView {
   const row = find(id);
   if (row.revokedAt) return view(row);
   const revokedAt = new Date().toISOString();
   db.update(appKeys).set({ revokedAt }).where(eq(appKeys.id, id)).run();
-  void by;
   return view({ ...row, revokedAt });
 }
 

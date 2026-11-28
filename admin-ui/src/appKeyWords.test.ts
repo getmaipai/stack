@@ -10,6 +10,10 @@ test("the base address is this page's address plus /v1", () => {
   expect(baseUrl("http://127.0.0.1:8770")).toBe("http://127.0.0.1:8770/v1");
   expect(baseUrl("http://127.0.0.1:8770/")).toBe("http://127.0.0.1:8770/v1");
 });
+test("opened over Tailscale, it still shows the local address", () => {
+  expect(baseUrl("http://100.101.102.103:8770")).toBe("http://127.0.0.1:8770/v1");
+  expect(baseUrl("http://localhost:8770")).toBe("http://localhost:8770/v1");
+});
 test("every default scope is a scope the page offers, and labels are plain", () => {
   for (const id of DEFAULT_SCOPES) expect(SCOPE_CHOICES.some((s) => s.id === id)).toBe(true);
   expect(scopeLabel("models")).toBe("Models list");

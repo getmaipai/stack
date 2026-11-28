@@ -14,4 +14,9 @@ export function useWords(lastUsedAt: string | null, count: number, agoWord: (iso
   return `Last used ${agoWord(lastUsedAt)}, ${count} ${count === 1 ? "request" : "requests"} in all.`;
 }
 /** The address a program puts in its "base URL" box: this page's own address plus /v1. */
-export const baseUrl = (origin: string): string => `${origin.replace(/\/+$/, "")}/v1`;
+export function baseUrl(origin: string): string {
+  // Keys work on this computer's own address only. Opened over Tailscale, the page still shows the local address a program should use.
+  let host = "127.0.0.1", port = "";
+  try { const u = new URL(origin); port = u.port; if (["127.0.0.1", "localhost", "[::1]"].includes(u.hostname)) host = u.hostname; } catch { /* the default stays */ }
+  return `http://${host}${port ? `:${port}` : ""}/v1`;
+}

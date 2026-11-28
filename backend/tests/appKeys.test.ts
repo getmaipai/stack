@@ -60,7 +60,7 @@ test("a key the Stack does not know is refused with what to do", async () => {
 
 test("a revoked key is refused, names the key, and raises a health item", async () => {
   const made = createAppKey({ name: "Old laptop", scopes: ["chat"], by: "admin" });
-  revokeAppKey(made.record.id, "admin");
+  revokeAppKey(made.record.id);
   const response = await chat(made.key);
   expect(response.status).toBe(401);
   const body = await code(response);
@@ -231,7 +231,7 @@ test("the admin routes: a name is needed, scopes must be known, names are not re
 test("the same name can be used again once the old key is revoked", () => {
   const first = createAppKey({ name: "Laptop", scopes: ["chat"], by: "admin" });
   expect(() => createAppKey({ name: "Laptop", scopes: ["chat"], by: "admin" })).toThrow(/already/);
-  revokeAppKey(first.record.id, "admin");
+  revokeAppKey(first.record.id);
   expect(createAppKey({ name: "Laptop", scopes: ["chat"], by: "admin" }).record.id).not.toBe(first.record.id);
 });
 

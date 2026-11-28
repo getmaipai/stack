@@ -68,7 +68,10 @@ export async function appKeyAdmit(request: Request): Promise<Admit | null> {
     return { response: refuse(415, "content_type_not_allowed", "The Stack takes JSON (or an uploaded file), not a form or plain-text body. Send the request as application/json.") };
   }
 
-  const verified = verifyAppKey(presented);
+  let verified: ReturnType<typeof verifyAppKey>;
+  try { verified = verifyAppKey(presented); } catch {
+    return { response: refuse(503, "app_key_unavailable", "The Stack could not check the app key (its key folder or database could not be read), so it did not run the request. Free some disk space or fix the permissions of the Stack's data folder, then restart the Stack.") };
+  }
   if (!verified.ok && verified.code === "app_key_unknown") {
     return no(refuse(401, "app_key_unknown", `The Stack does not know this app key, so it did not run the request. Check that the whole key was copied, or ${MAKE_NEW}.`, { "www-authenticate": "Bearer" }), null, "app_key_unknown");
   }
