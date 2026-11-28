@@ -23,7 +23,7 @@ VAD_SHA="9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
 PIDS=()
 WORKER_PID=""
 cleanup() {
-  if [ -n "$WORKER_PID" ]; then kill "$WORKER_PID" 2>/dev/null || true; wait "$WORKER_PID" 2>/dev/null || true; fi
+  if [ -n "$WORKER_PID" ]; then pkill -P "$WORKER_PID" 2>/dev/null || true; kill "$WORKER_PID" 2>/dev/null || true; wait "$WORKER_PID" 2>/dev/null || true; fi
   for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
   if [ "${KEEP_DATA:-0}" != "1" ]; then rm -rf "$DATA"; echo "scratch data removed"; fi
 }
@@ -85,8 +85,10 @@ except OSError: raise SystemExit(1)
 finally: s.close()
 PY
   then echo "port $port is in use; choose another base PORT=" >&2; exit 1; fi
+  # The worker exits when its stdin closes, so hand it a pipe that stays open.
+  rm -f "$DATA/stdin-$label"; mkfifo "$DATA/stdin-$label"; exec 9<>"$DATA/stdin-$label"
   start="$(python3 -c 'import time;print(time.time())')"
-  (cd backend && bun run src/index.ts speech-worker --role stt --port "$port" --model "$PWD/../$model" --vad "$PWD/../$DATA/silero_vad.onnx" --threads 2) >"$DATA/$label-worker.log" 2>&1 &
+  (cd backend && bun run src/index.ts speech-worker --role stt --port "$port" --model "$model" --vad "$DATA/silero_vad.onnx" --threads 2) <&9 >"$DATA/$label-worker.log" 2>&1 &
   WORKER_PID=$!
   PIDS+=("$WORKER_PID")
   for _ in $(seq 1 120); do curl -sf "http://127.0.0.1:$port/health" >/dev/null && break; sleep 0.25; done
@@ -110,14 +112,15 @@ PY
     done
     prev="$(cat "$DATA/$label-rss-peak" 2>/dev/null || echo 0)"; [ "$rss" -le "$prev" ] || echo "$rss" >"$DATA/$label-rss-peak"
     duration="$(afinfo "$clip" 2>/dev/null | awk '/estimated duration/ {print $3; exit}')"; duration="${duration:-0}"
-    printf '%s\n' "$response" | bun -e 'import { wordErrorRate } from "./backend/src/speech/wer.ts"; let raw=""; for await (const chunk of Bun.stdin.stream()) raw += new TextDecoder().decode(chunk); const d=JSON.parse(raw); console.log(JSON.stringify({ transcript:d.text ?? "", wer:wordErrorRate(Bun.argv[2]!,d.text ?? "") }));' -- "$reference" >"$DATA/$label-one.json"
+    printf '%s\n' "$response" | bun -e 'import { wordErrorRate } from "./backend/src/speech/wer.ts"; let raw=""; for await (const chunk of Bun.stdin.stream()) raw += new TextDecoder().decode(chunk); const d=JSON.parse(raw); console.log(JSON.stringify({ transcript:d.text ?? "", wer:wordErrorRate(Bun.argv.at(-1)!,d.text ?? "") }));' -- "$reference" >"$DATA/$label-one.json"
     bun -e 'import { readFileSync, appendFileSync } from "node:fs"; const s=JSON.parse(readFileSync(process.argv[1],"utf8")); const row={id:process.argv[2],lang:process.argv[3],reference:process.argv[4],transcript:s.transcript,wer:s.wer,wallSeconds:Number(process.argv[5]),audioSeconds:Number(process.argv[6]),rtf:Number(process.argv[5])/Number(process.argv[6]),rssKb:Number(process.argv[7])}; appendFileSync(process.argv[8],JSON.stringify(row)+"\n");' "$DATA/$label-one.json" "$id" "$lang" "$reference" "$elapsed" "$duration" "$rss" "$DATA/$label-results.ndjson"
   done < <(python3 - "$SENTENCES" <<'PY'
 import json,sys
 for r in json.load(open(sys.argv[1])): print(r["id"],r["lang"],r["text"],sep="\t")
 PY
   )
-  kill "$WORKER_PID" 2>/dev/null || true; wait "$WORKER_PID" 2>/dev/null || true; WORKER_PID=""
+  exec 9>&-
+  pkill -P "$WORKER_PID" 2>/dev/null || true; kill "$WORKER_PID" 2>/dev/null || true; wait "$WORKER_PID" 2>/dev/null || true; WORKER_PID=""
 done
 python3 - "$DATA" "$OUT" "$(cat "$DATA/v2-rss-peak" 2>/dev/null || echo 0)" "$(cat "$DATA/v3-rss-peak" 2>/dev/null || echo 0)" <<'PY'
 import json,math,os,sys
