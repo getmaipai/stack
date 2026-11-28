@@ -16,7 +16,7 @@ import { clearModelsForTests, installCatalogModel, packageDirectoryName, removeM
 import { bundledClipBase64, componentModel, probeReplyOk, probeRequest, resetSupervisorForTests, restartRole, scriptedProcess, selectedModel, setSupervisorFactoryForTests, speechWorkerCommand } from "@/lib/supervisor";
 import { decodeWave, frameToSamples, resampleLinear, rms, toRecognizerRate } from "@/speech/audio";
 import { isLikelySpeech, SttSession, type Transcriber, type VoiceDetector } from "@/speech/session";
-import { SESSION_PATH, startSpeechServer, TRANSCRIBE_PATH } from "@/speech/server";
+import { SESSION_PATH, SOUND_TAGS_PATH, startSpeechServer, TRANSCRIBE_PATH } from "@/speech/server";
 import { parseWorkerArgs } from "@/speech/worker";
 import { loadParakeet, missingParakeetFiles, PARAKEET_FILES, recognizerKind } from "@/speech/sherpa";
 import { SttWireEvent } from "@maipai/spec/stack/ts/stt-wire-event.js";
@@ -164,7 +164,8 @@ test("a burst under 0.2 s and an annotation-only transcript are no_speech, and a
 // ---- the worker's server ---------------------------------------------------
 
 const fixedEmbedding = { dim: 3, embed: (samples: Float32Array) => [samples[0] ?? 0, 0.25, -0.5] };
-const speechServer = startSpeechServer({ port: 0, build: "sherpa-onnx-node-test", modelPath: "/models/sherpa-onnx-moonshine-tiny-en-int8", transcriber: scriptedTranscriber((samples) => samples.length > 16_000 ? SENTENCE : ""), detector: energyDetector, speakerEmbedder: () => fixedEmbedding, session: { silenceTimeoutS: 0.3, partialIntervalS: 60 } });
+let soundTaggerCalls = 0;
+const speechServer = startSpeechServer({ port: 0, build: "sherpa-onnx-node-test", modelPath: "/models/sherpa-onnx-moonshine-tiny-en-int8", transcriber: scriptedTranscriber((samples) => samples.length > 16_000 ? SENTENCE : ""), detector: energyDetector, speakerEmbedder: () => fixedEmbedding, soundTagger: () => ({ sampleRate: 16_000, compute: () => { soundTaggerCalls++; return [{ label: "alarm", score: 0.9 }]; } }), session: { silenceTimeoutS: 0.3, partialIntervalS: 60 } });
 const speechBase = `http://127.0.0.1:${speechServer.port}`;
 afterAll(() => speechServer.stop(true));
 
@@ -182,6 +183,27 @@ test("the worker wears llama-server's identity shape and transcribes the clip fr
   expect(probeReplyOk("stt", { status: 200, body })).toBe(true);
   expect(probeReplyOk("stt", { status: 200, body: { text: "" } })).toBe(false);
   expect((await fetch(`${speechBase}${TRANSCRIBE_PATH}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio_base64: Buffer.from("not a wav").toString("base64") }) })).status).toBe(400);
+});
+
+test("sound tags route caps duration before reading and validates rate, alignment, and successful tags", async () => {
+  const base = `${speechBase}${SOUND_TAGS_PATH}`;
+  const headers = { "content-type": "audio/pcm;format=s16le;channels=1" };
+  soundTaggerCalls = 0;
+  const declared = await fetch(`${base}?sampleRate=16000`, { method: "POST", headers: { ...headers, "content-length": "320001" }, body: new Uint8Array(320001) });
+  expect(declared.status).toBe(413);
+  expect(soundTaggerCalls).toBe(0);
+  const actual = await fetch(`${base}?sampleRate=16000`, { method: "POST", headers, body: new Uint8Array(320002) });
+  expect(actual.status).toBe(413);
+  expect(soundTaggerCalls).toBe(0);
+  const samples = new Uint8Array(32_000);
+  for (let i = 0; i < samples.length; i += 2) { samples[i] = 0; samples[i + 1] = 0x20; }
+  const success = await fetch(`${base}?sampleRate=16000`, { method: "POST", headers, body: samples });
+  expect(success.status).toBe(200);
+  expect(await success.json()).toEqual({ tags: [{ label: "alarm", score: 0.9 }] });
+  expect((await fetch(`${base}?sampleRate=7999`, { method: "POST", headers, body: samples })).status).toBe(400);
+  expect((await fetch(`${base}?sampleRate=48001`, { method: "POST", headers, body: samples })).status).toBe(400);
+  expect((await fetch(`${base}?sampleRate=16000`, { method: "POST", headers, body: new Uint8Array([0]) })).status).toBe(400);
+  expect(soundTaggerCalls).toBe(1);
 });
 
 test("speaker embedding returns deterministic extractor dimensions and never logs audio or vectors", async () => {
