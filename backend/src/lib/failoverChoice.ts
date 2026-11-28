@@ -11,7 +11,7 @@ export type FailoverChoice = {
   serve: string | null;
   switched: boolean;
   notice: string | null;
-  skipped: Array<{ model: string; why: "unhealthy" | "does-not-fit" }>;
+  skipped: Array<{ model: string; why: "unhealthy" | "health-unknown" | "does-not-fit" }>;
 };
 
 export function chooseServing(input: FailoverChoiceInput): FailoverChoice {
@@ -24,6 +24,10 @@ export function chooseServing(input: FailoverChoiceInput): FailoverChoice {
 
     if (input.health[model] === "unhealthy") {
       skipped.push({ model, why: "unhealthy" });
+      continue;
+    }
+    if (input.health[model] !== "healthy") {
+      skipped.push({ model, why: "health-unknown" });
       continue;
     }
     if (input.fits?.[model] === false) {

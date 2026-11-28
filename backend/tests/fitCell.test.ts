@@ -32,3 +32,11 @@ test("an estimate is labelled; a row with no peak or turned off has no cell", ()
   expect(fitCell(row({ peak_bytes: undefined }), budget)).toBeNull();
   expect(fitCell(row({ state: "off" }), budget)).toBeNull();
 });
+
+test("an unavailable row with a known peak shows need and overage while preserving its refusal", () => {
+  const refused = row({ role: "image", state: "unavailable", peak_bytes: 9 * GB, fit: "refused", reason: "no generator slot fits" });
+  const cell = fitCell(refused, budget);
+  expect(cell?.headline).toBe("Needs 9.0 GB, 1.0 GB over");
+  expect(refused.reason).toBe("no generator slot fits");
+  expect(fitCell(row({ state: "unavailable", peak_bytes: undefined }), budget)).toBeNull();
+});

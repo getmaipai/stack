@@ -19,12 +19,12 @@ export interface FitCellData {
   limitPct: number;
 }
 
-/** A row's cell, or null when the row has nothing to say (turned off, unavailable, or no peak known). */
+/** A row's cell, or null when the row has nothing to say (turned off or no peak known). */
 export function fitCell(role: PlanRole, budget: Plan["budget"]): FitCellData | null {
-  if (role.state === "off" || role.state === "unavailable" || !role.peak_bytes) return null;
+  if (role.state === "off" || !role.peak_bytes) return null;
   const need = role.peak_bytes;
   // A resident row's memory is already in `resident_bytes`; an on-demand one is loaded on top of it.
-  const loadsOnTop = role.state === "on_demand" || role.state === "installed";
+  const loadsOnTop = role.state === "on_demand" || role.state === "installed" || role.state === "unavailable";
   const headroom = loadsOnTop ? budget.room_bytes - need : budget.room_bytes;
   const cap = budget.resident_cap_bytes;
   const end = (loadsOnTop ? budget.resident_bytes + need : Math.max(budget.resident_bytes, need));

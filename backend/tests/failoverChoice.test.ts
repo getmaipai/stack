@@ -29,9 +29,13 @@ describe("chooseServing", () => {
     });
   });
 
-  it("treats unknown or missing health as usable", () => {
-    expect(chooseServing({ primary: "p", fallbacks: [], health: { p: "unknown" } })).toEqual({ serve: "p", switched: false, notice: null, skipped: [] });
-    expect(chooseServing({ primary: "p", fallbacks: ["f"], health: { p: "unhealthy" } }).serve).toBe("f");
+  it("skips unknown or missing health and emits no success notice", () => {
+    expect(chooseServing({ primary: "p", fallbacks: [], health: { p: "unknown" } })).toEqual({
+      serve: null, switched: true, notice: "No model is answering for this role.", skipped: [{ model: "p", why: "health-unknown" }],
+    });
+    expect(chooseServing({ primary: "p", fallbacks: ["f"], health: { p: "unhealthy" } })).toEqual({
+      serve: null, switched: true, notice: "No model is answering for this role.", skipped: [{ model: "p", why: "unhealthy" }, { model: "f", why: "health-unknown" }],
+    });
   });
 
   it("ignores duplicate models after their first occurrence", () => {

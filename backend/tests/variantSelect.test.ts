@@ -22,10 +22,19 @@ describe("selectVariant", () => {
     expect(out.chosen?.id).toBe("y");
   });
 
-  test("a pin wins outright, even over budget", () => {
-    const out = selectVariant([v("a", "llama", 4), v("huge", "llama", 40)], { ...base, pin: "huge" });
+  test("a valid pin wins", () => {
+    const out = selectVariant([v("a", "llama", 4), v("pinned", "mlx", 6)], { ...base, pin: "pinned" });
     expect(out.reason).toBe("pinned");
-    expect(out.chosen?.id).toBe("huge");
+    expect(out.chosen?.id).toBe("pinned");
+  });
+
+  test("an unsupported or over-budget pin is reported explicitly and is not chosen", () => {
+    const unsupported = selectVariant([v("pin", "cuda", 4)], { ...base, pin: "pin" });
+    expect(unsupported.chosen).toBeNull();
+    expect(unsupported.reason).toBe("pinned-unsupported-engine");
+    const over = selectVariant([v("pin", "llama", 40)], { ...base, pin: "pin" });
+    expect(over.chosen).toBeNull();
+    expect(over.reason).toBe("pinned-over-budget");
   });
 
   test("an unknown size never beats a known fit", () => {

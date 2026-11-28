@@ -18,22 +18,24 @@ export interface SelectInput {
 
 export interface Selection {
   chosen: Variant | null
-  reason: "pinned" | "fits" | "unknown-size" | "nothing-fits" | "no-engine"
+  reason: "pinned" | "pinned-unsupported-engine" | "pinned-over-budget" | "pinned-unknown-size" | "fits" | "unknown-size" | "nothing-fits" | "no-engine"
   ranked: Array<{ variant: Variant; fit: "fits" | "unknown" | "over" }>
 }
 
 type Fit = "fits" | "unknown" | "over"
 
 export function selectVariant(variants: Variant[], input: SelectInput): Selection {
-  // A pin wins outright, even if it is over budget or on an unsupported engine.
+  const supported = new Set(input.supportedEngines)
   if (input.pin !== undefined) {
     const pinned = variants.find((variant) => variant.id === input.pin)
     if (pinned) {
-      return { chosen: pinned, reason: "pinned", ranked: [] }
+      if (!supported.has(pinned.engine)) return { chosen: null, reason: "pinned-unsupported-engine", ranked: [{ variant: pinned, fit: "over" }] }
+      if (pinned.sizeBytes !== null && pinned.sizeBytes > input.roomBytes) return { chosen: null, reason: "pinned-over-budget", ranked: [{ variant: pinned, fit: "over" }] }
+      if (pinned.sizeBytes === null) return { chosen: null, reason: "pinned-unknown-size", ranked: [{ variant: pinned, fit: "unknown" }] }
+      return { chosen: pinned, reason: "pinned", ranked: [{ variant: pinned, fit: "fits" }] }
     }
   }
 
-  const supported = new Set(input.supportedEngines)
   const remaining = variants.filter((variant) => supported.has(variant.engine))
   if (remaining.length === 0) {
     return { chosen: null, reason: "no-engine", ranked: [] }
