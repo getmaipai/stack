@@ -4,6 +4,8 @@
 // card. Anything unreadable comes back null with a reason, never a guess.
 import { hfUrl, huggingFaceFetch, resolveHuggingFace } from "@/lib/hf";
 import { runGgufParser, VERIFIED_ARCHITECTURES, type GgufShape } from "@/lib/fitPlan";
+import { getGovernorStatus } from "@/lib/governor";
+import { recommendText, roomFromGovernor } from "@/lib/variantRecommend";
 
 export interface InspectedSampling { temperature?: number; top_p?: number; top_k?: number; min_p?: number; presence_penalty?: number }
 export interface InspectResult {
@@ -51,7 +53,12 @@ export async function inspectModel(input: { source: string; file?: string }): Pr
   try { resolution = await resolveHuggingFace(parsed.repo, { revision: parsed.revision }); } catch { throw new InspectRefusal(`${parsed.repo} could not be read on huggingface.co. Check the link and try again.`); }
   const ggufs = resolution.files.filter((entry) => entry.name.toLowerCase().endsWith(".gguf"));
   const file = parsed.file ? resolution.files.find((entry) => entry.name === parsed.file) : ggufs.length === 1 ? ggufs[0] : undefined;
-  if (!file) throw new InspectRefusal(parsed.file ? `${parsed.file} is not in ${parsed.repo}. Check the file name.` : `${parsed.repo} has ${ggufs.length} model files. Paste the link to the one you want.`);
+  if (!file) {
+    if (parsed.file) throw new InspectRefusal(`${parsed.file} is not in ${parsed.repo}. Check the file name.`);
+    const prefix = `${parsed.repo} has ${ggufs.length} model files. Paste the link to the one you want.`;
+    const recommendation = recommendText(resolution.variants, roomFromGovernor(getGovernorStatus()));
+    throw new InspectRefusal(recommendation ? `${prefix} ${recommendation}` : prefix);
+  }
   if (!file.name.toLowerCase().endsWith(".gguf")) throw new InspectRefusal("Only GGUF model files can be added. Pick a .gguf file.");
   if (resolution.gated) throw new InspectRefusal(`${parsed.repo} is gated and needs a Hugging Face login, which MaiPai does not use. Pick an open model.`);
   const estimate = await runGgufParser({ target: { url: file.url }, contextTokens: 4096, kvCacheType: "q8_0", gpuLayers: "all" });
