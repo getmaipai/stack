@@ -13,6 +13,7 @@ import { decodeWave, frameToSamples, toRecognizerRate, WaveFormatError } from "@
 import { SttSession, type SttSessionConfig, type Transcriber, type VoiceDetector } from "@/speech/session";
 import type { SttWireEvent } from "@maipai/spec/stack/ts/stt-wire-event.js";
 import { tagSounds, type AudioTagger } from "@/speech/soundTagging";
+import { mapTagsToEvents } from "@/speech/soundEvents";
 
 export const SESSION_PATH = "/v1/audio/transcriptions/stream";
 export const TRANSCRIBE_PATH = "/v1/audio/transcriptions";
@@ -22,6 +23,8 @@ export const TRANSCRIBE_SPANS_PATH = "/v1/audio/transcriptions/detect-spans";
 export const DIARIZE_PATH = "/v1/audio/transcriptions/diarize";
 export const SPEAKER_EMBEDDING_PATH = "/v1/audio/speaker-embedding";
 export const SOUND_TAGS_PATH = "/v1/audio/tags";
+export const SOUND_EVENTS_PATH = "/v1/audio/events";
+export const SOUND_EVENTS_MAX_DURATION_SECONDS = 4;
 export const SOUND_TAGS_MAX_DURATION_SECONDS = 10;
 export const SOUND_TAGS_MIN_SAMPLE_RATE = 8_000;
 export const SOUND_TAGS_MAX_SAMPLE_RATE = 48_000;
@@ -155,21 +158,33 @@ export function startSpeechServer(options: SpeechServerOptions) {
           return jsonResponse({ error: "Speakers could not be detected in this audio." }, 500);
         }
       }
-      if (request.method === "POST" && url.pathname === SOUND_TAGS_PATH) {
+      if (request.method === "POST" && (url.pathname === SOUND_TAGS_PATH || url.pathname === SOUND_EVENTS_PATH)) {
+        const isEvents = url.pathname === SOUND_EVENTS_PATH;
+        const maxDuration = isEvents ? SOUND_EVENTS_MAX_DURATION_SECONDS : SOUND_TAGS_MAX_DURATION_SECONDS;
         const sampleRate = Number(url.searchParams.get("sampleRate"));
         const type = request.headers.get("content-type") ?? "";
-        if (!Number.isInteger(sampleRate) || sampleRate < SOUND_TAGS_MIN_SAMPLE_RATE || sampleRate > SOUND_TAGS_MAX_SAMPLE_RATE || !type.startsWith("audio/pcm") || !/format=s16le/.test(type) || !/channels=1/.test(type)) return jsonResponse({ error: "Send raw mono PCM16 audio and a sampleRate between 8000 and 48000 Hz." }, 400);
-        const maxBodyBytes = sampleRate * SOUND_TAGS_MAX_DURATION_SECONDS * 2;
+        let bytes: Uint8Array;
+        if (type.startsWith("application/json") && isEvents) {
+          const body = await request.json().catch(() => null) as { audio_base64?: unknown } | null;
+          if (typeof body?.audio_base64 !== "string" || !Number.isInteger(sampleRate) || sampleRate < SOUND_TAGS_MIN_SAMPLE_RATE || sampleRate > SOUND_TAGS_MAX_SAMPLE_RATE) return jsonResponse({ error: "Send audio_base64 and a sampleRate between 8000 and 48000 Hz." }, 400);
+          bytes = Uint8Array.from(Buffer.from(body.audio_base64, "base64"));
+        } else {
+          if (!Number.isInteger(sampleRate) || sampleRate < SOUND_TAGS_MIN_SAMPLE_RATE || sampleRate > SOUND_TAGS_MAX_SAMPLE_RATE || !type.startsWith("audio/pcm") || !/format=s16le/.test(type) || !/channels=1/.test(type)) return jsonResponse({ error: "Send raw mono PCM16 audio and a sampleRate between 8000 and 48000 Hz." }, 400);
+          bytes = new Uint8Array(await request.arrayBuffer());
+        }
+        if (!Number.isInteger(sampleRate) || sampleRate < SOUND_TAGS_MIN_SAMPLE_RATE || sampleRate > SOUND_TAGS_MAX_SAMPLE_RATE) return jsonResponse({ error: "Send raw mono PCM16 audio and a sampleRate between 8000 and 48000 Hz." }, 400);
+        const maxBodyBytes = sampleRate * maxDuration * 2;
         const contentLength = request.headers.get("content-length");
-        if (contentLength !== null && Number(contentLength) > maxBodyBytes) return jsonResponse({ error: `Audio must be ${SOUND_TAGS_MAX_DURATION_SECONDS} seconds or shorter.` }, 413);
-        const bytes = new Uint8Array(await request.arrayBuffer());
-        if (bytes.byteLength > maxBodyBytes || bytes.byteLength > SOUND_TAGS_MAX_BODY_BYTES) return jsonResponse({ error: `Audio must be ${SOUND_TAGS_MAX_DURATION_SECONDS} seconds or shorter.` }, 413);
+        if (contentLength !== null && Number(contentLength) > maxBodyBytes + (type.startsWith("application/json") ? 128 : 0)) return jsonResponse({ error: `Audio must be ${maxDuration} seconds or shorter.` }, 413);
+        if (bytes.byteLength > maxBodyBytes || bytes.byteLength > (isEvents ? SOUND_EVENTS_MAX_DURATION_SECONDS : SOUND_TAGS_MAX_DURATION_SECONDS) * SOUND_TAGS_MAX_SAMPLE_RATE * 2) return jsonResponse({ error: `Audio must be ${maxDuration} seconds or shorter.` }, 413);
         if (bytes.length % 2) return jsonResponse({ error: "PCM16 audio must contain whole samples." }, 400);
         const tagger = options.soundTagger?.() ?? null;
         if (!tagger) return jsonResponse({ error: "Sound tagging is not installed.", code: "component_not_ready" }, 404);
         const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), samples = new Float32Array(bytes.length / 2);
         for (let i = 0; i < samples.length; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
-        return jsonResponse({ tags: tagSounds(samples, sampleRate, tagger) });
+        const tags = tagSounds(samples, sampleRate, tagger);
+        if (isEvents) return jsonResponse({ events: mapTagsToEvents(tags) });
+        return jsonResponse({ tags });
       }
       if (request.method === "POST" && url.pathname === SPEAKER_EMBEDDING_PATH) {
         const started = performance.now();

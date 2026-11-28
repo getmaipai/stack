@@ -16,6 +16,15 @@ export type PrivacyRow = z.infer<typeof PrivacyRowSchema>;
 
 export const PRIVACY_ROWS: PrivacyRow[] = [
   {
+    id: "sound-events",
+    what: "Classifying a short audio window into the closed sound-event list",
+    when: "Only when the caller posts to POST /v1/audio/events; at most four seconds per request",
+    carries: "Raw mono PCM16 audio is classified locally; audio and events stay in memory for the request and nothing is retained",
+    receiver: "The local Stack speech worker on this computer",
+    setting: null,
+    hosts: [],
+  },
+  {
     id: "catalog-index",
     what: "Checking for engine and model updates",
     when: "Only when Home has switched update checks on, then when Home's schedule calls the check",

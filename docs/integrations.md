@@ -100,6 +100,7 @@ OpenAI-shaped, so an existing client library works unchanged.
 | `POST /v1/embeddings` | `embed` | embeddings |
 | `POST /v1/audio/transcriptions` | `stt` | transcription (multipart audio) |
 | `POST /v1/audio/speaker-embedding` | `stt` | short-clip speaker embedding |
+| `POST /v1/audio/events` | `stt` | raw mono PCM16 sound-event classification, at most 4 seconds; send `?sampleRate=8000..48000`, content type `audio/pcm;format=s16le;channels=1`; returns closed-list `{ events: [{ class, score }] }`; audio and results are not stored |
 | `POST /v1/audio/mouth-timings` | `stt` | one sentence of WAV speech in, recognizer word timings out |
 | `POST /v1/audio/transcriptions/jobs` | `stt` | long-file transcription job (JSON/base64 audio or video, up to 3 hours) |
 | `POST /v1/audio/speech` | `tts` | speech; phrase-level streaming and cancel |
@@ -368,6 +369,7 @@ own. The rows the Stack declares:
 | Fetching a video or audio file from a link a person pasted, or from a source a person follows (`media.fetch`, yt-dlp) | Only when Home submits a `media.fetch` job: when a person pastes a link, then each time a followed source is polled (its own interval, a few items per check, a pause between requests). A site that answers with too many requests or a sign-in wall four times is left alone for 30 minutes; only a person's own request goes through while it rests | A request to the site the person named, as a browser's tool would make it: the link, one ordinary client identity, and cookies only when the owner added a cookies file in Home. Nothing about the household or any person | The site named by the link, straight from this computer; the Stack has no list of sites and never contacts one by itself | none: per source in Home |
 | Downloading the pinned ffmpeg and ffprobe builds | Only the first time a media job needs them, or when the Stack's release pins a new build (there is no version check) | The name of the pinned archive; nothing about the household | GitHub releases of jellyfin-ffmpeg, straight from this computer | none |
 | The voice engine asking Hugging Face for its weights and voices | Each time the voice engine starts (it asks for the voice-cloning weights, and reads the pinned copy on this computer when the ask is refused without a token), and when a person picks a voice the computer does not hold yet | The file's name, and the Hugging Face token from settings when one is set, so the cloning weights can be read | Hugging Face, straight from this computer | `stack.engines.tts.hf_token` |
+| Classifying a sound-event audio window | Only when a caller posts at most four seconds to `POST /v1/audio/events` | Raw mono PCM16 is classified locally; audio and results remain in request memory and are discarded | The local Stack speech worker; nothing leaves this computer | none |
 
 Nothing else leaves the machine. Adding or changing an outbound
 endpoint adds or changes a row here and in the route in the same

@@ -33,7 +33,7 @@ import { EndpointModelMissingError, scoreEndpoint } from "@/speech/endpoint";
 import { deliverSpeech } from "@/lib/ttsDelivery";
 import { ttsDelivery, ttsDeliveryConfig } from "@/lib/ttsDeliveryState";
 import { WaveFormatError } from "@/speech/audio";
-import { SPEAKER_EMBEDDING_PATH } from "@/speech/server";
+import { SOUND_EVENTS_MAX_DURATION_SECONDS, SOUND_EVENTS_PATH, SPEAKER_EMBEDDING_PATH } from "@/speech/server";
 import { IMAGE_FAMILIES } from "@/images/models";
 
 const MessageSchema = z.object({ role: z.string(), content: z.unknown() }).passthrough();
@@ -50,6 +50,7 @@ const TranscriptionFormSchema = z.object({
 });
 const TranscriptionResponseSchema = z.object({ text: z.string() });
 const SpeakerEmbeddingResponseSchema = z.object({ model_id: z.string(), dim: z.number().int().positive(), embedding: z.array(z.number()) });
+const SoundEventsResponseSchema = z.object({ events: z.array(z.object({ class: z.string(), score: z.number() })) });
 // The speech form is spec/voice's (`text`, an optional `voice_url`
 // naming a preset or a voice URL); `model` and `timeout_ms` ride as
 // text fields and `model` is optional because this path serves one role.
@@ -286,6 +287,20 @@ const speakerEmbeddingRoute = createRoute({
     503: { content: { "application/json": { schema: z.object({ error: z.string(), code: z.string() }) } }, description: "Install titanet-small-en from Home's Engines page." },
   },
 });
+const soundEventsRoute = createRoute({
+  method: "post", path: "/audio/events", tags: ["Roles"], summary: "Classify a short raw PCM audio window into closed sound events",
+  request: {
+    body: { content: { "audio/pcm": { schema: z.string().openapi({ type: "string", format: "binary" }) } } },
+    query: z.object({ sampleRate: z.coerce.number().int().min(8_000).max(48_000) }),
+  },
+  responses: {
+    200: { content: { "application/json": { schema: SoundEventsResponseSchema } }, description: "Closed sound events only; the audio and result are kept in memory for this request." },
+    400: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "Invalid PCM16 mono audio or sample rate." },
+    413: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "Audio exceeds four seconds." },
+    404: { content: { "application/json": { schema: z.object({ error: z.string(), code: z.literal("component_not_ready") }) } }, description: "Install the sound model on the Engines page." },
+    503: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "The speech worker is busy or unavailable." },
+  },
+});
 const endpointRoute = createRoute({ method: "post", path: "/audio/endpoint", tags: ["Roles"], summary: "End-of-turn check (one WAV of the utterance so far; the last 8 seconds are read)", request: { body: { content: { "multipart/form-data": { schema: z.object({ file: z.custom<File>((value) => value instanceof File, "A WAV file in the `file` field.").openapi({ type: "string", format: "binary" }) }) } } } }, responses: { 200: { content: { "application/json": { schema: SttEndpointResponse } }, description: "SttEndpointResponse: whether the speaker has finished, with the probability." }, 400: { content: { "application/json": { schema: z.object({ error: z.string() }) } }, description: "The file is not a 16-bit PCM WAV." }, 503: { content: { "application/json": { schema: z.object({ error: z.string(), reason: z.string() }) } }, description: "The end-of-turn model is not installed." } } });
 const speechRoute = createRoute({ method: "post", path: "/audio/speech", tags: ["Roles"], summary: "Text to speech (spec/voice's form, the WAV streamed as it is generated)", request: { body: { content: { "multipart/form-data": { schema: SpeechFormSchema } } } }, responses: { ...inferenceResponses, 400: { content: { "application/json": { schema: z.union([UnknownModelSchema, VoiceRefusedSchema]) } }, description: "Unknown role or model id, or a voice the Stack cannot pin and verify (reason voice-not-pinnable)." }, 409: { content: { "application/json": { schema: z.union([UnverifiedModelSchema, VoiceRefusedSchema]) } }, description: "The named model's provenance is incomplete, or the voice needs voice cloning that is off or has no token (reason voice-cloning-unavailable)." }, 200: { content: { "audio/wav": { schema: z.string().openapi({ format: "binary" }) } }, description: "TtsSynthesizeResult: a chunked audio/wav body whose header carries the format and a placeholder data size, with the identity headers. Abort the request to cancel." } } });
 const ImageResponseSchema = z.object({ created: z.number().int(), job: z.string(), data: z.array(z.record(z.string(), z.unknown())) });
@@ -339,6 +354,24 @@ v1Routes.openapi(speakerEmbeddingRoute, async (c) => {
   } catch (error) {
     if (error instanceof EngineUnavailableError) { const result = noEngineResponse("stt", error.reason); return jsonReply(c, result.body, result.status, result.headers) as never; }
     return jsonReply(c, { error: "The speaker embedding engine is not ready. Start the stt engine, then try again." }, 503, identityHeaders(null)) as never;
+  }
+});
+v1Routes.openapi(soundEventsRoute, async (c) => {
+  const started = performance.now();
+  const sampleRate = Number(c.req.query("sampleRate"));
+  const contentType = c.req.header("content-type") ?? "";
+  if (!Number.isInteger(sampleRate) || sampleRate < 8_000 || sampleRate > 48_000 || !/^audio\/pcm;format=s16le;channels=1(?:;|$)/.test(contentType)) return jsonReply(c, { error: "Send raw mono PCM16 audio and a sampleRate between 8000 and 48000 Hz." }, 400, identityHeaders(null)) as never;
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (bytes.length % 2) return jsonReply(c, { error: "PCM16 audio must contain whole samples." }, 400, identityHeaders(null)) as never;
+  if (bytes.byteLength > sampleRate * SOUND_EVENTS_MAX_DURATION_SECONDS * 2) return jsonReply(c, { error: "Audio must be four seconds or shorter." }, 413, identityHeaders(null)) as never;
+  try {
+    const result = await requestRole("stt", SOUND_EVENTS_PATH, { sampleRate, audio_base64: Buffer.from(bytes).toString("base64") }, c.req.raw.signal);
+    console.log(`audio-events samples=${bytes.length / 2} ms=${Math.round(performance.now() - started)} status=${result.status}`);
+    return jsonReply(c, result.body, result.status, result.headers) as never;
+  } catch (error) {
+    console.log(`audio-events samples=${bytes.length / 2} ms=${Math.round(performance.now() - started)} status=failed`);
+    if (error instanceof EngineUnavailableError) return jsonReply(c, { error: "The speech worker is busy. Try again shortly." }, 503, identityHeaders(null)) as never;
+    return jsonReply(c, { error: "The speech worker is not ready." }, 503, identityHeaders(null)) as never;
   }
 });
 v1Routes.openapi(endpointRoute, async (c) => {
