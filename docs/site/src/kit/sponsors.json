@@ -1,0 +1,5 @@
+{
+  "note": "Shared by the Home and Stack sites. Add { name, href, logo } objects; logo is a path under public/ or omitted for a text tile.",
+  "become": "https://github.com/sponsors/getmaipai",
+  "sponsors": []
+}

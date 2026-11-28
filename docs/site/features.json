@@ -1,0 +1,153 @@
+{
+  "note": "The one source for the seven Stack feature areas: the landing cards, the features index and every feature page come from this file. Every bullet was checked against the Stack code or docs on 2026-11-28; cut a bullet that cannot be shown. Each bullet is Shipped unless it says status.",
+  "docs": "https://github.com/getmaipai/stack/blob/main/docs",
+  "areas": [
+    {
+      "slug": "setup",
+      "name": "Setup",
+      "card": "Install and pick your hardware in minutes.",
+      "icon": "<path d=\"M5 19c0-4 3-6 3-6l3 3s-2 3-6 3zM9 13c0-5 5-9 11-9 0 6-4 11-9 11\"/>",
+      "hero": { "before": "Get running in ", "hl": "minutes", "after": "." },
+      "lead": "One installer and one admin page. Pick your computer's memory size and Stack suggests a setup that fits.",
+      "guide": { "title": "Install guide", "doc": "user/install.md" },
+      "visual": { "kind": "screen", "shot": "models", "alt": "The AI and models page: one card per feature, and a Setup for this computer panel with the 16, 32, 64 and 128 GB setups." },
+      "bullets": [
+        "Ready-made setups for 16, 32, 64 and 128 GB and up, matched to your computer's memory",
+        "Engines and models are pinned and checked against a checksum before they are used",
+        "Turn features on or off any time, on one page. A feature that is off uses no memory"
+      ],
+      "related": [
+        { "title": "Install the Stack", "text": "One script, checked before anything is unpacked.", "doc": "user/install.md" },
+        { "title": "Sign in for the first time", "text": "Set the admin password with a one-time code.", "doc": "user/sign-in.md" },
+        { "title": "Choose features and models", "text": "Turn features on, pick models, use the recommended setup.", "doc": "user/features-and-models.md" }
+      ]
+    },
+    {
+      "slug": "memory",
+      "name": "Memory and tiers",
+      "card": "Fit your hardware, protect your computer.",
+      "icon": "<path d=\"M4 18a9 9 0 1 1 16 0M12 14l4-5\"/>",
+      "hero": { "before": "Fit your hardware, protect your ", "hl": "computer", "after": "." },
+      "lead": "A memory guard loads only what fits, and a priority order keeps the work you need most loaded.",
+      "guide": { "title": "Features and models guide", "doc": "user/features-and-models.md" },
+      "visual": { "kind": "screen", "shot": "resources", "alt": "The Resources page: memory in use, how much of the engine budget is held, and memory by feature over time." },
+      "bullets": [
+        "A ready-made setup for each memory size, with what stays loaded and what loads when asked",
+        "Four levels per feature, Reduced, Standard, Boost and Max, and you choose which model each level uses",
+        "A model that does not fit your memory is refused, with the reason in a sentence",
+        "A priority order, \"Which feature goes first\", decides who is served first when memory is tight",
+        "Engines that sit idle unload and free their memory"
+      ],
+      "related": [
+        { "title": "Choose features and models", "text": "Levels, the priority order and the fit check.", "doc": "user/features-and-models.md" },
+        { "title": "A tour of the admin page", "text": "Overview, Resources and every other screen.", "doc": "user/admin-page.md" },
+        { "title": "Install the Stack", "text": "Start here if you have not installed it yet.", "doc": "user/install.md" }
+      ]
+    },
+    {
+      "slug": "queue",
+      "name": "The queue",
+      "card": "Run one job without slowing another.",
+      "icon": "<rect x=\"3\" y=\"4\" width=\"18\" height=\"7\" rx=\"2\"/><rect x=\"3\" y=\"13\" width=\"18\" height=\"7\" rx=\"2\"/><path d=\"M7 7.5h.01M7 16.5h.01\"/>",
+      "hero": { "before": "Run one job without ", "hl": "slowing", "after": " another." },
+      "lead": "Chat, voice and the wake word stay loaded. A picture, video or music job waits in line, or is refused with a reason when memory is short.",
+      "guide": { "title": "Admin page guide", "doc": "user/admin-page.md" },
+      "visual": { "kind": "lanes", "alt": "Drawn illustration of job lines: chat and voice answer at once, a picture is running with one waiting, a film clip runs while another waits." },
+      "bullets": [
+        "Chat, voice and the wake word stay loaded, so a long film does not push them out",
+        "Heavy jobs wait in line, one at a time, in the order they arrived, and each shows its place in line",
+        "A smaller job that fits can go ahead of a bigger one that is waiting, but a waiting job is never passed for more than 10 minutes",
+        "When a job cannot run, you get a reason in plain words"
+      ],
+      "related": [
+        { "title": "A tour of the admin page", "text": "Overview shows what is busy and what is waiting.", "doc": "user/admin-page.md" },
+        { "title": "Choose features and models", "text": "Set which feature goes first when memory is short.", "doc": "user/features-and-models.md" },
+        { "title": "If something is not working", "text": "What to do when a job does not start.", "doc": "user/fix-a-problem.md" }
+      ]
+    },
+    {
+      "slug": "health",
+      "name": "Health and logs",
+      "card": "See what is wrong and fix it.",
+      "icon": "<path d=\"M3 12h4l2-6 4 12 2-6h6\"/>",
+      "hero": { "before": "See what is wrong. ", "hl": "Fix", "after": " it." },
+      "lead": "Every problem is listed in plain words with one fix, and recent engine log lines are on one screen.",
+      "guide": { "title": "Fix a problem guide", "doc": "user/fix-a-problem.md" },
+      "visual": { "kind": "screen", "shot": "health", "alt": "The Health page: two problems, each with a sentence about what is wrong and one button to fix it." },
+      "bullets": [
+        "A short health list. Each item says what is wrong and offers one fix button",
+        "Recent log lines for each engine, with secrets removed, on the Engines screen",
+        "The Helper reads the same health and logs, so you can ask about them"
+      ],
+      "related": [
+        { "title": "If something is not working", "text": "Step by step, by symptom.", "doc": "user/fix-a-problem.md" },
+        { "title": "A tour of the admin page", "text": "Health, Engines and every other screen.", "doc": "user/admin-page.md" },
+        { "title": "Ask the Helper a question", "text": "Plain-words answers about your setup.", "doc": "user/helper.md" }
+      ]
+    },
+    {
+      "slug": "helper",
+      "name": "The Helper",
+      "card": "Just ask about your setup.",
+      "icon": "<path d=\"M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z\"/>",
+      "hero": { "before": "Just ", "hl": "ask", "after": "." },
+      "lead": "A small built-in assistant on the admin page that answers questions about your setup.",
+      "guide": { "title": "Helper guide", "doc": "user/helper.md" },
+      "visual": { "kind": "screen", "shot": "helper", "alt": "The Helper screen: a short conversation ending in a card with Confirm and Cancel buttons before a restart." },
+      "bullets": [
+        "Ask in plain words, like \"Is everything healthy?\" or \"How much memory is free?\"",
+        "It reads health, features, models, memory, logs, settings and updates on its own",
+        "It asks before it changes anything: a Confirm and Cancel card, and nothing changes until you confirm",
+        "It has its own small model, so it works even when chat is broken, and your questions stay on your computer"
+      ],
+      "related": [
+        { "title": "Ask the Helper a question", "text": "Install it, ask, and confirm a change.", "doc": "user/helper.md" },
+        { "title": "A tour of the admin page", "text": "Where the Helper sits.", "doc": "user/admin-page.md" },
+        { "title": "What stays on your computer", "text": "What leaves, and when.", "doc": "user/privacy.md" }
+      ]
+    },
+    {
+      "slug": "connect",
+      "name": "Connect your apps",
+      "card": "One local address per job.",
+      "icon": "<path d=\"M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4\"/>",
+      "hero": { "before": "One address per ", "hl": "job", "after": "." },
+      "lead": "Chat, speech, pictures and more answer on one local address in the OpenAI format. Stack picks the engine.",
+      "guide": { "title": "Integration contract", "doc": "integrations.md" },
+      "visual": { "kind": "code", "alt": "Drawn illustration of a request to the local chat address and the reply headers that name the engine and model." },
+      "bullets": [
+        "Each job is a role on a standard path, such as chat completions, embeddings, transcription, speech and images",
+        "Every reply says which engine and model answered, in a header",
+        "API changes are additive, and the OpenAPI description is generated from the code",
+        "Today every write needs Home's token header. Optional keys for other apps are planned, not built (status: Planned)"
+      ],
+      "related": [
+        { "title": "Integration contract", "text": "Every route, header and error shape.", "doc": "integrations.md" },
+        { "title": "A tour of the admin page", "text": "Every screen, including Settings.", "doc": "user/admin-page.md" },
+        { "title": "What stays on your computer", "text": "The address listens on this computer only by default.", "doc": "user/privacy.md" }
+      ]
+    },
+    {
+      "slug": "updates",
+      "name": "Updates and rollback",
+      "card": "Stay current, and go back if needed.",
+      "icon": "<path d=\"M20 11a8 8 0 0 0-14-4L4 9M4 4v5h5M4 13a8 8 0 0 0 14 4l2-2M20 20v-5h-5\"/>",
+      "hero": { "before": "Stay current, ", "hl": "safely", "after": "." },
+      "lead": "Update an engine, and go back if the new one misbehaves.",
+      "guide": { "title": "Update and go back guide", "doc": "user/update-and-go-back.md" },
+      "visual": { "kind": "screen", "shot": "updates", "alt": "The Updates page: each engine with its installed and newest version, and an Update button when one is available." },
+      "bullets": [
+        "Updates are checked only when you click Check now, or if you switch the check on",
+        "After an engine update the old build is kept, and a Go back button returns to it",
+        "If a new engine build does not answer, Stack keeps the old one",
+        "Stack itself updates from a checked release and goes back to the old build on its own if the new one does not answer in about 30 seconds",
+        "An update never touches your data"
+      ],
+      "related": [
+        { "title": "Update, and go back", "text": "Engines and the Stack itself.", "doc": "user/update-and-go-back.md" },
+        { "title": "What stays on your computer", "text": "What an update check sends.", "doc": "user/privacy.md" },
+        { "title": "A tour of the admin page", "text": "The Updates screen.", "doc": "user/admin-page.md" }
+      ]
+    }
+  ]
+}

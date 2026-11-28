@@ -1,0 +1,7 @@
+/node_modules
+/.next/
+/out/
+*.tsbuildinfo
+next-env.d.ts
+# copied from ../images/admin by scripts/sync-shots.ts at build time
+/public/screens/

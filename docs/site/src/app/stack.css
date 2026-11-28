@@ -1,0 +1,30 @@
+/* Stack site parts that sit on the kit tokens (ported from the approved mockup). Tokens only. */
+.kit .crumb{color:var(--mut);font-size:.88rem;padding:0 0 18px}.kit .crumb a:hover{color:var(--p)}
+.kit .needs{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center;font-size:.9rem;color:var(--mut);padding:10px 14px;border:1px dashed var(--bd);border-radius:12px;background:var(--bg2);margin:0 0 30px}
+.kit .needs a{color:var(--p);font-weight:700}
+.kit .needs b{color:var(--p)}
+.kit .lanes{padding:18px;display:grid;gap:10px;font-size:.82rem}
+.kit .lane{display:grid;grid-template-columns:1fr;gap:6px;align-items:center}.kit .lane>span{color:var(--mut);font-weight:600}
+.kit .track{display:flex;gap:6px;background:var(--bg2);border-radius:10px;padding:6px;min-height:38px;flex-wrap:wrap}
+.kit .job{border-radius:8px;padding:5px 10px;font-weight:600;color:var(--pf);background:var(--p)}.kit .job.w{background:var(--soft);color:var(--p);border:1px dashed var(--p)}.kit .job.m{opacity:.65}
+.kit .sq{list-style:none;padding:0;margin:0;display:grid;gap:14px}.kit .sq li{display:flex;gap:14px;align-items:flex-start;font-size:1.05rem}.kit .sq li:before{content:"";flex:none;width:12px;height:12px;border-radius:4px;background:var(--p2);margin-top:8px}
+.kit .sq .badge{margin-left:8px;vertical-align:2px}
+.kit .qa{display:grid;gap:10px}
+.kit .qa .row{display:grid;grid-template-columns:1fr;gap:2px;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:14px 18px;transition:.15s}
+.kit .qa .row:hover{border-color:var(--p);box-shadow:var(--shadow);transform:translateY(-1px)}
+.kit .qa .q{color:var(--mut);font-style:italic}.kit .qa .a b{display:block}.kit .qa .a span{color:var(--mut);font-size:.9rem}
+.kit .podui{padding:16px;display:grid;gap:10px}
+.kit .ep{display:flex;gap:12px;align-items:center;background:var(--bg2);border-radius:12px;padding:10px}.kit .ep b{font-size:.9rem}.kit .ep small{color:var(--mut);display:block}
+.kit .codebox{font:.78rem/1.6 var(--font-mono);background:var(--bg2);border-radius:12px;padding:12px 14px;overflow-x:auto;white-space:pre;margin:0}
+.kit .codebox span{color:var(--p)}
+.kit .pic{display:block;width:100%;height:auto}.kit .pic.crop{max-height:430px;object-fit:cover;object-position:top left}
+.kit .pic-d{display:none}.dark .kit .pic-l{display:none}.dark .kit .pic-d{display:block}
+.kit .shot figcaption.cap{margin:0}
+.kit .heroshot{max-width:100%}
+.kit .stack-hero-l,.kit .stack-hero-r{min-width:0}
+.kit .doclinks{display:grid;gap:10px}
+.kit .wk{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.kit .wk .card ul{margin:4px 0 0;padding-left:18px;list-style:disc;color:var(--mut);font-size:.93rem}
+.kit .tbl{width:100%;border-collapse:collapse;font-size:.93rem}.kit .tbl th,.kit .tbl td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--bd)}.kit .tbl th{color:var(--mut);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase}
+.kit .tbl-wrap{overflow-x:auto;border:1px solid var(--bd);border-radius:16px;background:var(--card)}
+@media(max-width:820px){.kit .wk{grid-template-columns:1fr}.kit .h2c h1{max-width:none}}

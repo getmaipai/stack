@@ -1,0 +1,13 @@
+@import 'tailwindcss';
+@import '../kit/kit.css';
+@import './stack.css';
+
+html { scrollbar-gutter: stable; }
+html > body[data-scroll-locked] { margin-right: 0px !important; --removed-body-scroll-bar-size: 0px !important; }
+
+/* System font stack: nothing is fetched. */
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+body { background: var(--color-fd-background); }
